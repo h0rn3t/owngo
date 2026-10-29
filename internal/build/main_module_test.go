@@ -72,13 +72,11 @@ func TestGenMainModuleExecutable(t *testing.T) {
 		}
 	}
 	assertInOrder(t, ir,
-		"call void @Py_Initialize()",
 		`call void @"example.com/b.init"()`,
 		`call void @"example.com/z.init"()`,
 		`call void @"example.com/a.init"()`,
 		"call void @\"example.com/foo.init\"()",
 		"call void @\"example.com/foo.main\"()",
-		"call void @Py_Finalize()",
 	)
 }
 
@@ -164,7 +162,6 @@ func TestGenMainModuleCoverageExit(t *testing.T) {
 				}
 				order := []string{
 					`call void @"example.com/app.main"()`,
-					`call void @Py_Finalize()`,
 					`call void @runtime.runCoverageExitHook(i64 0)`,
 				}
 				if goos == "windows" {
