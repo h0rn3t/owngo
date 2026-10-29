@@ -12,9 +12,8 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-// TestCorpus ганяє фікстури testdata/src/corpus через analysistest.
-// P0.4 має зробити текст діагностик таким, як у фікстурах.
-// До того тест падає: Analyzer звітує unknown, а не категорію.
+// TestCorpus ганяє фікстури testdata/src/corpus через analysistest
+// і звіряє текст категорії v0.
 //
 // Діагностика — рівно один рядок на місце, без префікса:
 //
@@ -74,8 +73,8 @@ type quiet struct{}
 
 func (quiet) Errorf(string, ...any) {}
 
-// TestSiteCount перевіряє прийняття P0.3: кількість діагностик на кожному
-// рядку дорівнює кількості «// want». Повідомлення unknown тримається до P0.4.
+// TestSiteCount перевіряє, що кількість діагностик на рядку дорівнює кількості «// want».
+// Текст категорії звіряє TestCorpus.
 func TestSiteCount(t *testing.T) {
 	results := analysistest.Run(quiet{}, analysistest.TestData(), Analyzer, "corpus")
 	if len(results) != 1 || results[0].Err != nil {
@@ -87,9 +86,6 @@ func TestSiteCount(t *testing.T) {
 	}
 	got := map[string]int{}
 	for _, d := range results[0].Diagnostics {
-		if d.Message != "unknown" {
-			t.Errorf("diagnostic message = %q, want unknown", d.Message)
-		}
 		pos := results[0].Pass.Fset.Position(d.Pos)
 		key := filepath.Base(pos.Filename) + ":" + strconv.Itoa(pos.Line)
 		got[key]++

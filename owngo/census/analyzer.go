@@ -9,8 +9,7 @@ import (
 	"golang.org/x/tools/go/ssa"
 )
 
-// Analyzer знаходить місця алокації пакета і звітує unknown.
-// Текст категорій із корпусу з'явиться в P0.4.
+// Analyzer знаходить місця алокації пакета і звітує категорію v0.
 var Analyzer = &analysis.Analyzer{
 	Name:     "census",
 	Doc:      "класифікує місця алокації Go-програми",
@@ -21,12 +20,16 @@ var Analyzer = &analysis.Analyzer{
 func run(pass *analysis.Pass) (any, error) {
 	pkg := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
 	for _, fn := range pkg.SrcFuncs {
+		if fn.Blocks == nil {
+			continue
+		}
+		msg := messages(fn)
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
 				if !isSite(instr) {
 					continue
 				}
-				pass.Reportf(sitePos(instr), "unknown")
+				pass.Reportf(sitePos(instr), "%s", msg[instr])
 			}
 		}
 	}

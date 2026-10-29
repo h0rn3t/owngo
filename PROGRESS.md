@@ -30,3 +30,11 @@
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень. `go test ./owngo/census/ -run TestSiteCount -count=1` зелений: 73 діагностики, по рядках збігаються з `// want`.
 - `TestCorpus` лишається червоним: текст `unknown` не збігається з категоріями фікстур. Це задача P0.4.
 - Лишилось: P0.4, класифікатор v0, після якого `go test ./owngo/census/...` зелений.
+
+## 2026-10-29 — P0.4
+
+- Класифікатор v0 у `messages`: у межах однієї функції, без розбору полів. Каскад: `pinned`, `stack` (`Alloc` з `Heap == false`), `cyclic` (строгий граф типів, без ребер через інтерфейс і канал), `static`, `rc-shared` (`go`, `channel`, `global`), `rc-local` (`closure`, `return`, `call`). `implicit` не входить у каскад.
+- Запис у об'єкт наслідує його втечу. Замикання дає щонайменше `closure`; `go`, `channel` і `global` перекривають її. Builtin і callee звичайного виклику причиною `call` не є. `go` випускає і аргументи, і значення функції.
+- `TestSiteCount` лишається перевіркою кількості місць; текст категорії звіряє `TestCorpus`.
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений: `TestCorpus` і `TestSiteCount`.
+- Лишилось: P0.5, циклічні типи в двох режимах для інтерфейсів. `go fix` досі пропонує `strings.Cut` у вже наявному `quotedWants`; не чіпав.
