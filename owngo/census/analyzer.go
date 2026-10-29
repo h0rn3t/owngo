@@ -35,12 +35,24 @@ var Analyzer = &analysis.Analyzer{
 
 func run(pass *analysis.Pass) (any, error) {
 	pkg := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
+	mode := ifaceStrict
+	var universe []types.Type
+	if f := pass.Analyzer.Flags.Lookup("conservative"); f != nil && f.Value.String() == "true" {
+		mode = ifaceConservative
+		for _, name := range pass.Pkg.Scope().Names() {
+			obj, ok := pass.Pkg.Scope().Lookup(name).(*types.TypeName)
+			if !ok {
+				continue
+			}
+			universe = append(universe, obj.Type(), types.NewPointer(obj.Type()))
+		}
+	}
 	sites := []Site{}
 	for _, fn := range pkg.SrcFuncs {
 		if fn.Blocks == nil {
 			continue
 		}
-		msg := messages(fn)
+		msg := messages(fn, mode, universe)
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
 				if !isSite(instr) {

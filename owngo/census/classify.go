@@ -65,7 +65,7 @@ func (s siteSet) absorb(other siteSet) bool {
 // messages класифікує місця однієї функції.
 // Запис у об'єкт наслідує втечу цього об'єкта; запис у об'єкт, який не втікає, втечею не є.
 // Розбір без полів: будь-яке поле ділить одну множину вмісту.
-func messages(fn *ssa.Function) map[ssa.Instruction]string {
+func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type) map[ssa.Instruction]string {
 	var instrs []ssa.Instruction
 	for _, block := range fn.Blocks {
 		instrs = append(instrs, block.Instrs...)
@@ -80,7 +80,7 @@ func messages(fn *ssa.Function) map[ssa.Instruction]string {
 		if !isSite(instr) {
 			continue
 		}
-		out[instr] = category(instr, escape[instr], pinned[instr])
+		out[instr] = category(instr, escape[instr], pinned[instr], mode, universe)
 	}
 	return out
 }
@@ -341,7 +341,7 @@ func spread(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ss
 	}
 }
 
-func category(instr ssa.Instruction, k escapeKind, pinned bool) string {
+func category(instr ssa.Instruction, k escapeKind, pinned bool, mode ifaceMode, universe []types.Type) string {
 	switch instr := instr.(type) {
 	case *ssa.Call:
 		if b, ok := instr.Call.Value.(*ssa.Builtin); ok && b.Name() == "append" {
@@ -362,7 +362,7 @@ func category(instr ssa.Instruction, k escapeKind, pinned bool) string {
 	if alloc, ok := instr.(*ssa.Alloc); ok && !alloc.Heap {
 		return "stack"
 	}
-	if cyclicType(instr.(ssa.Value).Type()) {
+	if cyclic(instr.(ssa.Value).Type(), mode, universe) {
 		if k == escapeNone {
 			return "cyclic"
 		}
@@ -423,11 +423,6 @@ const (
 	ifaceStrict ifaceMode = iota
 	ifaceConservative
 )
-
-// cyclicType — строгий режим діагностики v0.
-func cyclicType(t types.Type) bool {
-	return cyclic(t, ifaceStrict, nil)
-}
 
 // cyclic звітує, чи тип місця після зняття одного вказівника досягає себе.
 // Канал, функція і ключ мапи ребра не дають.

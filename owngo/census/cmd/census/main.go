@@ -40,8 +40,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("census", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "print allocation sites as JSON")
+	conservative := fs.Bool("conservative", false, "interface edges count as cycles")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(stderr, "usage: census -json <package>")
+		_, _ = fmt.Fprintln(stderr, "usage: census -json [-conservative] <package>")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -57,6 +58,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 	pkgs, err := load(fs.Args())
 	if err != nil {
 		return err
+	}
+	if *conservative {
+		census.Analyzer.Flags.Bool("conservative", false, "interface edges count as cycles")
+		if err := census.Analyzer.Flags.Set("conservative", "true"); err != nil {
+			return err
+		}
 	}
 	graph, err := checker.Analyze([]*analysis.Analyzer{census.Analyzer}, pkgs, nil)
 	if err != nil {
@@ -83,8 +90,9 @@ func load(patterns []string) ([]*packages.Package, error) {
 			return pkgs, err
 		}
 		// Каталог поза поточним модулем go list бачить лише якщо запит іде з нього.
+		// ./... бере підпакети. Корінь сервісу часто сам не є пакетом.
 		if info, err := os.Stat(patterns[0]); err == nil && info.IsDir() {
-			pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: patterns[0]}, ".")
+			pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: patterns[0]}, "./...")
 			if err != nil {
 				return nil, err
 			}

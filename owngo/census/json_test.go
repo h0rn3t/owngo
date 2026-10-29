@@ -106,6 +106,92 @@ func TestCommandEmpty(t *testing.T) {
 	}
 }
 
+// TestCommandModule: каталог модуля — це всі пакети ./..., не лише корінь.
+// Корінь без пакета (як у сервісі) теж входить: місця лежать у підпакеті.
+func TestCommandModule(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/mod\n\ngo 1.27.0\n")
+	writeFile(t, filepath.Join(dir, "q", "q.go"), "package q\n\nfunc G() *int { return new(int) }\n")
+
+	stdout, stderr, code := runCensus(t, "-json", dir)
+	if code != 0 {
+		t.Fatalf("census -json module exit = %d, want 0\nstderr:\n%s", code, stderr)
+	}
+	got := siteAt(decodeSites(t, []byte(stdout)), "q.go:3")
+	if got.Category != "rc-local" || got.Reason != "return" {
+		t.Fatalf("census -json module q.go:3 = %+v, want rc-local return", got)
+	}
+}
+
+// TestCommandConservative: поле any робить тип циклічним лише в консервативному
+// режимі. Строгий лишає втечу поверненням і локальне new без втечі.
+// Стековий Alloc лишається stack в обох режимах.
+func TestCommandConservative(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/hold\n\ngo 1.27.0\n")
+	writeFile(t, filepath.Join(dir, "leak.go"), "package p\n\ntype holder struct{ v any }\n\nfunc Leak() *holder { return new(holder) }\n")
+	writeFile(t, filepath.Join(dir, "keep.go"), "package p\n\nfunc Keep() {\n\th := new(holder)\n\t_ = h\n}\n")
+	writeFile(t, filepath.Join(dir, "stack.go"), "package p\n\nfunc Stack() {\n\tvar h holder\n\t_ = h.v\n}\n")
+
+	strict := commandSites(t, dir)
+	conservative := commandSites(t, dir, "-conservative")
+	tests := []struct {
+		pos                string
+		strictCat, strictR string
+		consCat, consR     string
+	}{
+		{pos: "leak.go:5", strictCat: "rc-local", strictR: "return", consCat: "cyclic", consR: "return"},
+		{pos: "keep.go:4", strictCat: "static", strictR: "", consCat: "cyclic", consR: ""},
+		{pos: "stack.go:4", strictCat: "stack", strictR: "", consCat: "stack", consR: ""},
+	}
+	for _, tt := range tests {
+		gotS := siteAt(strict, tt.pos)
+		if gotS.Category != tt.strictCat || gotS.Reason != tt.strictR {
+			t.Errorf("strict %s = %s %q, want %s %q", tt.pos, gotS.Category, gotS.Reason, tt.strictCat, tt.strictR)
+		}
+		gotC := siteAt(conservative, tt.pos)
+		if gotC.Category != tt.consCat || gotC.Reason != tt.consR {
+			t.Errorf("conservative %s = %s %q, want %s %q", tt.pos, gotC.Category, gotC.Reason, tt.consCat, tt.consR)
+		}
+	}
+}
+
+func commandSites(t *testing.T, dir string, extra ...string) []site {
+	t.Helper()
+	args := append([]string{"-json"}, extra...)
+	args = append(args, dir)
+	stdout, stderr, code := runCensus(t, args...)
+	if code != 0 {
+		t.Fatalf("census %s exit = %d, want 0\nstderr:\n%s", strings.Join(args, " "), code, stderr)
+	}
+	return decodeSites(t, []byte(stdout))
+}
+
+func siteAt(sites []site, suffix string) site {
+	var found site
+	n := 0
+	for _, s := range sites {
+		if strings.HasSuffix(s.Pos, suffix) {
+			found = s
+			n++
+		}
+	}
+	if n != 1 {
+		return site{Pos: suffix, Category: fmt.Sprintf("count=%d", n)}
+	}
+	return found
+}
+
+func writeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+}
+
 // TestCommandLoadError: невідомий пакет не пише JSON у stdout.
 func TestCommandLoadError(t *testing.T) {
 	stdout, stderr, code := runCensus(t, "-json", "./no/such/package")
