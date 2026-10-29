@@ -414,12 +414,33 @@ func fromGlobal(v ssa.Value) bool {
 	return walk(v)
 }
 
-// cyclicType звітує, чи тип місця після зняття одного вказівника досягає себе.
-// Поле-структура обходиться далі. Поле-інтерфейс ребра не дає; канал за елементом не обходиться.
+// ifaceMode керує ребрами інтерфейсу в графі типів.
+// ifaceStrict їх не додає. ifaceConservative веде ребро до кожного
+// конкретного типу всесвіту, який можна присвоїти цьому інтерфейсу.
+type ifaceMode int
+
+const (
+	ifaceStrict ifaceMode = iota
+	ifaceConservative
+)
+
+// cyclicType — строгий режим діагностики v0.
 func cyclicType(t types.Type) bool {
+	return cyclic(t, ifaceStrict, nil)
+}
+
+// cyclic звітує, чи тип місця після зняття одного вказівника досягає себе.
+// Канал, функція і ключ мапи ребра не дають.
+func cyclic(t types.Type, mode ifaceMode, universe []types.Type) bool {
+	if t == nil {
+		return false
+	}
 	root := t
 	if p, ok := t.Underlying().(*types.Pointer); ok {
 		root = p.Elem()
+	}
+	if mode == ifaceConservative {
+		universe = slices.Concat(universe, []types.Type{root, types.NewPointer(root)})
 	}
 	seen := map[types.Type]bool{}
 	var walk func(types.Type, int) bool
@@ -431,7 +452,7 @@ func cyclicType(t types.Type) bool {
 			return false
 		}
 		seen[cur] = true
-		for _, next := range typeEdges(cur) {
+		for _, next := range typeEdges(cur, mode, universe) {
 			if walk(next, depth+1) {
 				return true
 			}
@@ -441,7 +462,7 @@ func cyclicType(t types.Type) bool {
 	return walk(root, 0)
 }
 
-func typeEdges(t types.Type) []types.Type {
+func typeEdges(t types.Type, mode ifaceMode, universe []types.Type) []types.Type {
 	switch u := t.Underlying().(type) {
 	case *types.Pointer:
 		return []types.Type{u.Elem()}
@@ -455,6 +476,20 @@ func typeEdges(t types.Type) []types.Type {
 		out := make([]types.Type, 0, u.NumFields())
 		for field := range u.Fields() {
 			out = append(out, field.Type())
+		}
+		return out
+	case *types.Interface:
+		if mode != ifaceConservative {
+			return nil
+		}
+		var out []types.Type
+		for _, cand := range universe {
+			if _, ok := cand.Underlying().(*types.Interface); ok {
+				continue
+			}
+			if types.AssignableTo(cand, t) {
+				out = append(out, cand)
+			}
 		}
 		return out
 	default:
