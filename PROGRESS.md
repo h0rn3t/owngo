@@ -72,3 +72,11 @@
 - Сервіс [ms-faq](https://gitlab.datahub.ua.energy/tko/ms-faq) `develop` @ `520cbc6`: 701 місце, 618 поза `stack`, **45** розривів (14 у `internal/testutil`). Звіт — `owngo/GC-GAP.md`.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений.
 - Лишилось: P0.8, динамічні ваги. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
+
+## 2026-10-29 — P0.8
+
+- `ParseAllocProfile` читає текст `go tool pprof -raw` (`alloc_objects`, `alloc_space`). `Weigh` приписує зразок першому кадру від листа до кореня, чий `file:line` збігається з місцем census. Кілька місць на одному рядку ділять об'єкти і байти цілим діленням, остача — ранішим. `FormatWeights` друкує таблицю часток; маса поза census — окремий рядок від усього профілю.
+- pprof дописує повне ім'я узагальненої функції в дужках одразу після `s=рядок`. Без цього локація зникала і зразок падав з `ErrProfileLocation`.
+- Сервіс [ms-faq](https://gitlab.datahub.ua.energy/tko/ms-faq) `develop` @ `520cbc6`: юніт-тести, `-memprofilerate=1`, 11 пакетів (`cmd/app` без тестів; `//go:build integration` не збирався; бенчмарків немає). 701 місце census. Серед приписаної купи `static` + `rc-local` — 76.0% об'єктів і 58.9% байтів. Поза census — 86.9% об'єктів і 98.8% байтів профілю. Звіт — `owngo/WEIGHTS.md`.
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений.
+- Лишилось: P0.9, пік горутин. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
