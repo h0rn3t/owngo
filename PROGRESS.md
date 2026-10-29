@@ -14,3 +14,11 @@
 - Базова лінія — `owngo/BASELINE.md`: 286 пакетів зелені, падіння — оточення (bun замість Node, Apple `ar`) і пробіл wasm SjLj.
 - Критерій P0.1 «той самий набір падінь, що й upstream» на цій машині неперевірний: upstream тут не збирається (69 пакетів `[build failed]`). Зафіксовано в `BASELINE.md`.
 - Лишилось: wasm `+exception-handling` (не потрібно для нативних цілей OwnGo); перегляд перевірки macOS SDK під LLD 23; нічого не закомічено.
+
+## 2026-10-29 — P0.2
+
+- Корпус `owngo/census/testdata/src/corpus`: фікстури `analysistest` для `stack`, `static`, `rc-local`, `rc-shared`, `cyclic` (строгий режим без полів-інтерфейсів), `pinned` і `implicit`. Щонайменше п'ять місць на категорію, включно з причинами return, closure, channel, global, go, call і unsafe, внутрішніми вказівниками, `append` з аліасом, викликом через інтерфейс і func-значення, method value, перезаписом глобальної змінної, каналом і `go`.
+- Контракт діагностики зафіксовано в коментарі `TestCorpus`: одне місце — один якірний `// want` (`^static$`, `^rc-local: return$`, `^rc-shared: go$`, `^cyclic: return$`, `^pinned: unsafe$`, `^implicit: append$`). Захоплення вказівника замиканням і тимчасовий масив varargs у `append` — окремі місця на тому самому рядку.
+- Аналізатора ще немає. `TestCorpus` тримає локальну заглушку, яка нічого не звітує; `census.Analyzer` — задача P0.3.
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень. `go test ./owngo/census/...` компілюється і падає з `no diagnostic was reported matching` на всіх 73 очікуваннях.
+- Лишилось: P0.3, каркас, що звітує `unknown` і збігається з корпусом за кількістю місць.
