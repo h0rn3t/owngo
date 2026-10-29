@@ -6,4 +6,6 @@
 // StackGaps порівнює місця поза stack із діагностиками escape analysis gc.
 // ParseAllocProfile і Weigh з'єднують місця з профілем pprof
 // (alloc_objects, alloc_space) за file:line.
+// Outside розкладає рядок поза census на стандартну бібліотеку,
+// модулі поза каталогом, тести, runtime і файли модуля без місця.
 package census
