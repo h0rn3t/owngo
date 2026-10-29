@@ -74,6 +74,16 @@ func (l Level) Name() string {
 	}
 }
 
+// Pipeline returns the LLVM PassBuilder level, as in "default<O2>". LLVM 23
+// dropped the Os and Oz pipelines: size levels run O2, and the optsize and
+// minsize function attributes carry the size policy.
+func (l Level) Pipeline() string {
+	if l == Os || l == Oz {
+		return O2.Name()
+	}
+	return l.Name()
+}
+
 func (l Level) Flag() string {
 	if !l.IsValid() {
 		return ""

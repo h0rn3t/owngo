@@ -75,7 +75,7 @@ func check() int {
 				options := llvm.NewPassBuilderOptions()
 				defer options.Dispose()
 				options.SetVerifyEach(true)
-				if err := mod.RunPasses("default<"+level.String()+">", prog.TargetMachine(), options); err != nil {
+				if err := mod.RunPasses("default<"+level.Pipeline()+">", prog.TargetMachine(), options); err != nil {
 					t.Fatal(err)
 				}
 				object, err := prog.TargetMachine().EmitToMemoryBuffer(mod, llvm.ObjectFile)

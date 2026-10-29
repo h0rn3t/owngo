@@ -53,7 +53,7 @@ end:
 				llabi.PopGCRootFrame(mod, fn, frame)
 				options := llvm.NewPassBuilderOptions()
 				defer options.Dispose()
-				if err := mod.RunPasses("default<Os>", llvm.TargetMachine{}, options); err != nil {
+				if err := mod.RunPasses("default<O2>", llvm.TargetMachine{}, options); err != nil {
 					t.Fatal(err)
 				}
 				if mode != 0 {

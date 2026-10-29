@@ -58,9 +58,12 @@ func TestBuilderLinksWithClangWcharABI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse C module: %v", err)
 			}
+			// Clang 23 emits wchar_size only when it differs from the target
+			// default, so an absent flag is also an ABI choice to preserve.
 			wantFlag := fmt.Sprintf(`!{i32 1, !"wchar_size", i32 %d}`, tt.wcharSize)
-			if !strings.Contains(cModule.String(), wantFlag) {
-				t.Fatalf("C module is missing %s:\n%s", wantFlag, cModule.String())
+			cHasFlag := strings.Contains(cModule.String(), `!"wchar_size"`)
+			if cHasFlag && !strings.Contains(cModule.String(), wantFlag) {
+				t.Fatalf("C module has a wchar_size flag other than %s:\n%s", wantFlag, cModule.String())
 			}
 
 			module := ctx.NewModule("go-debug-test")
@@ -82,8 +85,11 @@ func TestBuilderLinksWithClangWcharABI(t *testing.T) {
 			if module.NamedFunction("c_wchar_size").IsNil() || module.NamedGlobal(debuggerMarkerSymbol).IsNil() {
 				t.Fatalf("linked module lost C code or the Go debugger marker:\n%s", module.String())
 			}
-			if !strings.Contains(module.String(), wantFlag) {
+			if cHasFlag && !strings.Contains(module.String(), wantFlag) {
 				t.Fatalf("linked module lost C ABI flag %s:\n%s", wantFlag, module.String())
+			}
+			if !cHasFlag && strings.Contains(module.String(), `!"wchar_size"`) {
+				t.Fatalf("linked module gained a wchar_size flag the C module did not set:\n%s", module.String())
 			}
 		})
 	}

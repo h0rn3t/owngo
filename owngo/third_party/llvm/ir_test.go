@@ -1,0 +1,233 @@
+//===- ir_test.go - Tests for ir ------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file tests bindings for the ir component.
+//
+//===----------------------------------------------------------------------===//
+
+package llvm
+
+import (
+	"strconv"
+	"strings"
+	"testing"
+)
+
+func TestStructIsOpaque(t *testing.T) {
+	ctx := NewContext()
+	defer ctx.Dispose()
+
+	typ := ctx.StructCreateNamed("T")
+	if !typ.IsStructOpaque() {
+		t.Fatal("new named struct is not opaque")
+	}
+
+	typ.StructSetBody(nil, false)
+	if typ.IsStructOpaque() {
+		t.Fatal("defined empty named struct is opaque")
+	}
+}
+
+func testAttribute(t *testing.T, name string) {
+	ctx := NewContext()
+	mod := ctx.NewModule("")
+	defer mod.Dispose()
+
+	ftyp := FunctionType(ctx.VoidType(), nil, false)
+	fn := AddFunction(mod, "foo", ftyp)
+
+	kind := AttributeKindID(name)
+	attr := mod.Context().CreateEnumAttribute(kind, 0)
+
+	fn.AddFunctionAttr(attr)
+	newattr := fn.GetEnumFunctionAttribute(kind)
+	if attr != newattr {
+		t.Errorf("got attribute %p, want %p", newattr.C, attr.C)
+	}
+
+	text := mod.String()
+	if !strings.Contains(text, " "+name+" ") {
+		t.Errorf("expected attribute '%s', got:\n%s", name, text)
+	}
+
+	fn.RemoveEnumFunctionAttribute(kind)
+	newattr = fn.GetEnumFunctionAttribute(kind)
+	if !newattr.IsNil() {
+		t.Errorf("got attribute %p, want 0", newattr.C)
+	}
+}
+
+func TestAttributes(t *testing.T) {
+	// Tests that our attribute constants haven't drifted from LLVM's.
+	attrTests := []string{
+		"sanitize_address",
+		"alwaysinline",
+		"builtin",
+		"convergent",
+		"inlinehint",
+		"inreg",
+		"jumptable",
+		"minsize",
+		"naked",
+		"nest",
+		"noalias",
+		"nobuiltin",
+		"noduplicate",
+		"noimplicitfloat",
+		"noinline",
+		"nonlazybind",
+		"nonnull",
+		"noredzone",
+		"noreturn",
+		"nounwind",
+		"optnone",
+		"optsize",
+		"readnone",
+		"readonly",
+		"returned",
+		"returns_twice",
+		"signext",
+		"safestack",
+		"ssp",
+		"sspreq",
+		"sspstrong",
+		"sanitize_thread",
+		"sanitize_memory",
+		"uwtable",
+		"zeroext",
+		"cold",
+		"nocf_check",
+	}
+
+	for _, name := range attrTests {
+		majorVersion, err := strconv.Atoi(strings.SplitN(Version, ".", 2)[0])
+		if err != nil {
+			// sanity check, should be unreachable
+			t.Errorf("could not parse LLVM version: %v", err)
+		}
+		if majorVersion >= 15 && name == "uwtable" {
+			// This changed from an EnumAttr to an IntAttr in LLVM 15, and testAttribute doesn't work on such attributes.
+			continue
+		}
+		testAttribute(t, name)
+	}
+}
+
+func TestDebugLoc(t *testing.T) {
+	ctx := NewContext()
+	mod := ctx.NewModule("")
+	defer mod.Dispose()
+
+	b := ctx.NewBuilder()
+	defer b.Dispose()
+
+	d := NewDIBuilder(mod)
+	defer func() {
+		d.Destroy()
+	}()
+	file := d.CreateFile("dummy_file", "dummy_dir")
+	voidInfo := d.CreateBasicType(DIBasicType{Name: "void"})
+	typeInfo := d.CreateSubroutineType(DISubroutineType{
+		File:       file,
+		Parameters: []Metadata{voidInfo},
+		Flags:      0,
+	})
+	scope := d.CreateFunction(file, DIFunction{
+		Name:         "foo",
+		LinkageName:  "foo",
+		Line:         10,
+		ScopeLine:    10,
+		Type:         typeInfo,
+		File:         file,
+		IsDefinition: true,
+	})
+
+	b.SetCurrentDebugLocation(10, 20, scope, Metadata{})
+	loc := b.GetCurrentDebugLocation()
+	if loc.Line != 10 {
+		t.Errorf("Got line %d, though wanted 10", loc.Line)
+	}
+	if loc.Col != 20 {
+		t.Errorf("Got column %d, though wanted 20", loc.Col)
+	}
+	if loc.Scope.C != scope.C {
+		t.Errorf("Got metadata %v as scope, though wanted %v", loc.Scope.C, scope.C)
+	}
+}
+
+func TestIntrinsicBindings(t *testing.T) {
+	ctx := NewContext()
+	mod := ctx.NewModule("")
+	defer mod.Dispose()
+
+	memsetID := LookupIntrinsicID("llvm.memset")
+	if memsetID == 0 {
+		t.Fatal("could not look up llvm.memset intrinsic")
+	}
+	ptrTy := PointerType(ctx.Int8Type(), 0)
+	fnTy := FunctionType(ctx.VoidType(), []Type{ptrTy}, false)
+	fn := AddFunction(mod, "use_memset", fnTy)
+	builder := ctx.NewBuilder()
+	defer builder.Dispose()
+	builder.SetInsertPointAtEnd(ctx.AddBasicBlock(fn, "entry"))
+	call := builder.CreateIntrinsic(ctx.VoidType(), memsetID, []Value{
+		fn.Param(0),
+		ConstInt(ctx.Int8Type(), 0, false),
+		ConstInt(ctx.Int64Type(), 8, false),
+		ConstInt(ctx.Int1Type(), 0, false),
+	}, "")
+	builder.CreateRetVoid()
+	if got := call.CalledValue().IntrinsicID(); got != memsetID {
+		t.Fatalf("got intrinsic ID %d, want %d", got, memsetID)
+	}
+	if err := VerifyModule(mod, ReturnStatusAction); err != nil {
+		t.Fatalf("module with intrinsic call should verify: %v", err)
+	}
+}
+
+func TestSubtypes(t *testing.T) {
+	cont := NewContext()
+	defer cont.Dispose()
+
+	st_pointer := cont.StructType([]Type{cont.Int32Type(), cont.Int8Type()}, false)
+	st_inner := st_pointer.Subtypes()
+	if len(st_inner) != 2 {
+		t.Errorf("Got size %d, though wanted 2", len(st_inner))
+	}
+	if st_inner[0] != cont.Int32Type() {
+		t.Errorf("Expected first struct field to be int32")
+	}
+	if st_inner[1] != cont.Int8Type() {
+		t.Errorf("Expected second struct field to be int8")
+	}
+}
+
+// LLVM 23's LLVMConstInt keeps bits above the type width, so the same value
+// built from a sign-extended uint64 must still unique to one constant.
+func TestConstIntTruncatesToTypeWidth(t *testing.T) {
+	ctx := NewContext()
+	defer ctx.Dispose()
+	i128 := ctx.IntType(128)
+	tests := []struct {
+		name string
+		got  Value
+		want Value
+	}{
+		{"i1", ConstInt(ctx.Int1Type(), ^uint64(0), false), ConstInt(ctx.Int1Type(), 1, false)},
+		{"i8", ConstInt(ctx.Int8Type(), 0xFFFFFFFFFFFFFF80, false), ConstInt(ctx.Int8Type(), 0x80, false)},
+		{"i16", ConstInt(ctx.Int16Type(), 0xFFFFFFFFFFFF8000, true), ConstInt(ctx.Int16Type(), 0x8000, false)},
+		{"i32", ConstInt(ctx.Int32Type(), 0xFFFFFFFF80000000, false), ConstInt(ctx.Int32Type(), 0x80000000, false)},
+		{"i128 signed", ConstInt(i128, ^uint64(0), true), ConstAllOnes(i128)},
+		{"i128 unsigned", ConstInt(i128, ^uint64(0), false), ConstIntFromString(i128, "18446744073709551615", 10)},
+	}
+	for _, tt := range tests {
+		if tt.got.C != tt.want.C {
+			t.Errorf("%s: ConstInt = %s, want the same constant as %s", tt.name, tt.got, tt.want)
+		}
+	}
+}

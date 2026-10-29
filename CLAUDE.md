@@ -6,6 +6,13 @@ This document provides essential information for AI assistants to help fix bugs 
 
 LLGo is a Go compiler based on LLVM designed to better integrate Go with the C ecosystem, including Python and JavaScript. It's a subproject of the XGo project that aims to expand the boundaries of Go/XGo for game development, AI and data science, WebAssembly, and embedded development.
 
+## Language
+
+- User-facing replies: **Ukrainian**.
+- Reasoning summaries, planning notes, specs, review summaries, code comments: **Ukrainian**.
+- Code identifiers, filenames, commands, package names, commit messages, log messages: **English**.
+
+
 ## Project Structure
 
 - `cmd/llgo` - Main llgo compiler command (usage similar to `go` command)
@@ -204,3 +211,25 @@ LLGO_ROOT=/path/to/llgo llgo run .
 3. **Defer in Loops:** LLGo now supports `defer` within loops, matching Go's semantics of executing defers in LIFO order for every iteration. Be mindful of loop-heavy defer usage as it allocates per iteration.
 4. **C Ecosystem Integration:** LLGo uses `go:linkname` directive to link external symbols through ABI
 5. **Python Integration:** Third-party Python libraries require separate installation of library files
+
+## OwnGo
+
+This repository is the OwnGo fork of llgo: a Go compiler without a tracing GC.
+`INTENT.md` is the source of truth for goals and principles; `PLAN.md` lists the
+current phase's tasks with acceptance criteria; `PROGRESS.md` records what each
+session did.
+
+- Remotes: `origin` is the fork, `upstream` is `goplus/llgo`. Rebase on
+  `upstream/main` regularly and keep the diff from upstream minimal.
+- New OwnGo code lives under `owngo/`; runtime changes go behind the `owngo`
+  build tag.
+- One PLAN.md task per session. Write tests first and confirm they fail before
+  implementing. At the end of a session, update `PROGRESS.md` and tick the task
+  in `PLAN.md`.
+- The fork targets LLVM 23 (upstream: 22). `github.com/xgo-dev/llvm` is
+  replaced by the patched copy in `owngo/third_party/llvm`; its `OWNGO.md`
+  lists the patches. Run tests with LLVM 23 and LLD first in `PATH`, or
+  `clang` resolves to Apple's and rejects LLVM 23 IR:
+  `export PATH=/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH`.
+- `owngo/BASELINE.md` lists the known `go test ./...` failures; a change must
+  not add to that list.

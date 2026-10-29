@@ -30,3 +30,6 @@ replace github.com/xgo-dev/llgo/runtime => ./runtime
 
 // v0.51.0 plus the generic-method wrapper fix; remove when upstream includes it.
 replace golang.org/x/tools => github.com/xgo-dev/tools v0.51.1
+
+// v0.10.1 ported to LLVM 23 (see owngo/third_party/llvm/OWNGO.md); remove when upstream supports it.
+replace github.com/xgo-dev/llvm => ./owngo/third_party/llvm

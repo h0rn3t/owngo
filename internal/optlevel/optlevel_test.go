@@ -56,20 +56,21 @@ func TestParseInvalid(t *testing.T) {
 
 func TestLevelFormatting(t *testing.T) {
 	tests := []struct {
-		level  Level
-		valid  bool
-		name   string
-		flag   string
-		string string
+		level    Level
+		valid    bool
+		name     string
+		flag     string
+		string   string
+		pipeline string
 	}{
-		{O0, true, "O0", "-O0", "O0"},
-		{O1, true, "O1", "-O1", "O1"},
-		{O2, true, "O2", "-O2", "O2"},
-		{O3, true, "O3", "-O3", "O3"},
-		{Os, true, "Os", "-Os", "Os"},
-		{Oz, true, "Oz", "-Oz", "Oz"},
-		{Unset, false, "", "", "unset"},
-		{Level(255), false, "", "", "unset"},
+		{O0, true, "O0", "-O0", "O0", "O0"},
+		{O1, true, "O1", "-O1", "O1", "O1"},
+		{O2, true, "O2", "-O2", "O2", "O2"},
+		{O3, true, "O3", "-O3", "O3", "O3"},
+		{Os, true, "Os", "-Os", "Os", "O2"},
+		{Oz, true, "Oz", "-Oz", "Oz", "O2"},
+		{Unset, false, "", "", "unset", ""},
+		{Level(255), false, "", "", "unset", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.string, func(t *testing.T) {
@@ -84,6 +85,9 @@ func TestLevelFormatting(t *testing.T) {
 			}
 			if got := tt.level.String(); got != tt.string {
 				t.Fatalf("%v.String() = %q, want %q", tt.level, got, tt.string)
+			}
+			if got := tt.level.Pipeline(); got != tt.pipeline {
+				t.Fatalf("%v.Pipeline() = %q, want %q", tt.level, got, tt.pipeline)
 			}
 		})
 	}

@@ -117,7 +117,7 @@ func TestAssertNilDerefColdCall(t *testing.T) {
 				if name == "dynamic" {
 					entry := fn.impl.EntryBasicBlock()
 					branch := entry.LastInstruction()
-					if branch.InstructionOpcode() != llvm.Br || branch.SuccessorsCount() != 2 {
+					if branch.InstructionOpcode() != llvm.CondBr || branch.SuccessorsCount() != 2 {
 						t.Fatalf("dynamic nil check must branch before calling runtime:\n%s", fn.impl.String())
 					}
 					for inst := entry.FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {

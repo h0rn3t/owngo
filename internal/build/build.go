@@ -4580,13 +4580,14 @@ func applySizeOptimizationAttributes(mod gllvm.Module, level optlevel.Level) {
 }
 
 func llvmPassPipeline(level optlevel.Level, ltoMode lto.Mode) string {
+	name := level.Pipeline()
 	switch ltoMode {
 	case lto.Full:
-		return "lto-pre-link<" + level.Name() + ">"
+		return "lto-pre-link<" + name + ">"
 	case lto.Thin:
-		return "thinlto-pre-link<" + level.Name() + ">"
+		return "thinlto-pre-link<" + name + ">"
 	default:
-		return "default<" + level.Name() + ">"
+		return "default<" + name + ">"
 	}
 }
 
