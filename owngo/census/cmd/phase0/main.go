@@ -1,5 +1,5 @@
 // Команда phase0 зводить один модуль для звіту фази 0:
-// категорії v0, консервативний режим інтерфейсів, розрив із gc
+// категорії v0 і v1, консервативний режим інтерфейсів, розрив із gc
 // і ваги профілю алокацій, якщо каталог профілів задано.
 package main
 
@@ -48,11 +48,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	strict, err := classify(roots, false)
+	strict, err := classify(roots, false, false)
 	if err != nil {
 		return err
 	}
-	conservative, err := classify(roots, true)
+	conservative, err := classify(roots, true, false)
 	if err != nil {
 		return err
 	}
@@ -65,9 +65,22 @@ func run(args []string, stdout, stderr io.Writer) error {
 			changed++
 		}
 	}
+	v1Sites, err := classify(roots, false, true)
+	if err != nil {
+		return err
+	}
+	if len(strict) != len(v1Sites) {
+		return fmt.Errorf("місць strict %d, v1 %d", len(strict), len(v1Sites))
+	}
+	v1Changed := 0
+	for i := range strict {
+		if strict[i].Category != v1Sites[i].Category || strict[i].Reason != v1Sites[i].Reason {
+			v1Changed++
+		}
+	}
 
 	gaps, gapErrs := stackGaps(*dir, roots, strict)
-	var weights, weightsCons []census.Weight
+	var weights, weightsCons, weightsV1 []census.Weight
 	if *profDir != "" {
 		samples, err := readProfiles(*profDir)
 		if err != nil {
@@ -75,6 +88,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 		weights = census.Weigh(strict, samples)
 		weightsCons = census.Weigh(conservative, samples)
+		weightsV1 = census.Weigh(v1Sites, samples)
 	}
 
 	rev := gitRev(*dir)
@@ -86,10 +100,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		"strict":               summary(strict),
 		"conservative":         summary(conservative),
 		"category_changed":     changed,
+		"v1":                   summary(v1Sites),
+		"v1_changed":           v1Changed,
 		"gaps":                 summary(gaps),
 		"gap_errors":           gapErrs,
 		"weights":              weights,
 		"weights_conservative": weightsCons,
+		"weights_v1":           weightsV1,
 	}
 	if err := json.MarshalWrite(stdout, out); err != nil {
 		return err
@@ -118,7 +135,7 @@ func loadRoots(dir string) ([]*packages.Package, []string, error) {
 	return roots, skipped, nil
 }
 
-func classify(pkgs []*packages.Package, conservative bool) ([]census.Site, error) {
+func classify(pkgs []*packages.Package, conservative, v1 bool) ([]census.Site, error) {
 	if census.Analyzer.Flags.Lookup("conservative") == nil {
 		census.Analyzer.Flags.Bool("conservative", false, "interface edges count as cycles")
 	}
@@ -129,6 +146,47 @@ func classify(pkgs []*packages.Package, conservative bool) ([]census.Site, error
 	if err := census.Analyzer.Flags.Set("conservative", value); err != nil {
 		return nil, err
 	}
+	on := "false"
+	if v1 {
+		on = "true"
+	}
+	if err := census.Analyzer.Flags.Set("v1", on); err != nil {
+		return nil, err
+	}
+	prevFacts := census.Analyzer.FactTypes
+	// v1 не вмикає FactTypes: інакше checker будує SSA всього графа імпорту.
+	// Зведення між пакетами модуля йдуть через census.ResetSummaries і topo.
+	census.Analyzer.FactTypes = nil
+	defer func() {
+		census.Analyzer.FactTypes = prevFacts
+		_ = census.Analyzer.Flags.Set("v1", "false")
+	}()
+	if !v1 {
+		return analyze(pkgs)
+	}
+	census.ResetSummaries()
+	defer census.ResetSummaries()
+	byPath := map[string][]census.Site{}
+	for _, pkg := range orderPackages(pkgs) {
+		got, err := analyze([]*packages.Package{pkg})
+		if err != nil {
+			return nil, err
+		}
+		byPath[pkg.PkgPath] = got
+	}
+	// Той самий порядок пакетів, що й у analyze, інакше v1_changed звіряє чужі місця.
+	ordered := slices.Clone(pkgs)
+	slices.SortFunc(ordered, func(a, b *packages.Package) int {
+		return strings.Compare(a.PkgPath, b.PkgPath)
+	})
+	var sites []census.Site
+	for _, pkg := range ordered {
+		sites = append(sites, byPath[pkg.PkgPath]...)
+	}
+	return sites, nil
+}
+
+func analyze(pkgs []*packages.Package) ([]census.Site, error) {
 	graph, err := checker.Analyze([]*analysis.Analyzer{census.Analyzer}, pkgs, nil)
 	if err != nil {
 		return nil, err
@@ -149,6 +207,57 @@ func classify(pkgs []*packages.Package, conservative bool) ([]census.Site, error
 		sites = append(sites, got...)
 	}
 	return sites, nil
+}
+
+func orderPackages(pkgs []*packages.Package) []*packages.Package {
+	byPath := map[string]*packages.Package{}
+	indeg := map[string]int{}
+	users := map[string][]string{}
+	paths := make([]string, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		byPath[pkg.PkgPath] = pkg
+		paths = append(paths, pkg.PkgPath)
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		pkg := byPath[path]
+		for imp := range pkg.Imports {
+			if _, ok := byPath[imp]; !ok {
+				continue
+			}
+			users[imp] = append(users[imp], path)
+			indeg[path]++
+		}
+	}
+	var ready []string
+	for _, path := range paths {
+		if indeg[path] == 0 {
+			ready = append(ready, path)
+		}
+	}
+	ordered := make([]string, 0, len(paths))
+	for len(ready) > 0 {
+		slices.Sort(ready)
+		path := ready[0]
+		ready = ready[1:]
+		ordered = append(ordered, path)
+		next := slices.Clone(users[path])
+		slices.Sort(next)
+		for _, user := range next {
+			indeg[user]--
+			if indeg[user] == 0 {
+				ready = append(ready, user)
+			}
+		}
+	}
+	if len(ordered) != len(paths) {
+		return pkgs
+	}
+	out := make([]*packages.Package, len(ordered))
+	for i, path := range ordered {
+		out[i] = byPath[path]
+	}
+	return out
 }
 
 func stackGaps(dir string, pkgs []*packages.Package, sites []census.Site) ([]census.Site, []string) {

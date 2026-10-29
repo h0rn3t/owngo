@@ -47,6 +47,8 @@ func TestSitesJSON(t *testing.T) {
 }
 
 // TestCommandJSON ганяє census -json по дереву testdata і по пакету corpus.
+// Дерево містить фікстури v1. Контракт цього тесту — корпус v0, тож місця
+// поза src/corpus у звірку кількостей не входять. Прапор -v1 тут вимкнений.
 func TestCommandJSON(t *testing.T) {
 	testdata := analysistest.TestData()
 	for _, pattern := range []string{testdata, filepath.Join(testdata, "src", "corpus")} {
@@ -58,7 +60,14 @@ func TestCommandJSON(t *testing.T) {
 			if stderr != "" {
 				t.Fatalf("census -json stderr = %q, want empty", stderr)
 			}
-			checkSites(t, decodeSites(t, []byte(stdout)))
+			sites := decodeSites(t, []byte(stdout))
+			if pattern == testdata {
+				corpus := string(filepath.Separator) + "corpus" + string(filepath.Separator)
+				sites = slices.DeleteFunc(sites, func(s site) bool {
+					return !strings.Contains(s.Pos, corpus)
+				})
+			}
+			checkSites(t, sites)
 		})
 	}
 }

@@ -24,6 +24,7 @@ type Site struct {
 }
 
 // Analyzer знаходить місця алокації пакета і звітує категорію v0.
+// Прапорець -v1 замінює причину call на позичання, переміщення або спільне.
 // Result має тип []Site, порожній зріз, якщо місць немає.
 var Analyzer = &analysis.Analyzer{
 	Name:       "census",
@@ -31,6 +32,15 @@ var Analyzer = &analysis.Analyzer{
 	Requires:   []*analysis.Analyzer{buildssa.Analyzer},
 	ResultType: reflect.TypeFor[[]Site](),
 	Run:        run,
+}
+
+func init() {
+	Analyzer.Flags.Bool("v1", false, "зведення параметрів: позичання, переміщення, спільне")
+}
+
+func v1On(pass *analysis.Pass) bool {
+	f := pass.Analyzer.Flags.Lookup("v1")
+	return f != nil && f.Value.String() == "true"
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -47,12 +57,16 @@ func run(pass *analysis.Pass) (any, error) {
 			universe = append(universe, obj.Type(), types.NewPointer(obj.Type()))
 		}
 	}
+	var ctx *v1Ctx
+	if v1On(pass) {
+		ctx = &v1Ctx{sums: packageSummaries(pass, pkg.SrcFuncs), pass: pass}
+	}
 	sites := []Site{}
 	for _, fn := range pkg.SrcFuncs {
 		if fn.Blocks == nil {
 			continue
 		}
-		msg := messages(fn, mode, universe)
+		msg := messages(fn, mode, universe, ctx)
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
 				if !isSite(instr) {

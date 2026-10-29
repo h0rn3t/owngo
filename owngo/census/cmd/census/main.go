@@ -41,8 +41,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "print allocation sites as JSON")
 	conservative := fs.Bool("conservative", false, "interface edges count as cycles")
+	v1 := fs.Bool("v1", false, "classify pointer transfers as borrow, move, or shared")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(stderr, "usage: census -json [-conservative] <package>")
+		_, _ = fmt.Fprintln(stderr, "usage: census -json [-conservative] [-v1] <package>")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -64,6 +65,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 		if err := census.Analyzer.Flags.Set("conservative", "true"); err != nil {
 			return err
 		}
+	}
+	if *v1 {
+		if err := census.Analyzer.Flags.Set("v1", "true"); err != nil {
+			return err
+		}
+		prevFacts := census.Analyzer.FactTypes
+		census.Analyzer.FactTypes = []analysis.Fact{(*census.Summary)(nil)}
+		defer func() {
+			census.Analyzer.FactTypes = prevFacts
+			_ = census.Analyzer.Flags.Set("v1", "false")
+		}()
 	}
 	graph, err := checker.Analyze([]*analysis.Analyzer{census.Analyzer}, pkgs, nil)
 	if err != nil {

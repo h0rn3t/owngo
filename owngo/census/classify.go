@@ -22,6 +22,13 @@ const (
 	escapeGo
 )
 
+// transferNote — слово v1, коли втеча прийшла з передачі вказівника.
+// Порожнє word лишає ім'я escapeKind: пряма втеча сильніша за move.
+type transferNote struct {
+	kind escapeKind
+	word string
+}
+
 func (k escapeKind) name() string {
 	switch k {
 	case escapeCall:
@@ -65,22 +72,31 @@ func (s siteSet) absorb(other siteSet) bool {
 // messages класифікує місця однієї функції.
 // Запис у об'єкт наслідує втечу цього об'єкта; запис у об'єкт, який не втікає, втечею не є.
 // Розбір без полів: будь-яке поле ділить одну множину вмісту.
-func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type) map[ssa.Instruction]string {
+func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx) map[ssa.Instruction]string {
 	var instrs []ssa.Instruction
 	for _, block := range fn.Blocks {
 		instrs = append(instrs, block.Instrs...)
 	}
 	pts, contents := pointTo(instrs)
+	if v1 != nil {
+		v1.pts = pts
+		v1.contents = contents
+		linkCallAliases(instrs, pts, v1)
+		contents = v1.contents
+	}
 	pinned := pinnedSites(instrs, pts)
-	escape := directEscape(instrs, pts)
-	spread(instrs, pts, contents, escape)
+	escape, notes := directEscape(instrs, pts, v1)
+	if v1 != nil {
+		markAppendAlias(instrs, pts, escape, notes)
+	}
+	spread(instrs, pts, contents, escape, notes)
 
 	out := make(map[ssa.Instruction]string)
 	for _, instr := range instrs {
 		if !isSite(instr) {
 			continue
 		}
-		out[instr] = category(instr, escape[instr], pinned[instr], mode, universe)
+		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe)
 	}
 	return out
 }
@@ -253,69 +269,93 @@ func pinnedSites(instrs []ssa.Instruction, pts map[ssa.Value]siteSet) map[ssa.In
 	return pinned
 }
 
-func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet) map[ssa.Instruction]escapeKind {
+func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx) (map[ssa.Instruction]escapeKind, map[ssa.Instruction]transferNote) {
 	escape := map[ssa.Instruction]escapeKind{}
+	notes := map[ssa.Instruction]transferNote{}
 	for _, instr := range instrs {
 		switch instr := instr.(type) {
 		case *ssa.Return:
 			for _, result := range instr.Results {
-				raise(escape, pts[result], escapeReturn)
+				raise(escape, notes, pts[result], escapeReturn, "")
 			}
 		case *ssa.Send:
-			raise(escape, pts[instr.X], escapeChannel)
+			raise(escape, notes, pts[instr.X], escapeChannel, "")
 		case *ssa.Store:
 			if fromGlobal(instr.Addr) {
-				raise(escape, pts[instr.Val], escapeGlobal)
+				raise(escape, notes, pts[instr.Val], escapeGlobal, "")
 			}
 		case *ssa.Call:
-			noteCall(&instr.Call, escapeCall, pts, escape, false)
+			noteCall(instr, &instr.Call, escapeCall, pts, escape, notes, false, v1)
 		case *ssa.Defer:
-			noteCall(&instr.Call, escapeCall, pts, escape, false)
+			noteCall(instr, &instr.Call, escapeCall, pts, escape, notes, false, v1)
 		case *ssa.Go:
-			noteCall(&instr.Call, escapeGo, pts, escape, true)
+			noteCall(instr, &instr.Call, escapeGo, pts, escape, notes, true, v1)
 		}
 	}
-	return escape
+	return escape, notes
 }
 
 // noteCall піднімає аргументи. Callee лишається, окрім go: там значення функції теж виходить.
 // invoke не чіпає отримувача — він callee, не аргумент. builtin не є причиною call.
-func noteCall(call *ssa.CallCommon, k escapeKind, pts map[ssa.Value]siteSet, escape map[ssa.Instruction]escapeKind, includeCallee bool) {
+// go не читає зведення: горутина — інший потік, навіть якщо тіло лише читає вказівник.
+// v1 == nil лишає кожен виклик втечею call, як у корпусі v0.
+func noteCall(instr ssa.Instruction, call *ssa.CallCommon, k escapeKind, pts map[ssa.Value]siteSet, escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote, includeCallee bool, v1 *v1Ctx) {
 	if _, ok := builtinName(call); ok {
 		return
 	}
-	for _, arg := range call.Args {
-		raise(escape, pts[arg], k)
+	if includeCallee || v1 == nil {
+		for _, arg := range call.Args {
+			raise(escape, notes, pts[arg], k, "")
+		}
+		if includeCallee && !call.IsInvoke() {
+			raise(escape, notes, pts[call.Value], k, "")
+		}
+		return
 	}
-	if includeCallee && !call.IsInvoke() {
-		raise(escape, pts[call.Value], k)
-	}
+	v1.transfer(instr, call, pts, escape, notes)
 }
 
-func raise(escape map[ssa.Instruction]escapeKind, sites siteSet, k escapeKind) {
+// raise піднімає місця до k. word записується лише коли вид справді виріс.
+// На тому самому виді shared замінює move. Пряма втеча (порожнє word) move не затирає.
+func raise(escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote, sites siteSet, k escapeKind, word string) bool {
+	changed := false
 	for site := range sites {
 		if k > escape[site] {
 			escape[site] = k
+			if word == "" {
+				delete(notes, site)
+			} else {
+				notes[site] = transferNote{kind: k, word: word}
+			}
+			changed = true
+			continue
+		}
+		if k == escape[site] && word == "shared" {
+			if n, ok := notes[site]; ok && n.kind == k && n.word == "move" {
+				notes[site] = transferNote{kind: k, word: "shared"}
+				changed = true
+			}
 		}
 	}
+	return changed
 }
 
-func spread(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet, escape map[ssa.Instruction]escapeKind) {
+func spread(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet, escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote) {
 	for _, instr := range instrs {
 		closure, ok := instr.(*ssa.MakeClosure)
 		if !ok {
 			continue
 		}
 		for _, binding := range closure.Bindings {
-			raise(escape, pts[binding], escapeClosure)
+			raise(escape, notes, pts[binding], escapeClosure, "")
 		}
 	}
 	for {
 		grew := false
 		for site, k := range escape {
+			word := noteWord(notes, site, k)
 			for inner := range contents[site] {
-				if escape[inner] < k {
-					escape[inner] = k
+				if raise(escape, notes, siteSet{inner: {}}, k, word) {
 					grew = true
 				}
 			}
@@ -326,10 +366,10 @@ func spread(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ss
 				continue
 			}
 			k := escape[closure]
+			word := noteWord(notes, closure, k)
 			for _, binding := range closure.Bindings {
 				for site := range pts[binding] {
-					if escape[site] < k {
-						escape[site] = k
+					if raise(escape, notes, siteSet{site: {}}, k, word) {
 						grew = true
 					}
 				}
@@ -341,7 +381,15 @@ func spread(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ss
 	}
 }
 
-func category(instr ssa.Instruction, k escapeKind, pinned bool, mode ifaceMode, universe []types.Type) string {
+func noteWord(notes map[ssa.Instruction]transferNote, site ssa.Instruction, k escapeKind) string {
+	n, ok := notes[site]
+	if !ok || n.kind != k {
+		return ""
+	}
+	return n.word
+}
+
+func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned bool, mode ifaceMode, universe []types.Type) string {
 	switch instr := instr.(type) {
 	case *ssa.Call:
 		if b, ok := instr.Call.Value.(*ssa.Builtin); ok && b.Name() == "append" {
@@ -362,19 +410,23 @@ func category(instr ssa.Instruction, k escapeKind, pinned bool, mode ifaceMode, 
 	if alloc, ok := instr.(*ssa.Alloc); ok && !alloc.Heap {
 		return "stack"
 	}
+	reason := k.name()
+	if note.kind == k && note.word != "" {
+		reason = note.word
+	}
 	if cyclic(instr.(ssa.Value).Type(), mode, universe) {
 		if k == escapeNone {
 			return "cyclic"
 		}
-		return "cyclic: " + k.name()
+		return "cyclic: " + reason
 	}
 	if k == escapeNone {
 		return "static"
 	}
 	if k >= escapeGlobal {
-		return "rc-shared: " + k.name()
+		return "rc-shared: " + reason
 	}
-	return "rc-local: " + k.name()
+	return "rc-local: " + reason
 }
 
 func builtinName(call *ssa.CallCommon) (string, bool) {
