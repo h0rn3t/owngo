@@ -22,3 +22,11 @@
 - Аналізатора ще немає. `TestCorpus` тримає локальну заглушку, яка нічого не звітує; `census.Analyzer` — задача P0.3.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень. `go test ./owngo/census/...` компілюється і падає з `no diagnostic was reported matching` на всіх 73 очікуваннях.
 - Лишилось: P0.3, каркас, що звітує `unknown` і збігається з корпусом за кількістю місць.
+
+## 2026-10-29 — P0.3
+
+- `census.Analyzer` на `buildssa` знаходить місця після lift: кожен `*ssa.Alloc`, `MakeSlice`/`MakeMap`/`MakeChan`, `MakeClosure` зі зв'язками, `MakeInterface` для не-вказівникового типу, виклик builtin `append`, додавання рядків, `Convert` між `string` і `[]byte` або `[]rune`. Кожне місце звітує `unknown`.
+- Позиція — `Pos()` інструкції. Якщо у `MakeClosure` літерала функції вона невалідна, береться `Pos` функції SSA (ключове слово `func`).
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень. `go test ./owngo/census/ -run TestSiteCount -count=1` зелений: 73 діагностики, по рядках збігаються з `// want`.
+- `TestCorpus` лишається червоним: текст `unknown` не збігається з категоріями фікстур. Це задача P0.4.
+- Лишилось: P0.4, класифікатор v0, після якого `go test ./owngo/census/...` зелений.
