@@ -15,6 +15,15 @@
 - Критерій P0.1 «той самий набір падінь, що й upstream» на цій машині неперевірний: upstream тут не збирається (69 пакетів `[build failed]`). Зафіксовано в `BASELINE.md`.
 - Лишилось: wasm `+exception-handling` (не потрібно для нативних цілей OwnGo); перегляд перевірки macOS SDK під LLD 23; нічого не закомічено.
 
+## 2026-10-29 — видалення Python-інтеропу (поза PLAN.md)
+
+- За рішенням власника прибрано Python-інтероп llgo; `INTENT.md` оновлено (свідомий виняток із мінімального дифу).
+- Ядро: `ssa/python.go`, гачки в `Call`/`Load`/`DIGlobal`, `PyDecl`, `vkPy*`, `AfterInit`; у `cl` — `PkgPyModule`, `pyFunc`/`pyVar`, `pystr`/`pyList`/`pyTuple`, імпорт модуля в `init`, третє значення `PyObjRef` у `compileFuncDecl`/`compileFunction`/`funcOf`; у `internal/build` — `Py_Initialize`/`Py_Finalize`, `NeedPyInit` у метаданих кешу, `TestPythonPackage`.
+- Видалено `cl/_testpy`, `chore/llpyg`, `_xtool/pydump`, `_demo/py`, Python-приклади `doc/_readme`, образ `pydeps`; README, `doc/LLGo-Bindings.md`, `CLAUDE.md`, CI-установку numpy/torch очищено.
+- Лишено: `_demo/c/cgofull` (libpython через звичайний cgo), Python-плагіни gdb/lldb, CI-скрипти на Python.
+- Код із `py.`-linkname або `LLGoPackage = "py.…"` тепер падає на лінкуванні (undefined symbol), окремої діагностики немає.
+- `go test ./...`: нових падінь немає після виправлення `main_module_test.go`. `internal/build` має два падіння, яких немає в таблиці `owngo/BASELINE.md`, але вони відтворюються на чистому `main` (`6b88530ec`): `TestCreatePackageArchiveFileWithExternalArchiver`, `TestWasmStackAddressesCodegen`.
+
 ## 2026-10-29 — P0.2
 
 - Корпус `owngo/census/testdata/src/corpus`: фікстури `analysistest` для `stack`, `static`, `rc-local`, `rc-shared`, `cyclic` (строгий режим без полів-інтерфейсів), `pinned` і `implicit`. Щонайменше п'ять місць на категорію, включно з причинами return, closure, channel, global, go, call і unsafe, внутрішніми вказівниками, `append` з аліасом, викликом через інтерфейс і func-значення, method value, перезаписом глобальної змінної, каналом і `go`.
@@ -55,3 +64,11 @@
 - Тест команди збирає бінарник і запускає його: `go run` замінює ненульовий код виходу на 1. Зразок `append` у `implicit.go` стоїть на рядку 6 — це рядок інструкції SSA, тип varargs лишається `*[1]int`.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/...` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений. `go run ./owngo/census/cmd/census -json owngo/census/testdata` дає валідний JSON: 73 місця, ключі `category`, `reason`, `pos`, `type`.
 - Лишилось: P0.7, розрив із escape-діагностиками `gc`. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
+
+## 2026-10-29 — P0.7
+
+- `StackGaps` порівнює місця census поза `stack` з escape-діагностиками gc. Команда: `go build -gcflags=-m -json=0,file://…`. JSON (коди `escape`, `escapes`) фіксує лише втечу в купу; «does not escape» дає `-m`. Розрив — рядок з алокацією, що не тікає, без діагностики купи на тому самому рядку. Голий ідентифікатор (параметр) розриву не дає. `make(chan)` gc не діагностує і в купі лишає завжди.
+- Корпус: 73 місця, 65 поза `stack`, **26** розривів. Список у `TestCorpusGCGap`.
+- Сервіс [ms-faq](https://gitlab.datahub.ua.energy/tko/ms-faq) `develop` @ `520cbc6`: 701 місце, 618 поза `stack`, **45** розривів (14 у `internal/testutil`). Звіт — `owngo/GC-GAP.md`.
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений.
+- Лишилось: P0.8, динамічні ваги. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
