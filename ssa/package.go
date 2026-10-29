@@ -34,7 +34,6 @@ import (
 )
 
 const (
-	PkgPython  = "github.com/goplus/lib/py"
 	PkgRuntime = env.LLGoRuntimePkg + "/internal/runtime"
 )
 
@@ -129,9 +128,6 @@ type aProgram struct {
 	rt    *types.Package
 	rtget func() *types.Package
 
-	py    *types.Package
-	pyget func() *types.Package
-
 	target  *Target
 	td      llvm.TargetData
 	tm      llvm.TargetMachine
@@ -197,33 +193,10 @@ type aProgram struct {
 	u64Ty     Type
 	u16Ty     Type
 
-	pyObjPtr  Type
-	pyObjPPtr Type
-
 	abiTy    Type
 	abiTyPtr Type
 	deferTy  Type
 	deferPtr Type
-
-	pyImpTy      *types.Signature
-	pyNewList    *types.Signature
-	pyListSetI   *types.Signature
-	pyNewTuple   *types.Signature
-	pyTupleSetI  *types.Signature
-	floatFromDbl *types.Signature
-	callNoArgs   *types.Signature
-	callOneArg   *types.Signature
-	callFOArgs   *types.Signature
-	loadPyModS   *types.Signature
-	getAttrStr   *types.Signature
-	pyUniStr     *types.Signature
-
-	pyBoolFromInt32       *types.Signature
-	pyLongFromInt64       *types.Signature
-	pyLongFromUint64      *types.Signature
-	pyUniFromStrAndSize   *types.Signature
-	pyComplexFromDbs      *types.Signature
-	pyBytesFromStrAndSize *types.Signature
 
 	mallocTy       *types.Signature
 	freeTy         *types.Signature
@@ -380,7 +353,6 @@ func (p Program) NewBackendProgram() Program {
 	backend := NewProgram(target)
 	backend.sizes = p.sizes
 	backend.rt, backend.rtget = p.rt, p.rtget
-	backend.py, backend.pyget = p.py, p.pyget
 	backend.packageSyntax = p.packageSyntax
 	backend.gocvt.packageSyntax = p.packageSyntax
 	backend.localities = p.localities
@@ -710,20 +682,15 @@ func (p Program) NewPackageEx(name, pkgPath string, metaCollect bool) Package {
 	// mod.Finalize()
 	gbls := make(map[string]Global)
 	fns := make(map[string]Function)
-	pyobjs := make(map[string]PyObjRef)
-	pymods := make(map[string]Global)
 	strs := make(map[string]llvm.Value)
 	glbDbgVars := make(map[Expr]bool)
 	nullPointerIsValidAttr := mod.Context().CreateEnumAttribute(llvm.AttributeKindID("null_pointer_is_valid"), 0)
 	framePointerAttr := mod.Context().CreateStringAttribute("frame-pointer", "non-leaf")
-	// Don't need reset p.needPyInit here
-	// p.needPyInit = false
 	ret := &aPackage{
-		mod: mod, path: pkgPath, Prog: p, vars: gbls, fns: fns,
+		mod: mod, path: pkgPath, Prog: p, vars: gbls, fns: fns, strs: strs,
 		nullPointerIsValidAttr: nullPointerIsValidAttr,
 		framePointerAttr:       framePointerAttr,
-		pyobjs:                 pyobjs, pymods: pymods, strs: strs,
-		di: nil, cu: nil, glbDbgVars: glbDbgVars,
+		di:                     nil, cu: nil, glbDbgVars: glbDbgVars,
 		export:         make(map[string]string),
 		preserveSyms:   make(map[string]struct{}),
 		llvmUsedValues: make([]llvm.Value, 0, 4),
@@ -990,8 +957,6 @@ type aPackage struct {
 
 	vars   map[string]Global
 	fns    map[string]Function
-	pyobjs map[string]PyObjRef
-	pymods map[string]Global
 	strs   map[string]llvm.Value
 	goStrs map[string]llvm.Value
 	fnlink func(string) string
@@ -999,7 +964,6 @@ type aPackage struct {
 	iRoutine int
 
 	NeedRuntime         bool
-	NeedPyInit          bool
 	NeedAbiInit         int // bitmask of Reflect* flags indicating which reflect type-construction operations are used
 	MethodByIndex       map[int]none
 	MethodByName        map[string]none
@@ -1119,15 +1083,6 @@ func (p Package) SetResolveLinkname(fn func(string) string) {
 }
 
 // -----------------------------------------------------------------------------
-
-// AfterInit is called after the package is initialized (init all packages that depends on).
-func (p Package) AfterInit(b Builder, ret BasicBlock) {
-	doPyLoadModSyms := p.pyHasModSyms()
-	if doPyLoadModSyms {
-		b.SetBlockEx(ret, afterInit, false)
-		p.pyLoadModSyms(b)
-	}
-}
 
 func (p Package) InitDebug(name, pkgPath string, positioner Positioner) {
 	p.di = newDIBuilder(p.Prog, p, positioner)

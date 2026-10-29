@@ -494,9 +494,6 @@ func (b Builder) WrapNilCheck(ptr, recvType, methodName Expr) Expr {
 // Load returns the value at the pointer ptr.
 func (b Builder) Load(ptr Expr) Expr {
 	dbgInstrf("Load %v\n", ptr.impl)
-	if ptr.kind == vkPyVarRef {
-		return b.pyLoad(ptr)
-	}
 	b.assertStaticNilDeref(ptr)
 	storageType := b.Prog.Elem(ptr.Type)
 	telem := b.Prog.withoutNativeStorage(storageType)

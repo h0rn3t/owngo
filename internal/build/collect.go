@@ -499,7 +499,6 @@ func (c *context) tryLoadFromCache(pkg *aPackage) bool {
 	pkg.ArchiveFile = paths.Archive
 	pkg.LinkArgs = meta.LinkArgs
 	pkg.NeedRt = meta.NeedRt
-	pkg.NeedPyInit = meta.NeedPyInit
 	pkg.Meta = pkgMeta
 	pkg.CacheHit = true
 
@@ -515,7 +514,6 @@ func parseManifestMetadata(content string) (*cacheArchiveMetadata, error) {
 		if data.Metadata != nil {
 			meta.LinkArgs = append([]string(nil), data.Metadata.LinkArgs...)
 			meta.NeedRt = data.Metadata.NeedRt
-			meta.NeedPyInit = data.Metadata.NeedPyInit
 		}
 		return meta, nil
 	}
@@ -556,8 +554,6 @@ func parseManifestMetadataLegacy(content string, meta *cacheArchiveMetadata) (*c
 			}
 		case "NEED_RT":
 			meta.NeedRt = value == "true"
-		case "NEED_PY_INIT":
-			meta.NeedPyInit = value == "true"
 		}
 	}
 
@@ -566,9 +562,8 @@ func parseManifestMetadataLegacy(content string, meta *cacheArchiveMetadata) (*c
 
 // cacheArchiveMetadata holds metadata about a cached archive.
 type cacheArchiveMetadata struct {
-	LinkArgs   []string
-	NeedRt     bool
-	NeedPyInit bool
+	LinkArgs []string
+	NeedRt   bool
 }
 
 // saveToCache saves a built package to cache.
@@ -629,11 +624,10 @@ func (c *context) saveToCache(pkg *aPackage) error {
 	}
 
 	meta := &manifestMetadata{
-		LinkArgs:   append([]string(nil), pkg.LinkArgs...),
-		NeedRt:     pkg.NeedRt,
-		NeedPyInit: pkg.NeedPyInit,
+		LinkArgs: append([]string(nil), pkg.LinkArgs...),
+		NeedRt:   pkg.NeedRt,
 	}
-	if len(meta.LinkArgs) == 0 && !meta.NeedRt && !meta.NeedPyInit {
+	if len(meta.LinkArgs) == 0 && !meta.NeedRt {
 		data.Metadata = nil
 	} else {
 		data.Metadata = meta

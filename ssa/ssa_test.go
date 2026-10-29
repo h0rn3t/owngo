@@ -1517,12 +1517,6 @@ func TestSetBlockEx(t *testing.T) {
 	b.SetBlockEx(&aBasicBlock{fn: fn}, -1, false)
 }
 
-func TestSetPython(t *testing.T) {
-	prog := NewProgram(nil)
-	typ := types.NewPackage("foo", "foo")
-	prog.SetPython(typ)
-}
-
 func TestClosureCtx(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
@@ -2276,9 +2270,7 @@ func TestCvtType(t *testing.T) {
 }
 
 func TestUserdefExpr(t *testing.T) {
-	c := &pyVarTy{}
 	b := &builtinTy{}
-	_ = c.String()
 	_ = b.String()
 	test := func(a types.Type) {
 		defer func() {
@@ -2288,7 +2280,6 @@ func TestUserdefExpr(t *testing.T) {
 		}()
 		a.Underlying()
 	}
-	test(c)
 	test(b)
 }
 
@@ -2317,24 +2308,6 @@ func assertPkg(t *testing.T, p Package, expected string) {
 	}
 	if got != want {
 		t.Fatalf("\n==> got:\n%s\n==> expected:\n%s\n", got, want)
-	}
-}
-
-func TestPyFunc(t *testing.T) {
-	prog := NewProgram(nil)
-	py := types.NewPackage("foo", "foo")
-	o := types.NewTypeName(0, py, "Object", nil)
-	types.NewNamed(o, types.Typ[types.Int], nil)
-	py.Scope().Insert(o)
-	prog.SetPython(py)
-	pkg := prog.NewPackage("bar", "foo/bar")
-	a := pkg.PyNewFunc("a", NoArgsNoRet, false)
-	if pkg.PyNewFunc("a", NoArgsNoRet, false) != a {
-		t.Fatal("NewPyFunc(a) failed")
-	}
-	foo := pkg.PyNewModVar("foo", false)
-	if pkg.PyNewModVar("foo", false) != foo {
-		t.Fatal("NewPyModVar(foo) failed")
 	}
 }
 

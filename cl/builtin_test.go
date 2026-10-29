@@ -715,8 +715,6 @@ func TestErrBuiltin(t *testing.T) {
 	test("longjmp", func(ctx *context) { ctx.longjmp(nil, nil) })
 	test("cstr(NoArgs)", func(ctx *context) { cstr(nil, nil) })
 	test("cstr(Nonconst)", func(ctx *context) { cstr(nil, []ssa.Value{&ssa.Parameter{}}) })
-	test("pystr(NoArgs)", func(ctx *context) { pystr(nil, nil) })
-	test("pystr(Nonconst)", func(ctx *context) { pystr(nil, []ssa.Value{&ssa.Parameter{}}) })
 	test("atomic", func(ctx *context) { ctx.atomic(nil, 0, nil) })
 	test("atomicLoad", func(ctx *context) { ctx.atomicLoad(nil, nil) })
 	test("atomicStore", func(ctx *context) { ctx.atomicStore(nil, nil) })

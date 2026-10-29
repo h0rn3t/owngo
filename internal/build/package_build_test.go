@@ -43,14 +43,13 @@ func TestPackageBuildTask(t *testing.T) {
 		PkgPath: "example.com/p",
 		GoFiles: []string{"p.go"},
 		Types:   types.NewPackage("example.com/p", "p"),
-	}, NeedRt: true, NeedPyInit: true}
+	}, NeedRt: true}
 	task := newPackageBuildTask(pkg)
 	if task.isDeclOnly() || task.isLinkOnly() || !task.hasSource() || task.isRuntime() || !task.needsRuntimeSignals() {
 		t.Fatalf("unexpected normal package task: %+v", task)
 	}
-	needRuntime, needPyInit := packageRuntimeNeeds([]*packageBuildTask{task})
-	if !needRuntime || !needPyInit {
-		t.Fatalf("package runtime needs = %v, %v; want true, true", needRuntime, needPyInit)
+	if !packageRuntimeNeeds([]*packageBuildTask{task}) {
+		t.Fatal("packageRuntimeNeeds = false, want true")
 	}
 }
 
@@ -256,13 +255,13 @@ func TestFinalizePackageBuildPreservesCachedRuntimeNeeds(t *testing.T) {
 		ID:      "example.com/cached",
 		PkgPath: "example.com/cached",
 		Types:   types.NewPackage("example.com/cached", "cached"),
-	}, CacheHit: true, NeedPyInit: true}
+	}, CacheHit: true, NeedRt: true}
 
 	if err := finalizePackageBuild(&context{}, newPackageBuildTask(pkg), false); err != nil {
 		t.Fatal(err)
 	}
-	if !pkg.NeedPyInit {
-		t.Fatal("cached package lost Python initialization requirement")
+	if !pkg.NeedRt {
+		t.Fatal("cached package lost its runtime requirement")
 	}
 }
 

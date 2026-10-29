@@ -36,7 +36,7 @@ func TestGenMainModuleExecutable(t *testing.T) {
 	ctx.prog.EnableFuncInfoSites(true)
 	pkg := &packages.Package{PkgPath: "example.com/foo", ExportFile: "foo.a"}
 	mod := genMainModule(ctx, llssa.PkgRuntime, pkg,
-		&genConfig{rtInit: true, pyInit: true, packageInits: []string{"example.com/b.init", "example.com/z.init", "example.com/a.init"}})
+		&genConfig{rtInit: true, packageInits: []string{"example.com/b.init", "example.com/z.init", "example.com/a.init"}})
 	if mod.ExportFile != "foo.a-main" {
 		t.Fatalf("unexpected export file: %s", mod.ExportFile)
 	}
@@ -50,8 +50,6 @@ func TestGenMainModuleExecutable(t *testing.T) {
 		".pushsection llgo_funcinfo_entry",
 		".quad " + uint64Hex(funcInfoSymbolID(runtimeMainSymbol)),
 		".quad " + uint64Hex(funcInfoSymbolID(processEntrySymbol)),
-		"call void @Py_Initialize()",
-		"call void @Py_Finalize()",
 		"call void @\"example.com/foo.init\"()",
 		`@"example.com/foo..inittask" = global { i32, i32 } zeroinitializer`,
 		"define weak void @_start()",
@@ -156,7 +154,7 @@ func TestGenMainModuleCoverageExit(t *testing.T) {
 					ctx.buildConf.Coverage = &CoverageConfig{}
 				}
 				pkg := &packages.Package{PkgPath: "example.com/app", ExportFile: "app.a"}
-				mod := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true, pyInit: true})
+				mod := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true})
 				ir := mod.LPkg.String()
 				if !covered {
 					if strings.Contains(ir, "runtime.runCoverageExitHook") {

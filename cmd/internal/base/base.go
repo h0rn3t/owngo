@@ -51,7 +51,7 @@ type Command struct {
 // Llgo command
 var Llgo = &Command{
 	UsageLine: "llgo",
-	Short:     `llgo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem including Python.`,
+	Short:     `llgo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem.`,
 	// Commands initialized in package main
 }
 

@@ -148,7 +148,6 @@ type instrOrValue interface {
 const (
 	PkgNormal = iota
 	PkgLLGo
-	PkgPyModule   // py.<module>
 	PkgNoInit     // noinit: a package that don't need to be initialized
 	PkgDeclOnly   // decl: a package that only have declarations
 	PkgLinkIR     // link llvm ir (.ll)
@@ -177,7 +176,6 @@ type context struct {
 	goProg               *ssa.Program
 	goTyps               *types.Package
 	goPkg                *ssa.Package
-	pyMod                string
 	skips                map[string]none
 	loaded               map[*types.Package]*pkgInfo // loaded packages
 	bvals                map[ssa.Value]llssa.Expr    // block values
@@ -217,9 +215,8 @@ type context struct {
 	srcLines         map[string][]string
 	addrOfFieldAddrs map[token.Pos]none
 
-	inits     []func()
-	phis      []func()
-	initAfter func()
+	inits []func()
+	phis  []func()
 
 	state   pkgState
 	inCFunc bool
@@ -450,9 +447,6 @@ func (p *context) compileMethodsIf(pkg llssa.Package, typ types.Type, keep func(
 func (p *context) compileGlobal(pkg llssa.Package, gbl *ssa.Global) {
 	typ := p.patchType(gbl.Type())
 	name, vtype, define := p.varName(gbl.Pkg.Pkg, gbl)
-	if vtype == pyVar {
-		return
-	}
 	dbgInstrln("==> NewVar", name, typ)
 	g, skip := p.localityGlobalStorage(pkg, gbl, name, typ, llssa.CallConv(vtype))
 	if skip {
@@ -630,7 +624,7 @@ func hasInstantiatedRecv(recv *types.Var) bool {
 	return false
 }
 
-func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, llssa.PyObjRef, int) {
+func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, int) {
 	pkgTypes, name, ftype := p.funcName(f)
 	simd, simdDecl := lookupSIMD(f, p.prog.Target().GOARCH)
 	simdDecl = simdDecl && f.Pkg == p.goPkg
@@ -643,7 +637,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		ftype = goFunc
 	}
 	if ftype != goFunc {
-		return nil, nil, ignoredFunc
+		return nil, ignoredFunc
 	}
 	sig := func() *types.Signature {
 		oldGoFn := p.goFn
@@ -690,7 +684,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			panic("conflicting closure environment ABI for " + name)
 		}
 		if fn.HasBody() {
-			return fn, nil, goFunc
+			return fn, goFunc
 		}
 	}
 	if fn == nil {
@@ -773,7 +767,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 		b.EndBuild()
 		b.Dispose()
-		return fn, nil, goFunc
+		return fn, goFunc
 	}
 	if nblk := len(f.Blocks); nblk > 0 {
 		var childInits []func()
@@ -886,7 +880,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			b.EndBuild()
 		})
 	}
-	return fn, nil, goFunc
+	return fn, goFunc
 }
 
 // funcInfoDisplayName normalizes anonymous functions to gc's pkg.fn.funcN
@@ -1180,9 +1174,6 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	oldLocalBlock := p.locality.function.block
 	p.locality.function.block = block
 	defer func() { p.locality.function.block = oldLocalBlock }()
-	var last int
-	var pyModInit bool
-	var prog = p.prog
 	var pkg = p.pkg
 	var fn = p.fn
 	var instrs = block.Instrs[n:]
@@ -1215,15 +1206,6 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 		p.initializeLocalGuards(b)
 		if p.state != pkgInPatch {
 			p.applyEmbedInits(b)
-		}
-		if pyModInit = p.pyMod != ""; pyModInit {
-			last = len(instrs) - 1
-			instrs = instrs[:last]
-		} else if p.state != pkgHasPatch {
-			// TODO(xsw): confirm pyMod don't need to call AfterInit
-			p.initAfter = func() {
-				pkg.AfterInit(b, ret)
-			}
 		}
 	}
 
@@ -1304,20 +1286,6 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 		}
 	}
 end:
-	if pyModInit {
-		jump := block.Instrs[n+last].(*ssa.Jump)
-		jumpTo := p.jumpTo(jump)
-		modPath := p.pyMod
-		modName := pysymPrefix + modPath
-		modPtr := pkg.PyNewModVar(modName, true).Expr
-		mod := b.Load(modPtr)
-		cond := b.BinOp(token.NEQ, mod, prog.Nil(mod.Type))
-		newBlk := fn.MakeBlock()
-		b.If(cond, jumpTo, newBlk)
-		b.SetBlockEx(newBlk, llssa.AtEnd, false)
-		b.Store(modPtr, b.PyImportMod(modPath))
-		b.Jump(jumpTo)
-	}
 	return ret
 }
 
@@ -1916,7 +1884,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 				}
 			case *ssa.Call:
 				if fn, ok := ref.Call.Value.(*ssa.Function); ok {
-					if _, _, ftype := p.funcOf(fn); ftype == llgoFuncAddr || ftype == llgoFuncPCABI0 { // llgo.funcAddr/funcPCABI0
+					if _, ftype := p.funcOf(fn); ftype == llgoFuncAddr || ftype == llgoFuncPCABI0 { // llgo.funcAddr/funcPCABI0
 						return
 					}
 				}
@@ -2548,11 +2516,11 @@ func (p *context) getLocalVariable(b llssa.Builder, fn *ssa.Function, v *types.V
 	return div
 }
 
-func (p *context) compileFunction(v *ssa.Function) (goFn llssa.Function, pyFn llssa.PyObjRef, kind int) {
+func (p *context) compileFunction(v *ssa.Function) (goFn llssa.Function, kind int) {
 	// TODO(xsw) v.Pkg == nil: means auto generated function?
 	if v.Pkg == p.goPkg || v.Pkg == nil {
 		// function in this package
-		goFn, pyFn, kind = p.compileFuncDecl(p.pkg, v)
+		goFn, kind = p.compileFuncDecl(p.pkg, v)
 		if kind != ignoredFunc {
 			return
 		}
@@ -2576,11 +2544,8 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 		if _, _, ftype := p.funcName(v); ftype == llgoInstr {
 			v = ssawrap.MakeCallWrapper(p.goProg, v)
 		}
-		aFn, pyFn, _ := p.compileFunction(v)
-		if aFn != nil {
-			return aFn.Expr
-		}
-		return pyFn.Expr
+		aFn, _ := p.compileFunction(v)
+		return aFn.Expr
 	case *ssa.Global:
 		varName := v.Name()
 		val := p.varOf(b, v)
@@ -3014,7 +2979,6 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 			panic(err)
 		}
 	}
-	ctx.initPyModule()
 	ctx.initFiles(pkgPath, files, cPkg)
 	ctx.prog.SetPatch(ctx.patchType)
 	ctx.prog.SetCompileMethods(ctx.checkCompileMethods)
@@ -3041,10 +3005,6 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 		for _, ini := range inits {
 			ini()
 		}
-	}
-	if fn := ctx.initAfter; fn != nil {
-		ctx.initAfter = nil
-		fn()
 	}
 	if err = ctx.validateCVariadicWrapperUses(); err != nil {
 		return nil, nil, err

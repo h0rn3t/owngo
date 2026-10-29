@@ -47,7 +47,6 @@ func TestNewBackendProgramSharesPreparedGoState(t *testing.T) {
 	coordinator.SetClosureEnvDirective(fset, "example.com/p.Entry", token.Pos(7))
 	coordinator.MarkPackageSyntaxParsed(pkg)
 	coordinator.SetLocalityInfo("example.com/p.Value", LocalityInfo{Locality: ThreadLocal})
-	coordinator.SetPython(func() *types.Package { return nil })
 
 	backend := coordinator.NewBackendProgram()
 	defer backend.Dispose()
@@ -80,9 +79,6 @@ func TestNewBackendProgramSharesPreparedGoState(t *testing.T) {
 	}
 	if locality, ok := backend.VariableLocality("example.com/p.Value"); !ok || locality.Locality != ThreadLocal {
 		t.Fatalf("locality = (%+v, %v), want ThreadLocal", locality, ok)
-	}
-	if backend.python() != nil {
-		t.Fatal("backend Program changed the prepared optional Python package")
 	}
 	if !backend.disableBoundsChecks || !backend.enableGoGlobalDCE || !backend.enableDeadcodeDrop || !backend.enableGCRoots ||
 		!backend.logicalGoroutineLocal || !backend.enableSafepoints ||

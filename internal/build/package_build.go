@@ -93,7 +93,7 @@ func (t *packageBuildTask) isDeclOnly() bool {
 }
 
 func (t *packageBuildTask) isLinkOnly() bool {
-	return t.kind == cl.PkgLinkIR || t.kind == cl.PkgLinkExtern || t.kind == cl.PkgPyModule
+	return t.kind == cl.PkgLinkIR || t.kind == cl.PkgLinkExtern
 }
 
 func (t *packageBuildTask) hasSource() bool {
@@ -327,7 +327,7 @@ func (ctx *context) executeIsolatedPackage(task *packageBuildTask, verbose bool)
 	}
 	owned = false
 	if task.needsRuntimeSignals() {
-		task.pkg.setNeedRuntimeOrPyInit(task.pkg.LPkg.NeedRuntime, task.pkg.LPkg.NeedPyInit)
+		task.pkg.NeedRt = task.pkg.LPkg.NeedRuntime
 	}
 	// Cache hits still rebuild the frontend module in the isolated Program even
 	// though they skip backend emission. Linking needs a small metadata subset of
@@ -420,10 +420,6 @@ func (ctx *context) newBackendTask(session backendSession) *context {
 	}
 }
 
-func packageRuntimeNeeds(tasks []*packageBuildTask) (needRuntime, needPyInit bool) {
-	for _, task := range tasks {
-		needRuntime = needRuntime || task.pkg.NeedRt
-		needPyInit = needPyInit || task.pkg.NeedPyInit
-	}
-	return
+func packageRuntimeNeeds(tasks []*packageBuildTask) bool {
+	return slices.ContainsFunc(tasks, func(task *packageBuildTask) bool { return task.pkg.NeedRt })
 }

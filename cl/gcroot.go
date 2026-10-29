@@ -40,7 +40,7 @@ func (p *context) prepareGCRoots(fn *ssa.Function, hasClosureContext bool) {
 		}
 		if call, ok := value.(*ssa.Call); ok {
 			if callee, ok := call.Call.Value.(*ssa.Function); ok {
-				if _, _, kind := p.funcOf(callee); kind == llgoFuncAddr {
+				if _, kind := p.funcOf(callee); kind == llgoFuncAddr {
 					// llgo.funcAddr has an unsafe.Pointer signature but lowers
 					// to a code pointer, not a Go heap pointer.
 					return false

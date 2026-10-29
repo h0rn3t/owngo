@@ -46,7 +46,6 @@ func genExpects(root string) {
 	runExpectDir(root, "cl/_testlto", func(conf *build.Config) {
 		conf.LTO = lto.Full
 	})
-	runExpectDir(root, "cl/_testpy")
 	runExpectDir(root, "cl/_testdata")
 }
 

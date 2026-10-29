@@ -65,16 +65,6 @@ func constBool(v ssa.Value) (ret bool, ok bool) {
 	return
 }
 
-// func pystr(string) *py.Object
-func pystr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
-	if len(args) == 1 {
-		if sv, ok := constStr(args[0]); ok {
-			return b.PyStr(sv)
-		}
-	}
-	panic("pystr(<string-literal>): invalid arguments")
-}
-
 // func cstr(string) *int8
 func cstr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 	if len(args) == 1 {
@@ -381,7 +371,7 @@ func (p *context) funcAddr(b llssa.Builder, args []ssa.Value) llssa.Expr {
 		if fn, ok := args[0].(*ssa.MakeInterface); ok {
 			switch f := fn.X.(type) {
 			case *ssa.Function:
-				if aFn, _, _ := p.compileFunction(f); aFn != nil {
+				if aFn, _ := p.compileFunction(f); aFn != nil {
 					return aFn.Expr
 				}
 			default:
@@ -415,7 +405,7 @@ func (p *context) funcPCABI0Value(b llssa.Builder, v ssa.Value) llssa.Expr {
 			cfn := b.Pkg.NewFunc(cname, fnSig, llssa.CDecl)
 			return b.Convert(p.type_(types.Typ[types.Uintptr], llssa.GoDecl), cfn.Expr)
 		}
-		if aFn, _, _ := p.compileFunction(v); aFn != nil {
+		if aFn, _ := p.compileFunction(v); aFn != nil {
 			return b.Convert(p.type_(types.Typ[types.Uintptr], llssa.GoDecl), aFn.Expr)
 		}
 	case *ssa.MakeClosure:
@@ -662,9 +652,6 @@ var llgoInstrs = map[string]int{
 	"boolToUint8":       llgoBoolToUint8,
 	"interfaceKindUsed": llgoInterfaceKindUsed,
 	"closureEnv":        llgoClosureEnv,
-	"pystr":             llgoPyStr,
-	"pyList":            llgoPyList,
-	"pyTuple":           llgoPyTuple,
 	"sigjmpbuf":         llgoSigjmpbuf,
 	"sigsetjmp":         llgoSigsetjmp,
 	"siglongjmp":        llgoSiglongjmp,
@@ -713,19 +700,9 @@ var llgoInstrs = map[string]int{
 
 // funcOf returns a function by name and set ftype = goFunc, cFunc, etc.
 // or returns nil and set ftype = llgoCstr, llgoAlloca, llgoUnreachable, etc.
-func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObjRef, ftype int) {
-	pkgTypes, name, ftype := p.funcName(fn)
+func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, ftype int) {
+	_, name, ftype := p.funcName(fn)
 	switch ftype {
-	case pyFunc:
-		if kind, mod := pkgKindByScope(pkgTypes.Scope()); kind == PkgPyModule {
-			pkg := p.pkg
-			fnName := pysymPrefix + mod + "." + name
-			if pyFn = pkg.PyObjOf(fnName); pyFn == nil {
-				pyFn = pkg.PyNewFunc(fnName, fn.Signature, true)
-			}
-			return
-		}
-		ftype = ignoredFunc
 	case llgoInstr:
 		if ftype = llgoInstrs[name]; ftype == 0 {
 			panic("unknown llgo instruction: " + name)
@@ -734,7 +711,7 @@ func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObj
 		pkg := p.pkg
 		if aFn = pkg.FuncOf(name); aFn == nil {
 			if len(fn.FreeVars) > 0 {
-				return nil, nil, ignoredFunc
+				return nil, ignoredFunc
 			}
 			sig := p.patchType(fn.Signature).(*types.Signature)
 			// Source env-bearing bodies are created by compileFuncDecl before
@@ -2382,7 +2359,7 @@ func (p *context) deferStackOwner(fn *ssa.Function) llssa.Function {
 	if owner := p.funcs[fn]; owner != nil {
 		return owner
 	}
-	owner, _, kind := p.compileFunction(fn)
+	owner, kind := p.compileFunction(fn)
 	if kind == ignoredFunc {
 		return nil
 	}
@@ -2685,7 +2662,7 @@ func (p *context) callEx(b llssa.Builder, act llssa.DoAction, call *ssa.CallComm
 			ret = p.emitDo(b, act, ds, mayRecover, fn, llssa.Builder.Call, p.compileValues(b, args, kind)...)
 			return
 		}
-		aFn, pyFn, ftype := p.compileFunction(cv)
+		aFn, ftype := p.compileFunction(cv)
 		// TODO(xsw): check ca != llssa.Call
 		switch ftype {
 		case cFunc, stdcallFunc:
@@ -2717,19 +2694,8 @@ func (p *context) callEx(b llssa.Builder, act llssa.DoAction, call *ssa.CallComm
 		case goFunc:
 			args := p.compileValues(b, args, kind)
 			ret = p.emitDo(b, act, ds, mayRecover, aFn.Expr, llssa.Builder.Call, args...)
-		case pyFunc:
-			args := p.compileValues(b, args, kind)
-			ret = p.emitDo(b, act, ds, mayRecover, pyFn.Expr, llssa.Builder.Call, args...)
 		case llgoSIMD:
 			ret = p.simdCall(b, cv, args)
-		case llgoPyList:
-			args := p.compileValues(b, args, fnHasVArg)
-			ret = b.PyList(args...)
-		case llgoPyTuple:
-			args := p.compileValues(b, args, fnHasVArg)
-			ret = b.PyTuple(args...)
-		case llgoPyStr:
-			ret = pystr(b, args)
 		case llgoCstr:
 			ret = cstr(b, args)
 		case llgoAsm:

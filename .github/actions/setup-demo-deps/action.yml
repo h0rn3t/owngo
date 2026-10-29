@@ -265,16 +265,6 @@ runs:
       run: |
         set -euo pipefail
 
-        pip3.12 install --user --break-system-packages numpy
-        if [[ "${RUNNER_OS}" == "Linux" ]]; then
-          # The demos use CPU tensors. The default PyPI wheel pulls CUDA
-          # libraries that can exhaust this job's one-hour time limit.
-          pip3.12 install --user --break-system-packages torch \
-            --index-url https://download.pytorch.org/whl/cpu
-        else
-          pip3.12 install --user --break-system-packages torch
-        fi
-
         pcdir="${HOME}/pc"
         mkdir -p "${pcdir}"
         libdir="$(pkg-config --variable=libdir python-3.12-embed)"
@@ -291,17 +281,6 @@ runs:
 
         $hostPython = "${{ steps.windows_python.outputs.python-path }}"
         $python = "${{ steps.windows_target_python.outputs.python-path || steps.windows_python.outputs.python-path }}"
-        $packages = @("numpy")
-        if ("${{ inputs.windows-arch }}" -eq "amd64") {
-          $packages += "torch"
-        } else {
-          Add-Content -Encoding utf8 $env:GITHUB_ENV "LLGO_WINDOWS_NO_TORCH=1"
-        }
-        & $python -m pip install @packages
-        if ($LASTEXITCODE -ne 0) {
-          throw "Installing Python demo dependencies failed with exit code $LASTEXITCODE"
-        }
-
         $prefix = (& $python -c "import sys; print(sys.base_prefix)").Trim()
         $hostPrefix = (& $hostPython -c "import sys; print(sys.base_prefix)").Trim()
         $includeDir = (& $python -c "import sysconfig; print(sysconfig.get_path('include'))").Trim()

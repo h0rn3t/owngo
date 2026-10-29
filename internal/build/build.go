@@ -258,10 +258,6 @@ type Config struct {
 	// sourceOverlayFile is borrowed by isolated child groups and fallback
 	// builds. The parent Build owns its lifetime through all child work.
 	sourceOverlayFile string
-	// TestPythonPackage supplies the synthetic Python ABI root used by compiler
-	// fixtures that intentionally avoid importing github.com/goplus/lib/py.
-	// Production callers leave this nil; the provider is evaluated once per Do.
-	TestPythonPackage func() *types.Package
 
 	// Coverage enables source coverage for builds/tests. Nil leaves the build
 	// unchanged; coverage holds only per-invocation temporary state.
@@ -924,13 +920,6 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	}
 
 	prog.SetRuntime(altPkgs[0].Types)
-	var pythonPackage *types.Package
-	if python := dedup.Check(llssa.PkgPython); python != nil {
-		pythonPackage = python.Types
-	} else if conf.TestPythonPackage != nil {
-		pythonPackage = conf.TestPythonPackage()
-	}
-	prog.SetPython(func() *types.Package { return pythonPackage })
 
 	buildMode := ssaBuildMode
 	passOpt := shouldRunLLVMPasses(mode)
@@ -1760,17 +1749,6 @@ func filterTestPackages(initial []*packages.Package, outFile string) ([]*package
 	return filtered, nil
 }
 
-func (p Package) setNeedRuntimeOrPyInit(needRuntime, needPyInit bool) {
-	p.NeedRt = needRuntime
-	p.NeedPyInit = needPyInit
-}
-
-func (p Package) isNeedRuntimeOrPyInit() (needRuntime, needPyInit bool) {
-	needRuntime = p.NeedRt
-	needPyInit = p.NeedPyInit
-	return
-}
-
 const (
 	ssaBuildMode = ssa.SanityCheckFunctions | ssa.InstantiateGenerics
 )
@@ -2157,9 +2135,7 @@ func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, er
 	if err := buildPackageGroup(ctx, normalTasks, verbose); err != nil {
 		return nil, err
 	}
-	needRuntime, needPyInit := packageRuntimeNeeds(normalTasks)
-
-	if needRuntime || needPyInit {
+	if packageRuntimeNeeds(normalTasks) {
 		if err := buildPackageGroup(ctx, runtimeTasks, verbose); err != nil {
 			return nil, err
 		}
@@ -2223,7 +2199,7 @@ func executePackageBuild(ctx *context, task *packageBuildTask, verbose bool) err
 		return err
 	}
 	if task.needsRuntimeSignals() && aPkg.LPkg != nil {
-		aPkg.setNeedRuntimeOrPyInit(aPkg.LPkg.NeedRuntime, aPkg.LPkg.NeedPyInit)
+		aPkg.NeedRt = aPkg.LPkg.NeedRuntime
 	}
 	return nil
 }
@@ -2251,7 +2227,7 @@ func finalizePackageBuild(ctx *context, task *packageBuildTask, verbose bool) er
 func appendExternalLinkArgs(ctx *context, aPkg *aPackage, spec string) {
 	// need to be linked with external library
 	// format: ';' separated alternative link methods. e.g.
-	//   link: $LLGO_LIB_PYTHON; $(pkg-config --libs python3-embed); -lpython3
+	//   link: $(pkg-config --libs zlib); -lz
 	altParts := strings.Split(spec, ";")
 	expdArgs := make([]string, 0, len(altParts))
 	for _, alt := range altParts {
@@ -2506,7 +2482,6 @@ func prepareMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage, outp
 // coordinator; isolated package Programs may already have been disposed.
 func planMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage) (*mainLinkPreparation, error) {
 	needRuntime := false
-	needPyInit := false
 	var needAbiInit int
 	methodByIndex := make(map[int]none)
 	methodByName := make(map[string]none)
@@ -2532,9 +2507,7 @@ func planMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage) (*mainL
 			continue
 		}
 		// Only let non-runtime packages influence whether runtime is needed.
-		need1, need2 := aPkg.isNeedRuntimeOrPyInit()
-		needRuntime = needRuntime || need1
-		needPyInit = needPyInit || need2
+		needRuntime = needRuntime || aPkg.NeedRt
 		if snapshot := aPkg.linkSnapshot; snapshot != nil {
 			needAbiInit |= snapshot.needAbiInit
 			for k := range snapshot.methodByIndex {
@@ -2567,7 +2540,7 @@ func planMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage) (*mainL
 	needRuntime = needRuntime || len(cExports) != 0
 
 	// Only link runtime objects when needed (or for host builds where runtime is always required).
-	if needRuntime || needPyInit || ctx.buildConf.Target == "" {
+	if needRuntime || ctx.buildConf.Target == "" {
 		linkArgs = append(linkArgs, rtLinkArgs...)
 		archiveInputs = append(archiveInputs, rtLinkInputs...)
 	}
@@ -2584,7 +2557,7 @@ func planMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage) (*mainL
 		// rather than by the presence of those archives on the link command.
 		// genMainModule supplies runtime.main/runtime.goexit records separately.
 		metadataOrder := linkedOrder
-		if !needRuntime && !needPyInit && !needsWasmRuntimeScheduler(ctx) && (ctx.prog == nil || !ctx.prog.NeedsLocalContext()) {
+		if !needRuntime && !needsWasmRuntimeScheduler(ctx) && (ctx.prog == nil || !ctx.prog.NeedsLocalContext()) {
 			metadataOrder = filterOutRuntimePkgs(linkedOrder)
 		}
 		funcInfo = prepareFuncInfoTableRecords(collectFuncInfo(metadataOrder), nil)
@@ -2597,7 +2570,6 @@ func planMainLink(ctx *context, pkg *packages.Package, pkgs []*aPackage) (*mainL
 	gen := genConfig{
 		defaultGODEBUG: ctx.defaultGODEBUG[pkg.ID],
 		rtInit:         needRuntime && !ctx.wasmRuntimeFree,
-		pyInit:         needPyInit,
 		abiInit:        needAbiInit,
 		packageInits:   packageInits,
 		methodByIndex:  methodByIndex,
@@ -4067,7 +4039,6 @@ type aPackage struct {
 	LPkg   llssa.Package
 
 	NeedRt          bool
-	NeedPyInit      bool
 	ssaInstructions int64
 	linkSnapshot    *packageLinkSnapshot
 
@@ -4140,7 +4111,6 @@ func registerSSAPkgs(ctx *context, initial []*packages.Package, verbose bool) ([
 				AltPkg:           altPkg,
 				LPkg:             nil,
 				NeedRt:           false,
-				NeedPyInit:       false,
 				LinkArgs:         nil,
 				ObjFiles:         nil,
 				rewriteVars:      rewrites,

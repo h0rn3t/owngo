@@ -127,8 +127,6 @@ func pkgKind(v string) (int, string) {
 		//	return PkgLinkBitCode
 		if strings.HasPrefix(v, "link:") { // "link: <libpath>"
 			return PkgLinkExtern, v[5:]
-		} else if strings.HasPrefix(v, "py.") { // "py.<module>"
-			return PkgPyModule, v[3:]
 		} else if strings.HasPrefix(v, "decl:") { // "decl: <param>"
 			return PkgDeclOnly, v[5:]
 		}
@@ -726,7 +724,6 @@ const (
 	ignoredFunc = iota
 	goFunc      = int(llssa.GoDecl)
 	cFunc       = int(llssa.CDecl)
-	pyFunc      = int(llssa.PyDecl)
 	stdcallFunc = int(llssa.Stdcall)
 	llgoInstr   = -1
 
@@ -749,10 +746,6 @@ const (
 	llgoFuncAddr   = llgoInstrBase + 0xe
 	llgoSetjmp     = llgoInstrBase + 0x13
 	llgoLongjmp    = llgoInstrBase + 0x14
-
-	llgoPyList  = llgoInstrBase + 0x10
-	llgoPyStr   = llgoInstrBase + 0x11
-	llgoPyTuple = llgoInstrBase + 0x12
 
 	llgoAtomicLoad    = llgoInstrBase + 0x1d
 	llgoAtomicStore   = llgoInstrBase + 0x1e
@@ -887,9 +880,6 @@ func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 		if strings.HasPrefix(v, "stdcall.") {
 			return nil, v[len("stdcall."):], stdcallFunc
 		}
-		if strings.HasPrefix(v, "py.") {
-			return pkg, v[3:], pyFunc
-		}
 		if strings.HasPrefix(v, "llgo.") {
 			return nil, v[5:], llgoInstr
 		}
@@ -926,7 +916,6 @@ const (
 	ignoredVar = iota
 	goVar      = int(llssa.GoDecl)
 	cVar       = int(llssa.CDecl)
-	pyVar      = int(llssa.PyDecl)
 )
 
 func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtype int, define bool) {
@@ -947,9 +936,6 @@ func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtyp
 				return v, goVar, false
 			}
 			if pos := strings.IndexByte(v, '.'); pos >= 0 {
-				if pos == 2 && v[0] == 'p' && v[1] == 'y' {
-					return v[3:], pyVar, false
-				}
 				return replaceGoName(v, pos), goVar, false
 			}
 			return v, cVar, false
@@ -962,12 +948,6 @@ func (p *context) varOf(b llssa.Builder, v *ssa.Global) llssa.Expr {
 	pkgTypes := p.ensureLoaded(v.Pkg.Pkg)
 	pkg := p.pkg
 	name, vtype, _ := p.varName(pkgTypes, v)
-	if vtype == pyVar {
-		if kind, mod := pkgKindByScope(pkgTypes.Scope()); kind == PkgPyModule {
-			return b.PyNewVar(pysymPrefix+mod, name).Expr
-		}
-		panic("unreachable")
-	}
 	if local, ok := p.localVariableAddress(b, v, name); ok {
 		return local
 	}
@@ -992,16 +972,6 @@ func (p *context) ensureLoaded(pkgTypes *types.Package) *types.Package {
 }
 
 // -----------------------------------------------------------------------------
-
-const (
-	pysymPrefix = "__llgo_py."
-)
-
-func (p *context) initPyModule() {
-	if kind, mod := pkgKindByScope(p.goTyps.Scope()); kind == PkgPyModule {
-		p.pyMod = mod
-	}
-}
 
 // ParsePkgSyntax collects declaration directives in one syntax pass before SSA
 // creation using default frontend options.

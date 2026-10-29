@@ -128,7 +128,7 @@ type Cmd_work struct {
 //line cmd/llgo/main_app.gox:1
 func (this *App) MainEntry() {
 //line cmd/llgo/main_app.gox:1:1
-	this.Short(`llgo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem including Python.`)
+	this.Short(`llgo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem.`)
 }
 func (this *App) Main() {
 	_xgo_obj0 := &Cmd_bug{App: this}
