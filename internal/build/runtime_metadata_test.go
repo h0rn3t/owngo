@@ -18,13 +18,12 @@ import (
 
 func TestPlanMainLinkRuntimeMetadata(t *testing.T) {
 	for _, test := range []struct {
-		name                                  string
-		runtime, python, wasm, local, cExport bool
-		wantRuntime                           bool
+		name                          string
+		runtime, wasm, local, cExport bool
+		wantRuntime                   bool
 	}{
 		{name: "runtime-free native"},
 		{name: "runtime required", runtime: true, wantRuntime: true},
-		{name: "python required", python: true, wantRuntime: true},
 		{name: "wasm scheduler", wasm: true, wantRuntime: true},
 		{name: "local context startup", local: true, wantRuntime: true},
 		{name: "leaf C export", cExport: true, wantRuntime: true},
@@ -37,7 +36,7 @@ func TestPlanMainLinkRuntimeMetadata(t *testing.T) {
 			}
 			app := snapshotPkg("example.com/main", "main.main")
 			rt := snapshotPkg(llssa.PkgRuntime, llssa.PkgRuntime+".unusedHelper")
-			app.NeedRt, app.NeedPyInit = test.runtime, test.python
+			app.NeedRt = test.runtime
 			if test.cExport {
 				app.linkSnapshot.cExports = []cExport{{
 					goName: "example.com/main.Callback", cName: "callback", sig: llssa.NoArgsNoRet,

@@ -18,8 +18,6 @@ package cl_test
 
 import (
 	"context"
-	"go/token"
-	"go/types"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +33,6 @@ import (
 	"github.com/xgo-dev/llgo/internal/llgen"
 	"github.com/xgo-dev/llgo/internal/lto"
 	"github.com/xgo-dev/llgo/internal/optlevel"
-	llssa "github.com/xgo-dev/llgo/ssa"
 	llvmenv "github.com/xgo-dev/llgo/xtool/env/llvm"
 )
 
@@ -884,31 +881,6 @@ func TestSelectOutputLinesAllowsConcurrentPrints(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRunAndTestFromTestpy(t *testing.T) {
-	conf := pythonFixtureConfig()
-	cltest.RunAndTestFromDir(t, "", "./_testpy", nil, cltest.WithRunConfig(conf))
-}
-
-func TestRunAndTestFromTestpyDWARF(t *testing.T) {
-	conf := pythonFixtureConfig()
-	conf.LinkOptions.DWARF = build.DWARFPreserve
-	cltest.RunAndTestFromDir(t, "", "./_testpy", nil,
-		cltest.WithRunConfig(conf), cltest.WithIRCheck(false))
-}
-
-func pythonFixtureConfig() *build.Config {
-	conf := build.NewDefaultConf(build.ModeRun)
-	conf.TestPythonPackage = func() *types.Package {
-		pkg := types.NewPackage(llssa.PkgPython, "py")
-		obj := types.NewTypeName(token.NoPos, pkg, "Object", nil)
-		types.NewNamed(obj, types.NewStruct(nil, nil), nil)
-		pkg.Scope().Insert(obj)
-		pkg.MarkComplete()
-		return pkg
-	}
-	return conf
 }
 
 func TestRunAndTestFromTestlibc(t *testing.T) {

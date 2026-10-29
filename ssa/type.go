@@ -50,8 +50,6 @@ const (
 	vkClosure
 	vkIfaceMethod
 	vkBuiltin
-	vkPyFuncRef
-	vkPyVarRef
 	vkTuple
 	vkSlice
 	vkArray

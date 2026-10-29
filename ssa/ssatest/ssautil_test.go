@@ -50,10 +50,6 @@ func TestNewProgram(t *testing.T) {
 	// Set runtime package
 	rtPkg := types.NewPackage(ssa.PkgRuntime, ssa.PkgRuntime)
 	prog.SetRuntime(rtPkg)
-
-	// Set python package
-	pyPkg := types.NewPackage(ssa.PkgPython, ssa.PkgPython)
-	prog.SetRuntime(pyPkg)
 }
 
 func TestNewProgramEx(t *testing.T) {
@@ -72,10 +68,6 @@ func TestNewProgramEx(t *testing.T) {
 	// Set runtime package
 	rtPkg := types.NewPackage(ssa.PkgRuntime, ssa.PkgRuntime)
 	prog.SetRuntime(rtPkg)
-
-	// Set python package
-	pyPkg := types.NewPackage(ssa.PkgPython, ssa.PkgPython)
-	prog.SetRuntime(pyPkg)
 }
 
 func TestAssert(t *testing.T) {

@@ -112,26 +112,6 @@ func Builtin(name string) Expr {
 
 // -----------------------------------------------------------------------------
 
-type pyVarTy struct {
-	mod  Expr
-	name string
-}
-
-func (p pyVarTy) Underlying() types.Type {
-	panic("don't call")
-}
-
-func (p pyVarTy) String() string {
-	return "pyVar"
-}
-
-func pyVarExpr(mod Expr, name string) Expr {
-	tvar := &aType{raw: rawType{&pyVarTy{mod, name}}, kind: vkPyVarRef}
-	return Expr{Type: tvar}
-}
-
-// -----------------------------------------------------------------------------
-
 // Zero returns a zero constant expression.
 func (p Program) Zero(t Type) Expr {
 	if t.kind == vkSIMD {
@@ -1528,9 +1508,6 @@ func (b Builder) CallForwardVarargs(fn Expr, args ...Expr) Expr {
 func (b Builder) Call(fn Expr, args ...Expr) (ret Expr) {
 	dbgInstrCall("Call", fn, args)
 	var kind = fn.kind
-	if kind == vkPyFuncRef {
-		return b.pyCall(fn, args)
-	}
 	var ll llvm.Type
 	var data Expr
 	var sig *types.Signature

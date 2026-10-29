@@ -153,11 +153,3 @@ RUN set -eux; \
   fi
 
 WORKDIR /repo
-
-FROM base AS pydeps
-
-# Optional demo deps used by _demo/py (numpy/torch). Keep in a separate target
-# so users can build a smaller image when needed.
-RUN set -eux; \
-  pip install numpy && \
-  (pip install torch --index-url https://download.pytorch.org/whl/cpu || pip install torch)

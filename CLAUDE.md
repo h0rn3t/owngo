@@ -4,7 +4,7 @@ This document provides essential information for AI assistants to help fix bugs 
 
 ## About LLGo
 
-LLGo is a Go compiler based on LLVM designed to better integrate Go with the C ecosystem, including Python and JavaScript. It's a subproject of the XGo project that aims to expand the boundaries of Go/XGo for game development, AI and data science, WebAssembly, and embedded development.
+LLGo is a Go compiler based on LLVM designed to better integrate Go with the C ecosystem, including JavaScript. It's a subproject of the XGo project that aims to expand the boundaries of Go/XGo for game development, AI and data science, WebAssembly, and embedded development.
 
 ## Language
 
@@ -20,8 +20,8 @@ LLGo is a Go compiler based on LLVM designed to better integrate Go with the C e
 - `ssa/` - LLVM IR file generation using Go SSA semantics
 - `internal/build/` - Build process orchestration
 - `runtime/` - LLGo runtime library
-- `chore/` - Development tools (llgen, llpyg, ssadump, etc.)
-- `_demo/` - Example programs demonstrating C/C++ interop (`c/hello`, `c/qsort`) and Python integration (`py/callpy`, `py/numpy`)
+- `chore/` - Development tools (llgen, ssadump, etc.)
+- `_demo/` - Example programs demonstrating C/C++ interop (`c/hello`, `c/qsort`)
 - `_cmptest/` - Comparison tests to verify the same program gets the same output with Go and LLGo
 
 ## Development Environment
@@ -37,11 +37,10 @@ The following commands and workflows are essential when fixing bugs or implement
 go test ./...
 ```
 
-**Note:** Some tests may fail if optional dependencies (like Python) are not properly configured. The test suite includes comprehensive tests for:
+**Note:** Some tests may fail if optional dependencies are not properly configured. The test suite includes comprehensive tests for:
 - Compiler functionality
 - SSA generation
 - C interop
-- Python integration (requires Python development headers)
 
 ### Write and run tests for your changes
 
@@ -210,7 +209,6 @@ LLGO_ROOT=/path/to/llgo llgo run .
 2. **Demo Directory:** Examples in `_demo` are prefixed with `_` to prevent standard `go` command from trying to compile them
 3. **Defer in Loops:** LLGo now supports `defer` within loops, matching Go's semantics of executing defers in LIFO order for every iteration. Be mindful of loop-heavy defer usage as it allocates per iteration.
 4. **C Ecosystem Integration:** LLGo uses `go:linkname` directive to link external symbols through ABI
-5. **Python Integration:** Third-party Python libraries require separate installation of library files
 
 ## OwnGo
 

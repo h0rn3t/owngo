@@ -9,7 +9,7 @@ LLGo - A Go compiler based on LLVM
 [![GoDoc](https://pkg.go.dev/badge/github.com/xgo-dev/llgo.svg)](https://pkg.go.dev/github.com/xgo-dev/llgo)
 [![XGo](https://img.shields.io/badge/project-XGo-blue.svg)](https://github.com/goplus/xgo)
 
-LLGo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem, including Python and JavaScript. It's a subproject of [the XGo project](https://github.com/goplus/xgo).
+LLGo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem, including JavaScript. It's a subproject of [the XGo project](https://github.com/goplus/xgo).
 
 LLGo aims to expand the boundaries of Go/XGo, providing limitless possibilities such as:
 
@@ -231,7 +231,7 @@ llgo run .
 
 ### Other frequently used libraries
 
-Beyond the standard library, LLGo can import libraries from across the C/C++ ecosystem. Bindings are currently maintained by hand; automating this process, as is already done for Python library imports, is planned for the future.
+Beyond the standard library, LLGo can import libraries from across the C/C++ ecosystem. Bindings are currently maintained by hand; automating this process is planned for the future.
 
 Available bindings include:
 
@@ -258,102 +258,6 @@ Examples built on these bindings:
 * [tetris](https://github.com/llarhub/raylib/tree/main/demo/tetris): a Tetris game based on raylib
 
 
-## Python support
-
-You can import a Python library in LLGo!
-
-You can import Python libraries into `llgo` through `llpyg` (see [Development tools](#development-tools)). Available bindings include:
-
-* [py](https://pkg.go.dev/github.com/goplus/lib/py) (abi)
-* [py/std](https://pkg.go.dev/github.com/goplus/lib/py/std) (builtins)
-* [py/sys](https://pkg.go.dev/github.com/goplus/lib/py/sys)
-* [py/os](https://pkg.go.dev/github.com/goplus/lib/py/os)
-* [py/math](https://pkg.go.dev/github.com/goplus/lib/py/math)
-* [py/json](https://pkg.go.dev/github.com/goplus/lib/py/json)
-* [py/inspect](https://pkg.go.dev/github.com/goplus/lib/py/inspect)
-* [py/statistics](https://pkg.go.dev/github.com/goplus/lib/py/statistics)
-* [py/numpy](https://pkg.go.dev/github.com/goplus/lib/py/numpy)
-* [py/pandas](https://pkg.go.dev/github.com/goplus/lib/py/pandas)
-* [py/torch](https://pkg.go.dev/github.com/goplus/lib/py/torch)
-* [py/matplotlib](https://pkg.go.dev/github.com/goplus/lib/py/matplotlib)
-
-Third-party libraries such as pandas and PyTorch must be installed separately.
-
-Here is an example:
-
-<!-- embedme doc/_readme/llgo_call_py/call_py.go -->
-
-```go
-package main
-
-import (
-	"github.com/goplus/lib/py"
-	"github.com/goplus/lib/py/math"
-	"github.com/goplus/lib/py/std"
-)
-
-func main() {
-	x := math.Sqrt(py.Float(2))       // x = sqrt(2)
-	std.Print(py.Str("sqrt(2) ="), x) // print("sqrt(2) =", x)
-}
-```
-
-It is equivalent to the following Python code:
-
-<!-- embedme doc/_readme/llgo_call_py/call_math.py -->
-
-```py
-import math
-
-x = math.sqrt(2)
-print("sqrt =", x)
-```
-
-Here, We call `py.Float(2)` to create a Python number 2, and pass it to Python’s `math.sqrt` to get `x`. Then we call `std.Print` to print the result.
-
-Let's look at a slightly more complex example. For example, we use `numpy` to calculate:
-
-<!-- embedme doc/_readme/llgo_py_list/py_list.go -->
-
-```go
-package main
-
-import (
-	"github.com/goplus/lib/py"
-	"github.com/goplus/lib/py/numpy"
-	"github.com/goplus/lib/py/std"
-)
-
-func main() {
-	a := py.List(
-		py.List(1.0, 2.0, 3.0),
-		py.List(4.0, 5.0, 6.0),
-		py.List(7.0, 8.0, 9.0),
-	)
-	b := py.List(
-		py.List(9.0, 8.0, 7.0),
-		py.List(6.0, 5.0, 4.0),
-		py.List(3.0, 2.0, 1.0),
-	)
-	x := numpy.Add(a, b)
-	std.Print(py.Str("a+b ="), x)
-}
-```
-
-Here we define two 3x3 matrices a and b, add them to get x, and then print the result.
-
-The `_demo/py/` directory contains some python related demos:
-
-* [basic](_demo/py/basic/main.go): call Python math, statistics, variadic builtin, iterator, and print APIs
-* [scientific](_demo/py/matrix/matrix.go): convert nested lists through NumPy and PyTorch
-
-To run these demos (If you haven't installed `llgo` yet, please refer to [How to install](#how-to-install)):
-
-```sh
-cd <demo-directory>  # eg. cd _demo/py/basic
-llgo run .
-```
-
 ## Dependencies
 
 - [Go 1.27](https://go.dev) for building LLGo; CI validates user packages separately with Go 1.20 through Go 1.27
@@ -366,7 +270,6 @@ llgo run .
 - [libffi](https://sourceware.org/libffi/)
 - [OpenSSL 3.0+](https://www.openssl.org/)
 - [zlib 1.2+](https://github.com/madler/zlib)
-- [Python 3.12+](https://www.python.org) (optional, for [github.com/goplus/lib/py](https://pkg.go.dev/github.com/goplus/lib/py))
 
 ## How to install
 
@@ -401,7 +304,6 @@ In either shell, run `cd ..`, then use `go run ./cmd/llgo version` or
 ```sh
 brew update
 brew install llvm@22 lld@22 bdw-gc openssl cjson libffi libuv pkg-config
-brew install python@3.12 # optional
 brew link --force --overwrite llvm@22 lld@22 libffi
 ./install.sh
 ```
@@ -440,7 +342,6 @@ echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -
 wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 sudo apt-get update
 sudo apt-get install -y llvm-22-dev clang-22 libclang-22-dev lld-22 lldb-22 libunwind-22-dev libc++-22-dev pkg-config libgc-dev libssl-dev zlib1g-dev libffi-dev libcjson-dev libsqlite3-dev libuv1-dev
-sudo apt-get install -y python3.12-dev # optional
 ./install.sh
 ```
 
@@ -448,7 +349,6 @@ sudo apt-get install -y python3.12-dev # optional
 
 ```sh
 apk add go llvm22-dev clang22-dev lld22 lldb pkgconf gc-dev libunwind-dev openssl-dev zlib-dev libffi-dev cjson-dev sqlite-dev libuv-dev
-apk add python3-dev # optional
 apk add g++ # build only
 export LLVM_CONFIG=/usr/lib/llvm22/bin/llvm-config
 export CGO_CPPFLAGS="$($LLVM_CONFIG --cppflags)"
@@ -579,9 +479,6 @@ Module maintenance does not inject LLGo-specific build tags. Go's `tidy` and `ve
 
 `build`, `clean`, `install`, `run`, `test`, `version`, and `tool compile` remain LLGo-specific. The Go `bug`, `doc`, and `telemetry` commands are not exposed: the first and last operate Go services, while `go doc` cannot select LLGo-only sources because it has no build-tag option.
 
-* [pydump](_xtool/pydump): It is the first production program compiled with `llgo` rather than `go`. It outputs symbol information (functions, variables, and constants) from a Python library in JSON format, preparing for the generation of corresponding packages in `llgo`.
-* [pysigfetch](https://github.com/goplus/hdq/tree/main/chore/pysigfetch): It generates symbol information by extracting information from Python's documentation site. This tool is not part of the `llgo` project, but we depend on it.
-* [llpyg](chore/llpyg): It is used to automatically convert Python libraries into Go packages that `llgo` can import. It depends on `pydump` and `pysigfetch` to accomplish the task.
 * [llgen](chore/llgen): It is used to compile Go packages into LLVM IR files (*.ll).
 * [gentests](chore/gentests): It refreshes runtime-output and package-metadata golden data under `cl/_test*`. LLVM IR checks live in Go sources as `// LITTEST` FileCheck directives.
 * [litgen](chore/litgen): It maintains explicitly opted-in, source-embedded FileCheck snapshots. It supports function/global selection, update-only operation, stale-check verification, and stable LLVM value abstractions. Small handwritten checks remain manual.
@@ -597,11 +494,7 @@ How do I generate these tools?
 git clone https://github.com/xgo-dev/llgo.git
 cd llgo
 go install -v ./cmd/...
-go install -v ./chore/...  # compile all tools except pydump
-export LLGO_ROOT=$PWD
-cd _xtool
-llgo install ./...   # compile pydump
-go install github.com/goplus/hdq/chore/pysigfetch@v0.8.1  # compile pysigfetch
+go install -v ./chore/...
 ```
 
 ## Key modules

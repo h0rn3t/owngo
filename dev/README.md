@@ -115,8 +115,7 @@ Start an interactive shell (pick one):
 ```
 
 Notes:
-- `amd64` uses the `pydeps` image target (includes extra Python demo deps like `numpy`/`torch`).
-- `arm64` and `i386` use the smaller `base` target (no extra Python ML deps).
+- All three use the `base` image target.
 
 Inside the container, run tests/builds using the repo scripts:
 

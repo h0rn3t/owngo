@@ -22,7 +22,6 @@ import (
 	"go/token"
 	"go/types"
 	"log"
-	"strings"
 
 	"github.com/xgo-dev/llgo/internal/callerlocation"
 	"github.com/xgo-dev/llvm"
@@ -129,7 +128,6 @@ const (
 	AtEnd InsertPoint = iota
 	AtStart
 	BeforeLast
-	afterInit
 )
 
 // SetBlockEx sets blk as current basic block and pos as its insert point.
@@ -146,8 +144,6 @@ func (b Builder) SetBlockEx(blk BasicBlock, pos InsertPoint, setBlk bool) {
 		b.impl.SetInsertPointBefore(blk.first.FirstInstruction())
 	case BeforeLast:
 		b.impl.SetInsertPointBefore(blk.last.LastInstruction())
-	case afterInit:
-		b.impl.SetInsertPointBefore(instrAfterInit(blk.first))
 	default:
 		panic("SetBlockEx: invalid pos")
 	}
@@ -158,29 +154,6 @@ func (b Builder) SetBlockEx(blk BasicBlock, pos InsertPoint, setBlk bool) {
 	// without a current location. Reapply the tracked location at the common
 	// block-positioning boundary before subsequent instructions are emitted.
 	b.restoreDebugLocation()
-}
-
-func instrAfterInit(blk llvm.BasicBlock) llvm.Value {
-	instr := blk.FirstInstruction()
-	for {
-		instr = llvm.NextInstruction(instr)
-		if notInit(instr) {
-			return instr
-		}
-	}
-}
-
-func notInit(instr llvm.Value) bool {
-	switch op := instr.InstructionOpcode(); op {
-	case llvm.Call:
-		if n := instr.OperandsCount(); n == 1 {
-			fn := instr.Operand(0)
-			name := fn.Name()
-			// Skip .init calls
-			return !strings.HasSuffix(name, ".init")
-		}
-	}
-	return true
 }
 
 // -----------------------------------------------------------------------------

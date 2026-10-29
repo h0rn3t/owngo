@@ -40,13 +40,6 @@ func NewProgramEx(t *testing.T, target *ssa.Target, imp types.Importer) ssa.Prog
 		}
 		return rt
 	})
-	prog.SetPython(func() *types.Package {
-		rt, err := imp.Import(ssa.PkgPython)
-		if err != nil {
-			t.Fatal("load python failed:", err)
-		}
-		return rt
-	})
 	return prog
 }
 

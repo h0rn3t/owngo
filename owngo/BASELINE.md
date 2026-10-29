@@ -14,8 +14,11 @@
 ```bash
 export LLGO_ROOT=$PWD
 export PATH=/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH
-go test ./...
+go test -timeout 30m ./...
 ```
+
+`internal/build` сам по собі йде ~17 хв, тож стандартний таймаут 10 хв
+`go test` його обриває.
 
 LLVM 23 має бути першим у `PATH`: інакше `clang` береться з `/usr/bin`
 (Apple clang 21) і не розбирає IR від LLVM 23.
@@ -37,4 +40,16 @@ upstream не збирається взагалі: перший прогін н�
 | `cmd/internal/browser` | `TestExtensionJavaScript` | оточення: `node` у `PATH` — shim від bun (`~/.bun/bin/node`), потрібен справжній Node.js |
 | `internal/targets` | `TestEmscriptenRunnersConsumeExitStatus/emscripten-memory64-runner.mjs` | оточення: той самий shim, немає WebAssembly Memory64 |
 | `internal/targets` | `TestEmscriptenRunnersForwardProgramArguments/emscripten-memory64-runner.mjs` | оточення: те саме |
-| `internal/build` | — | таймаут 10 хв `go test` під навантаженням повного прогону; окремо з `-timeout 30m` — див. нижче |
+| `internal/build` | `TestCreatePackageArchiveFileWithExternalArchiver` | оточення: без LTO на darwin llgo бере системний `ar`; Apple `ar` з Xcode 27 не читає bitcode LLVM 23 і мовчки викидає член `.bc` |
+| `internal/build` | `TestWasmStackAddressesCodegen/32`, `/64` | **пробіл LLVM 23**: SjLj у wasm вимагає `+exception-handling` у функції; прапорці clang для IR-входу його не дають |
+
+## Відомі пробіли порту на LLVM 23
+
+- **wasm (`wasip1`, `js`):** збірка падає в бекенді: `Function runtime.semaRelease
+  is using setjmp/longjmp but does not have +exception-handling target feature`.
+  Потрібно, щоб llgo ставив атрибут `target-features` з `+exception-handling`
+  (разом з `+atomics,+bulk-memory`, бо атрибут замінює типові фічі) на
+  wasm-функції. OwnGo цілиться в нативні бінарники, тому не виправлено.
+- **macOS SDK:** `internal/crosscompile/macos_sdk.go` досі відхиляє SDK ≥ 27
+  з поясненням про LLD 22. Нативна збірка на цій машині працює (hello world,
+  `_cmptest`-подібні тести в `cl`), але перевірка не переглядалась під LLD 23.

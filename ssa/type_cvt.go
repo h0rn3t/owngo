@@ -61,7 +61,6 @@ const (
 	ccUnknown CallConv = iota
 	GoDecl
 	CDecl
-	PyDecl
 	Stdcall
 )
 

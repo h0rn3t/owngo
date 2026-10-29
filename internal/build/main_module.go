@@ -36,7 +36,6 @@ import (
 type genConfig struct {
 	defaultGODEBUG string
 	rtInit         bool
-	pyInit         bool
 	abiInit        int
 	packageInits   []string
 	methodByIndex  map[int]none
@@ -129,13 +128,6 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	// TODO(lijie): workaround for syscall patch
 	defineWeakNoArgStub(mainPkg, "syscall.init")
 
-	var pyInit llssa.Function
-	var pyFinalize llssa.Function
-	if cfg.pyInit {
-		pyInit = declareNoArgFunc(mainPkg, "Py_Initialize")
-		pyFinalize = declareNoArgFunc(mainPkg, "Py_Finalize")
-	}
-
 	wasmRuntimeScheduler := needsWasmRuntimeScheduler(ctx)
 	var rtInit llssa.Function
 	if cfg.rtInit || wasmRuntimeScheduler {
@@ -181,7 +173,7 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		if ctx.buildConf.BuildMode == BuildModeCShared && ctx.buildConf.Goos == "linux" {
 			initArraySection = ".init_array"
 		}
-		inits := []llssa.Function{godebugInit, pyInit, rtInit, abiInit, runtimeStub}
+		inits := []llssa.Function{godebugInit, rtInit, abiInit, runtimeStub}
 		// Windows already enables this during runtime initialization because
 		// callbacks in ordinary executables also enter from foreign threads.
 		// Other platforms enable it at startup when linked C exports exist.
@@ -235,8 +227,6 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		mainInit:     mainInit,
 		mainMain:     mainMain,
 		wasmRunMain:  wasmRunMain,
-		pyInit:       pyInit,
-		pyFinalize:   pyFinalize,
 		rtInit:       rtInit,
 		callbackInit: callbackInit,
 		processExit:  processExit,
@@ -464,8 +454,6 @@ type entryFunctions struct {
 	mainInit     llssa.Function
 	mainMain     llssa.Function
 	wasmRunMain  llssa.Function
-	pyInit       llssa.Function
-	pyFinalize   llssa.Function
 	rtInit       llssa.Function
 	callbackInit llssa.Function
 	processExit  llssa.Function
@@ -481,9 +469,9 @@ type entryFunctions struct {
 //
 // The entry stores argc/argv, optionally disables stdio buffering, and manages
 // the local context. Native PCLN builds run the common startup sequence through
-// runtime.main; other builds run it inline. That sequence initializes Python,
-// the runtime stub/package, ABI types, and packages, calls main.main, and then
-// finalizes Python. The entry leaves the local context and returns 0.
+// runtime.main; other builds run it inline. That sequence initializes the runtime
+// stub/package, ABI types, and packages and calls main.main. The entry leaves
+// the local context and returns 0.
 func defineEntryFunction(ctx *context, pkg llssa.Package, argcVar, argvVar llssa.Global, argvType llssa.Type, fns entryFunctions) llssa.Function {
 	prog := pkg.Prog
 	entryName := processEntrySymbol
@@ -543,9 +531,6 @@ func emitRuntimeMainBody(b llssa.Builder, fns entryFunctions) {
 	if fns.godebugInit != nil {
 		b.Call(fns.godebugInit.Expr)
 	}
-	if fns.pyInit != nil {
-		b.Call(fns.pyInit.Expr)
-	}
 	if fns.rtInit != nil {
 		b.Call(fns.rtInit.Expr)
 	}
@@ -564,9 +549,6 @@ func emitRuntimeMainBody(b llssa.Builder, fns entryFunctions) {
 		}
 		b.Call(fns.mainInit.Expr)
 		b.Call(fns.mainMain.Expr)
-	}
-	if fns.pyFinalize != nil {
-		b.Call(fns.pyFinalize.Expr)
 	}
 	if fns.coverageExit != nil {
 		b.Call(fns.coverageExit.Expr, b.Prog.IntVal(0, b.Prog.Int()))

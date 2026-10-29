@@ -423,11 +423,6 @@ func TestWindows386WideIntegerDebugValue(t *testing.T) {
 	}
 }
 
-func TestDIGlobalIgnoresStorageLessFrontendVariable(t *testing.T) {
-	var builder Builder
-	builder.DIGlobal(pyVarExpr(Nil, "attribute"), "module.attribute", token.Position{})
-}
-
 func TestDeferInitBuilderInheritsDebugLocation(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "defer.go", `package p
