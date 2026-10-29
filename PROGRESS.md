@@ -80,3 +80,10 @@
 - Сервіс [ms-faq](https://gitlab.datahub.ua.energy/tko/ms-faq) `develop` @ `520cbc6`: юніт-тести, `-memprofilerate=1`, 11 пакетів (`cmd/app` без тестів; `//go:build integration` не збирався; бенчмарків немає). 701 місце census. Серед приписаної купи `static` + `rc-local` — 76.0% об'єктів і 58.9% байтів. Поза census — 86.9% об'єктів і 98.8% байтів профілю. Звіт — `owngo/WEIGHTS.md`.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений.
 - Лишилось: P0.9, пік горутин. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
+
+## 2026-10-29 — P0.9
+
+- Go-агент у prod APM уже пише `golang.goroutines` (`metricset` `app`, поточна кількість). Запасний шлях `runtime/metrics` не знадобився.
+- Вікно 2026-10-22T00:00:00Z … 2026-10-30T00:00:00Z, середовище `prod`. Список — усі 19 Go-сервісів, що надіслали поле. `ms-faq` серед них немає.
+- Пік одного процесу: `ms-zv` 20740 (воркер; веб ≤ 65), `ms-ap` 4441 (p99 924), решта ≤ 173. Звіт — `owngo/GOROUTINES.md`. Поріг «тисячі» з `INTENT.md` перетинають два сервіси; рішення щодо M:N лишається на P0.12.
+- Лишилось: P0.10, звіт фази 0. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
