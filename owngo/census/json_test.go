@@ -122,8 +122,15 @@ func TestCommandLoadError(t *testing.T) {
 
 func runCensus(t *testing.T, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
-	argv := append([]string{"run", "./cmd/census"}, args...)
-	cmd := exec.CommandContext(t.Context(), "go", argv...) //nolint:gosec // G204: тест запускає census зі своїми аргументами
+	// go run підміняє ненульовий код виходу на 1. Бінарник зберігає код census.
+	bin := filepath.Join(t.TempDir(), "census")
+	buildArgv := []string{"build", "-o", bin, "./cmd/census"}
+	build := exec.CommandContext(t.Context(), "go", buildArgv...) //nolint:gosec // G204: тест збирає census зі сталих аргументів
+	build.Dir = filepath.Dir(analysistest.TestData())
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build ./cmd/census: %v\n%s", err, out)
+	}
+	cmd := exec.CommandContext(t.Context(), bin, args...) //nolint:gosec // G204: тест запускає census зі своїми аргументами
 	cmd.Dir = filepath.Dir(analysistest.TestData())
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -295,8 +302,8 @@ var sampleTypes = []struct {
 	{"static.go", 51, "rc-local", "closure", "*int"},
 	{"static.go", 52, "static", "", "func() int"},
 	{"stack.go", 8, "stack", "", "*[4]int"},
-	{"implicit.go", 7, "implicit", "append", "[]int"},
-	{"implicit.go", 7, "static", "", "*[1]int"},
+	{"implicit.go", 6, "implicit", "append", "[]int"},
+	{"implicit.go", 6, "static", "", "*[1]int"},
 	{"implicit.go", 25, "implicit", "concat", "string"},
 	{"implicit.go", 34, "implicit", "string", "string"},
 	{"implicit.go", 38, "implicit", "string", "[]byte"},

@@ -46,3 +46,12 @@
 - `TestCyclicTypes`: список, дерево з батьківським вказівником, графи (`[]*T`, `map[int]*T`, `[2]*T`, взаємні `left`/`right`) циклічні в обох режимах. Через інтерфейс (`any`, власний інтерфейс, `[]edge`, два типи через спільний інтерфейс, `error`, зворотний вказівник з іншого типу пакета) — лише консервативний. Інтерфейс без зворотного шляху, канал, `func` і ключ мапи — жоден режим.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD, базовий конфіг) без зауважень. `go test -race -count=1 ./owngo/census/` зелений: `TestCorpus`, `TestSiteCount`, `TestCyclicTypes`, `TestCyclicNil`.
 - Лишилось: P0.6, CLI і JSON. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.
+
+## 2026-10-29 — P0.6
+
+- Аналізатор повертає `[]Site`: `category`, `reason`, `pos` (`file:line` без колонки) і `type` (тип значення SSA відносно пакета). Текст діагностик `// want` не змінювався. Немає місць — порожній зріз, у JSON `[]`, не `null`. Порожня `reason` лишається ключем.
+- Команда `owngo/census/cmd/census -json`. Успіх: код 0, JSON лише на stdout. Без `-json` або без пакета: код 2. Помилка завантаження чи аналізу: код 1, stdout порожній. `-h`: код 0.
+- Каталог `testdata` для `go list` невидимий, тож він вантажиться як GOPATH (`GO111MODULE=off`, пакети під `src`). Інший каталог, зокрема модуль поза поточним, вантажиться через `packages.Load` з `Dir` цього каталогу.
+- Тест команди збирає бінарник і запускає його: `go run` замінює ненульовий код виходу на 1. Зразок `append` у `implicit.go` стоїть на рядку 6 — це рядок інструкції SSA, тип varargs лишається `*[1]int`.
+- Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/...` без зауважень, `golangci-lint` (нові знахідки від HEAD) без зауважень. `go test -race -count=1 ./owngo/census/` зелений. `go run ./owngo/census/cmd/census -json owngo/census/testdata` дає валідний JSON: 73 місця, ключі `category`, `reason`, `pos`, `type`.
+- Лишилось: P0.7, розрив із escape-діагностиками `gc`. `go fix` досі пропонує `strings.Cut` у `quotedWants`; не чіпав.

@@ -1,24 +1,41 @@
 package census
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
+	"reflect"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
 	"golang.org/x/tools/go/ssa"
 )
 
+// Site — місце алокації в результаті аналізатора і в JSON команди.
+//
+// Порожній Reason лишається ключем JSON: stack, static і cyclic без втечі
+// не мають причини.
+type Site struct {
+	Category string `json:"category"` // категорія v0
+	Reason   string `json:"reason"`   // причина після ": ", або порожньо
+	Pos      string `json:"pos"`      // file:line без колонки
+	Type     string `json:"type"`     // тип значення SSA
+}
+
 // Analyzer знаходить місця алокації пакета і звітує категорію v0.
+// Result має тип []Site, порожній зріз, якщо місць немає.
 var Analyzer = &analysis.Analyzer{
-	Name:     "census",
-	Doc:      "класифікує місця алокації Go-програми",
-	Requires: []*analysis.Analyzer{buildssa.Analyzer},
-	Run:      run,
+	Name:       "census",
+	Doc:        "класифікує місця алокації Go-програми",
+	Requires:   []*analysis.Analyzer{buildssa.Analyzer},
+	ResultType: reflect.TypeFor[[]Site](),
+	Run:        run,
 }
 
 func run(pass *analysis.Pass) (any, error) {
 	pkg := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
+	sites := []Site{}
 	for _, fn := range pkg.SrcFuncs {
 		if fn.Blocks == nil {
 			continue
@@ -29,11 +46,24 @@ func run(pass *analysis.Pass) (any, error) {
 				if !isSite(instr) {
 					continue
 				}
-				pass.Reportf(sitePos(instr), "%s", msg[instr])
+				text := msg[instr]
+				category, reason, _ := strings.Cut(text, ": ")
+				value, ok := instr.(ssa.Value)
+				if !ok {
+					return nil, fmt.Errorf("місце %T не є значенням SSA", instr)
+				}
+				pos := pass.Fset.Position(sitePos(instr))
+				sites = append(sites, Site{
+					Category: category,
+					Reason:   reason,
+					Pos:      fmt.Sprintf("%s:%d", pos.Filename, pos.Line),
+					Type:     types.TypeString(value.Type(), types.RelativeTo(pass.Pkg)),
+				})
+				pass.Reportf(sitePos(instr), "%s", text)
 			}
 		}
 	}
-	return nil, nil
+	return sites, nil
 }
 
 func isSite(instr ssa.Instruction) bool {
