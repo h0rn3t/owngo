@@ -1,17 +1,20 @@
 package census
 
 import (
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
-	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
 // TestCorpus ганяє фікстури testdata/src/corpus через analysistest.
-// Заглушка нічого не звітує, тож тест компілюється і падає, доки немає аналізатора.
-//
-// P0.3 замінює заглушку на census.Analyzer і звіряє кількість місць із кількістю
-// «// want». P0.4 має зробити текст діагностик таким, як у фікстурах.
+// P0.4 має зробити текст діагностик таким, як у фікстурах.
+// До того тест падає: Analyzer звітує unknown, а не категорію.
 //
 // Діагностика — рівно один рядок на місце, без префікса:
 //
@@ -63,12 +66,99 @@ import (
 // Тимчасовий масив varargs у append — окреме місце Alloc, не implicit.
 // Захоплення вказівника замиканням дає друге місце Alloc (*T) на рядку new.
 func TestCorpus(t *testing.T) {
-	stub := &analysis.Analyzer{
-		Name: "census",
-		Doc:  "заглушка корпусу census; аналізатор з'явиться в P0.3",
-		Run: func(*analysis.Pass) (any, error) {
-			return nil, nil
-		},
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "corpus")
+}
+
+// quiet ковтає звірку текстів analysistest. TestSiteCount звіряє лише місця.
+type quiet struct{}
+
+func (quiet) Errorf(string, ...any) {}
+
+// TestSiteCount перевіряє прийняття P0.3: кількість діагностик на кожному
+// рядку дорівнює кількості «// want». Повідомлення unknown тримається до P0.4.
+func TestSiteCount(t *testing.T) {
+	results := analysistest.Run(quiet{}, analysistest.TestData(), Analyzer, "corpus")
+	if len(results) != 1 || results[0].Err != nil {
+		var err error
+		if len(results) == 1 {
+			err = results[0].Err
+		}
+		t.Fatalf("corpus results = %d, err = %v", len(results), err)
 	}
-	analysistest.Run(t, analysistest.TestData(), stub, "corpus")
+	got := map[string]int{}
+	for _, d := range results[0].Diagnostics {
+		if d.Message != "unknown" {
+			t.Errorf("diagnostic message = %q, want unknown", d.Message)
+		}
+		pos := results[0].Pass.Fset.Position(d.Pos)
+		key := filepath.Base(pos.Filename) + ":" + strconv.Itoa(pos.Line)
+		got[key]++
+	}
+	want := wantLines(t)
+	if maps.Equal(got, want) {
+		return
+	}
+	keys := slices.Collect(maps.Keys(got))
+	for k := range want {
+		if _, ok := got[k]; !ok {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		if got[k] != want[k] {
+			t.Errorf("sites %s = %d, want %d", k, got[k], want[k])
+		}
+	}
+}
+
+func wantLines(t *testing.T) map[string]int {
+	t.Helper()
+	dir := filepath.Join(analysistest.TestData(), "src", "corpus")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v", dir, err)
+	}
+	counts := map[string]int{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", entry.Name(), err)
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			n := quotedWants(line)
+			if n == 0 {
+				continue
+			}
+			counts[entry.Name()+":"+strconv.Itoa(i+1)] = n
+		}
+	}
+	return counts
+}
+
+func quotedWants(line string) int {
+	i := strings.Index(line, "// want")
+	if i < 0 {
+		return 0
+	}
+	rest := line[i+len("// want"):]
+	n := 0
+	for i := 0; i < len(rest); i++ {
+		if rest[i] != '"' && rest[i] != '`' {
+			continue
+		}
+		quote := rest[i]
+		i++
+		for i < len(rest) && rest[i] != quote {
+			if rest[i] == '\\' && quote == '"' {
+				i++
+			}
+			i++
+		}
+		n++
+	}
+	return n
 }
