@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	gpackages "github.com/goplus/gogen/packages"
+	"github.com/xgo-dev/llgo/internal/cabi"
 	llssa "github.com/xgo-dev/llgo/ssa"
 	"github.com/xgo-dev/llgo/ssa/ssatest"
-	"github.com/xgo-dev/llgo/internal/cabi"
 	"golang.org/x/tools/go/ssa"
 
 	"github.com/xgo-dev/llgo/cl"

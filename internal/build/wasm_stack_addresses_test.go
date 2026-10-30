@@ -71,7 +71,7 @@ end:
 				}
 				asm := filepath.Join(dir, "roots.s")
 				cmd := exec.Command("clang", fmt.Sprintf("--target=wasm%d-unknown-unknown", bits),
-					"-Os", "-S", "-fwasm-exceptions", "-mllvm", "-wasm-enable-sjlj", path, "-o", asm)
+					"-Os", "-S", "-fwasm-exceptions", "-mexception-handling", "-mllvm", "-wasm-enable-sjlj", path, "-o", asm)
 				if output, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("clang: %v\n%s", err, output)
 				}

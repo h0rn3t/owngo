@@ -367,6 +367,8 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 		size,
 		p.prog.IntVal(cat, p.prog.Int32()),
 	}
+	// Keep each runtimeFunc name a string literal: the runtime audit
+	// rejects dynamic compiler lookups.
 	switch name {
 	case "FreeAccounted":
 		params = append([]*types.Var{
@@ -374,6 +376,9 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 		}, params...)
 		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
 		args = append([]llssa.Expr{b.PtrCast(dst, ptr)}, args...)
+		sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
+		b.Call(p.runtimeFunc("FreeAccounted", sig), args...)
+		return
 	case "DecAccounted":
 		params = []*types.Var{
 			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
@@ -381,15 +386,23 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 		}
 		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
 		args = []llssa.Expr{b.PtrCast(dst, ptr), size}
+		sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
+		b.Call(p.runtimeFunc("DecAccounted", sig), args...)
+		return
 	case "Inc":
 		params = []*types.Var{
 			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
 		}
 		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
 		args = []llssa.Expr{b.PtrCast(dst, ptr)}
+		sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
+		b.Call(p.runtimeFunc("Inc", sig), args...)
+		return
+	default:
+		sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
+		b.Call(p.runtimeFunc("NoteAlloc", sig), args...)
+		return
 	}
-	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
-	b.Call(p.runtimeFunc(name, sig), args...)
 }
 
 // ownGoSizeExpr повертає байти користувача. append через GrowSlice лишає 0.
@@ -505,7 +518,12 @@ func (p *context) callSizedAlloc(b llssa.Builder, name string, size llssa.Expr) 
 		types.NewTuple(types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr])),
 		types.NewTuple(types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer])),
 		false)
-	return b.Call(p.runtimeFunc(name, sig), b.Convert(p.prog.Uintptr(), size))
+	// Keep each runtimeFunc name a string literal: the runtime audit
+	// rejects dynamic compiler lookups.
+	if name == "AllocU" {
+		return b.Call(p.runtimeFunc("AllocU", sig), b.Convert(p.prog.Uintptr(), size))
+	}
+	return b.Call(p.runtimeFunc("AllocCounted", sig), b.Convert(p.prog.Uintptr(), size))
 }
 
 func (p *context) ownGoBytes(b llssa.Builder, n llssa.Expr, elemSize uint64) llssa.Expr {

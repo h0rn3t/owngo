@@ -191,6 +191,16 @@ func gcPackages(dir string, patterns, extraEnv []string) ([][2]string, error) {
 	return pkgs, nil
 }
 
+// gcJSONURIPath повертає шлях для file:// URI. На Windows додає провідний
+// слеш (file:///C:/...), інакше go падає з invalid port.
+func gcJSONURIPath(dir string) string {
+	p := filepath.ToSlash(dir)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return p
+}
+
 func compileGC(dir, jsonDir string, pkgs [][2]string, extraEnv []string) (string, error) {
 	binDir, err := os.MkdirTemp("", "census-gc-bin-")
 	if err != nil {
@@ -198,7 +208,7 @@ func compileGC(dir, jsonDir string, pkgs [][2]string, extraEnv []string) (string
 	}
 	defer removeTemp(binDir)
 
-	flag := "-gcflags=-m -json=0,file://" + jsonDir
+	flag := "-gcflags=-m -json=0,file://" + gcJSONURIPath(jsonDir)
 	var stderr bytes.Buffer
 	for _, pkg := range pkgs {
 		args := []string{"build", flag}

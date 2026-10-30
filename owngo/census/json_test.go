@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -219,6 +220,9 @@ func runCensus(t *testing.T, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	// go run підміняє ненульовий код виходу на 1. Бінарник зберігає код census.
 	bin := filepath.Join(t.TempDir(), "census")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	buildArgv := []string{"build", "-o", bin, "./cmd/census"}
 	build := exec.CommandContext(t.Context(), "go", buildArgv...) //nolint:gosec // G204: тест збирає census зі сталих аргументів
 	build.Dir = filepath.Dir(analysistest.TestData())

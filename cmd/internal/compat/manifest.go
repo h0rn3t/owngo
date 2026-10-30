@@ -127,7 +127,7 @@ func Flag(command, name string) Record {
 	if !in(command, "build install run test cmptest") {
 		return rejected
 	}
-	if in(name, "C a p v x tags mod modfile modcacherw") {
+	if in(name, "C a p v x tags mod modfile modcacherw asan") {
 		return Record{"native", "cmd/internal/flags", "Typed native build configuration or source graph selection"}
 	}
 	if name == "exec" && in(command, "run test") {
