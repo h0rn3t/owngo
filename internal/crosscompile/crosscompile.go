@@ -773,6 +773,10 @@ func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, le
 			"-resource-dir=" + libclangDir,
 			"-matomics",
 			"-mbulk-memory",
+			// LLVM 23 errors when setjmp/longjmp lowering runs without the
+			// exception-handling target feature; enable it like the other
+			// mandatory Wasm features.
+			"-mexception-handling",
 		}
 		export.CCFLAGS = append(export.CCFLAGS, "-pthread")
 		if ltoMode.Enabled() {
@@ -815,6 +819,7 @@ func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, le
 			// Keep process-stack placement stable across host linker versions.
 			"-Wl,--stack-first",
 			"-mbulk-memory",
+			"-mexception-handling",
 			"-mmultimemory",
 			"-z", defaultWASIStackFlag,
 			"-Wl,--export=malloc", "-Wl,--export=free",

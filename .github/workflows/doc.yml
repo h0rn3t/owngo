@@ -153,8 +153,10 @@ jobs:
           # them so the full install cannot pass using the default install.
           git() {
             if [ "$1" = "clone" ]; then
-              # do nothing because we already have the branch
-              cd ..
+              # do nothing because we already have the branch; emulate the
+              # cloned directory name so forks whose checkout is not named
+              # llgo work too.
+              ln -sfn "$GITHUB_WORKSPACE" llgo
             else
               command git "$@"
             fi

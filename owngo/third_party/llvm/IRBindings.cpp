@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "IRBindings.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Constants.h"
@@ -23,6 +22,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <algorithm>
+#include <vector>
 
 using namespace llvm;
 
@@ -139,17 +139,33 @@ LLVMValueRef LLVMGoBuildIntrinsicCall(LLVMBuilderRef B, LLVMTypeRef RetTy,
                                       unsigned Count, const char *Name) {
   Intrinsic::ID IntrinsicID = static_cast<Intrinsic::ID>(ID);
   ArrayRef<Value *> UnwrappedArgs(unwrap(Args), Count);
-  SmallVector<Type *, 8> ParamTys;
-  SmallVector<Type *, 8> OverloadTys;
-
+  // NOTE: std::vector instead of SmallVector: LLVM 23 declares
+  // SmallVectorBase as extern template, but the Windows static libraries do
+  // not ship those symbols, so linking a static SmallVector user fails.
+  std::vector<Type *> ParamTys;
   ParamTys.reserve(Count);
   for (Value *Arg : UnwrappedArgs)
     ParamTys.push_back(Arg->getType());
 
   FunctionType *FTy = FunctionType::get(unwrap(RetTy), ParamTys, false);
-  if (!Intrinsic::isSignatureValid(IntrinsicID, FTy, OverloadTys))
+
+  BasicBlock *BB = unwrap(B)->GetInsertBlock();
+  if (!BB)
+    return nullptr;
+  Function *Parent = BB->getParent();
+  if (!Parent)
+    return nullptr;
+  Module *M = Parent->getParent();
+  if (!M)
     return nullptr;
 
-  return wrap(unwrap(B)->CreateIntrinsic(IntrinsicID, OverloadTys,
-                                         UnwrappedArgs, nullptr, Name));
+  // getOrInsertDeclaration resolves the overloaded types from RetTy/ArgTys.
+  // Accept it only when the resolved signature matches FTy, mirroring the
+  // old isSignatureValid check (which also requires a SmallVector).
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, IntrinsicID, unwrap(RetTy), ParamTys);
+  if (!Fn || Fn->getFunctionType() != FTy)
+    return nullptr;
+
+  return wrap(unwrap(B)->CreateCall(Fn, UnwrappedArgs, Name ? Name : ""));
 }

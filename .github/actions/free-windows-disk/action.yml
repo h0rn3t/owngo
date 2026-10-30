@@ -81,3 +81,6 @@ runs:
         }
 
         Show-Disk "after"
+        # Best effort cleanup: a failing prune (e.g. a stopped Docker daemon)
+        # must not fail the job when the disk itself was freed.
+        exit 0
