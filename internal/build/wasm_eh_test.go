@@ -8,7 +8,7 @@ import (
 	"github.com/xgo-dev/llgo/internal/crosscompile"
 )
 
-func TestEmscriptenEHFunctionFeature(t *testing.T) {
+func TestWasmEHFunctionFeature(t *testing.T) {
 	for _, profile := range []crosscompile.WasmProfile{
 		crosscompile.WasmProfileJ32, crosscompile.WasmProfileJ64,
 		crosscompile.WasmProfileW32, crosscompile.WasmProfileNone,
@@ -30,8 +30,8 @@ define void @threaded() "target-features"="+atomics,+bulk-memory,+exception-hand
 					ctx.crossCompile.CCFLAGS = []string{"-pthread"}
 				}
 				before := mod.String()
-				applyEmscriptenEHFeature(ctx, mod)
-				if profile == crosscompile.WasmProfileW32 || profile == crosscompile.WasmProfileNone {
+				applyWasmEHFeature(ctx, mod)
+				if profile == crosscompile.WasmProfileNone {
 					if mod.String() != before {
 						t.Fatal("changed a non-Emscripten module")
 					}
@@ -62,7 +62,7 @@ define void @threaded() "target-features"="+atomics,+bulk-memory,+exception-hand
 					t.Fatal("changed an external declaration")
 				}
 				first := mod.String()
-				applyEmscriptenEHFeature(ctx, mod)
+				applyWasmEHFeature(ctx, mod)
 				if mod.String() != first {
 					t.Fatal("EH feature application is not idempotent")
 				}

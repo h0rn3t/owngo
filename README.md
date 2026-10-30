@@ -303,19 +303,19 @@ In either shell, run `cd ..`, then use `go run ./cmd/llgo version` or
 
 ```sh
 brew update
-brew install llvm@22 lld@22 bdw-gc openssl cjson libffi libuv pkg-config
-brew link --force --overwrite llvm@22 lld@22 libffi
+brew install llvm@23 lld@23 bdw-gc openssl cjson libffi libuv pkg-config
+brew link --force --overwrite llvm@23 lld@23 libffi
 ./install.sh
 ```
 
-Native macOS builds use LLVM/LLD 22 and require a macOS SDK older than 27.
+Native macOS builds use LLVM/LLD 23 and require a macOS SDK older than 27.
 LLGo keeps the active SDK when it meets that requirement; otherwise it selects
 the newest installed older SDK from Xcode or Command Line Tools. SDK 27 and
 newer are excluded. Set `SDKROOT` to pin an installed older SDK; an unsupported
 or missing explicit SDK is an error. If no older SDK is installed, install one
 before building. The selected SDK is used for both compilation and linking.
 
-Homebrew's versioned LLVM 22 formula does not ship LLDB and there is no `lldb@22` formula. LLGo checks common Homebrew and system locations, then `lldb` on `PATH`; use `LLGO_LLDB` or `llgo lldb -lldb` to select one explicitly.
+Homebrew's versioned LLVM 23 formula does not ship LLDB and there is no `lldb@23` formula. LLGo checks common Homebrew and system locations, then `lldb` on `PATH`; use `LLGO_LLDB` or `llgo lldb -lldb` to select one explicitly.
 
 ### on Linux
 
@@ -338,10 +338,10 @@ For source builds, install the build dependencies:
 <!-- embedme doc/_readme/scripts/install_ubuntu.sh#L2-L1000 -->
 
 ```sh
-echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-23 main" | sudo tee /etc/apt/sources.list.d/llvm.list
 wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 sudo apt-get update
-sudo apt-get install -y llvm-22-dev clang-22 libclang-22-dev lld-22 lldb-22 libunwind-22-dev libc++-22-dev pkg-config libgc-dev libssl-dev zlib1g-dev libffi-dev libcjson-dev libsqlite3-dev libuv1-dev
+sudo apt-get install -y llvm-23-dev clang-23 libclang-23-dev lld-23 lldb-23 libunwind-23-dev libc++-23-dev pkg-config libgc-dev libssl-dev zlib1g-dev libffi-dev libcjson-dev libsqlite3-dev libuv1-dev
 ./install.sh
 ```
 

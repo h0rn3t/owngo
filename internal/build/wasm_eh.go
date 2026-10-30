@@ -8,13 +8,16 @@ import (
 	"github.com/xgo-dev/llvm"
 )
 
-// Emscripten can select native Wasm SjLj through SUPPORT_LONGJMP=wasm. LLVM
-// requires the feature on each caller's IR function, even when emcc receives
-// -fwasm-exceptions. Declaring the capability does not select the EH mode:
-// Emscripten's default JS SjLj and explicit native SjLj keep their own lowering.
-func applyEmscriptenEHFeature(ctx *context, mod llvm.Module) {
+// Native Wasm SjLj requires the feature on each caller's IR function, even
+// when the driver receives -fwasm-exceptions: function attributes override
+// the backend's command-line features, and LLVM 23 reports a fatal error
+// otherwise. Declaring the capability does not select the EH mode: Emscripten's
+// default JS SjLj and explicit native SjLj keep their own lowering, and the
+// WASI profile always lowers native SjLj with shared-memory threads.
+func applyWasmEHFeature(ctx *context, mod llvm.Module) {
 	profile := ctx.crossCompile.WasmProfile
-	if profile != crosscompile.WasmProfileJ32 && profile != crosscompile.WasmProfileJ64 {
+	if profile != crosscompile.WasmProfileJ32 && profile != crosscompile.WasmProfileJ64 &&
+		profile != crosscompile.WasmProfileW32 {
 		return
 	}
 	required := []string{"exception-handling"}

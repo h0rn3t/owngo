@@ -324,3 +324,27 @@
 - Частка 1 063 134 701 байт лишається фактом заміру. Поріг 50% не застосований.
 - Лишилось: P4.2, байти місця `static` поза `main`.
 
+## 2026-10-30 — P4.2
+
+- Компілятор не змінювався. Підсумки на виході — ті самі `FreeAccounted` (`ReportExit`).
+- `owngo/bytes/outstatic`: одне базове купове місце `[8]byte` у пакеті `site`, який не є `main`. Місце `static`, і ці 8 байтів ідуть у `freed`. Живий `static` після виклику такий самий, як до нього.
+- `owngo/bytes/outheld`: те саме `new([8]byte)` передається в параметр `func`. v1 позначає місце `rc-local: shared`, тож ні `FreeAccounted`, ні `DecAccounted` не ставляться. Ті самі 8 байтів лишаються в `live rc-local`. `freed` і живий `static` не змінюються.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`:
+  - `go run ./cmd/llgo run -tags owngo ./owngo/bytes/outstatic` — код 0. `owngo freed 144`, `owngo live static 984`, `owngo live rc-local 1736`.
+  - `go run ./cmd/llgo run -tags owngo ./owngo/bytes/outheld` — код 0. `owngo freed 136`, `owngo live static 984`, `owngo live rc-local 1744`.
+- Різниця — 8 байтів: 144 − 136 у `freed` і 1744 − 1736 у `live rc-local`. Числа — в `owngo/REPORT-PHASE4.md` поруч із 1 063 134 701 байтом, 22.9% двох рядків і 14.5% профілю. 8 і 144 менші за половину профілю (3 669 927 840). Профілі наново не знімались.
+- `gofmt -l` на нових файлах порожньо. `go vet` і `go vet -tags owngo` для обох дерев без зауважень. `go test -count=1` і з тегом `owngo` — `[no test files]`. `golangci-lint` (нові знахідки від HEAD, базовий конфіг, також із `--build-tags owngo`) — 0 зауважень. `go fix -diff` для цих пакетів порожній, з тегом `owngo` теж. `check-docs` на обох пакетах `site` — усі експортовані символи з коментарем. `govulncheck` не запускався: залежностей не змінювали.
+- Частка 1 063 134 701 байт лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P4.3, ASan на місці поза `main`.
+
+## 2026-10-30 — P4.3
+
+- Компілятор не змінювався. `-asan` з P1.4 без змін: пайплайн LLVM із суфіксом `,asan`, атрибут `sanitize_address`, лінк `-fsanitize=address`. Фікстури збираються з `-O0`, щоб читання після звільнення не стерлось як невизначена поведінка.
+- `owngo/asan/outuaf`: пакет `site` поза `main` виділяє `new(int)`, кличе `FreeAccounted` з категорією `CatStatic` і читає об'єкт у тій самій функції. `owngo/asan/outlive`: те саме місце передається в параметр `func(*int)`. v1 не ставить `FreeAccounted`. Виклик повертає 7, об'єкт лишається живим.
+- Прийняття, з кореня репозиторію, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`:
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/outuaf` — код 1. У виводі `ERROR: AddressSanitizer: heap-use-after-free` і `SUMMARY: AddressSanitizer: heap-use-after-free ... in github.com/xgo-dev/llgo/owngo/asan/outuaf/site.ReadAfterFree+0xac`. Звільнення — `runtime.FreeAccounted` у тій самій функції. Раннер загортає abort trap у `exit status 1`.
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/outlive` — код 0, stdout `asan-outlive-ok`, тексту AddressSanitizer немає.
+- `gofmt -l` на нових файлах порожньо. `go vet` і `go vet -tags owngo` для обох дерев без зауважень. `go test -count=1` і з тегом `owngo` — `[no test files]`. `golangci-lint` (нові знахідки від HEAD, також із `--build-tags owngo`) — 0 зауважень. `go fix -diff` для цих пакетів порожній, з тегом `owngo` теж. `check-docs` на обох пакетах `site` — усі експортовані символи з коментарем. `govulncheck` не запускався: залежностей не змінювали.
+- Частка 1 063 134 701 байт лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P4.4, гейт фази 4.
+

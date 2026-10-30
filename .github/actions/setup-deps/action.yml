@@ -54,7 +54,7 @@ runs:
         # Cache the host architecture's full LLVM archive: x64 on windows-2022
         # and native ARM64 on windows-11-arm.
         path: ${{ runner.tool_cache }}\llgo-llvm-archives\${{ runner.arch == 'ARM64' && 'clang+llvm-23.1.4-aarch64-pc-windows-msvc.tar.xz' || 'clang+llvm-23.1.4-x86_64-pc-windows-msvc.tar.xz' }}
-        key: ${{ runner.arch == 'ARM64' && 'llgo-llvm-archive-23.1.4-aarch64-pc-windows-msvc-f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d681' || 'llgo-llvm-archive-23.1.4-x86_64-pc-windows-msvc-854bffcfc84528e0ee92490ff5c178920abd358a79c3e98f053e41e3e8e4c6d2' }}
+        key: ${{ runner.arch == 'ARM64' && 'llgo-llvm-archive-23.1.4-aarch64-pc-windows-msvc-f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d6811' || 'llgo-llvm-archive-23.1.4-x86_64-pc-windows-msvc-854bffcfc84528e0ee92490ff5c178920abd358a79c3e98f053e41e3e8e4c6d2' }}
 
     - name: Install full-target Windows LLVM
       if: runner.os == 'Windows' && inputs.install-llvm == 'true' && inputs.windows-abi == 'msvc'
@@ -72,7 +72,7 @@ runs:
 
         $hostArch = if ($env:RUNNER_ARCH -eq "ARM64") { "aarch64" } else { "x86_64" }
         $expectedSha256 = if ($env:RUNNER_ARCH -eq "ARM64") {
-          "f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d681"
+          "f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d6811"
         } else {
           "854bffcfc84528e0ee92490ff5c178920abd358a79c3e98f053e41e3e8e4c6d2"
         }

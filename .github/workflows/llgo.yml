@@ -704,12 +704,19 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Install compiler dependencies
-        uses: ./.github/actions/setup-deps
+      # Intel runners retain bottled versions from their image; Homebrew no
+      # longer ships Intel bottles for LLVM, and the image predates the
+      # versioned llvm@23 formula, so the brew-based setup-deps cannot
+      # install LLVM 23 here. Use the locked mise development environment
+      # instead: its conda-forge llvmdev/clangxx/lld 23.1.4 toolchain is
+      # bottled for osx-64 and already qualified by the Mise lane.
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
-          llvm-version: "23"
-      - name: Set up Go
-        uses: ./.github/actions/setup-go
+          version: 2026.10.7
+          install_args: --locked
+          working_directory: dev
+          env: true
+          export_path: true
       - name: Build LLGo
         shell: bash
         run: |

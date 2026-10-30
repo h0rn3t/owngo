@@ -418,7 +418,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          llvm_config="$(command -v llvm-config || command -v llvm-config-22)"
+          llvm_config="$(command -v llvm-config || command -v llvm-config-23)"
           cmake -S ltoplugin -B ltoplugin/build \
             -DLLVM_DIR="$("${llvm_config}" --cmakedir)" \
             -DCMAKE_BUILD_TYPE=Release

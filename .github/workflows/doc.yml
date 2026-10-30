@@ -155,8 +155,15 @@ jobs:
             if [ "$1" = "clone" ]; then
               # do nothing because we already have the branch; emulate the
               # cloned directory name so forks whose checkout is not named
-              # llgo work too.
-              ln -sfn "$GITHUB_WORKSPACE" llgo
+              # llgo work too. Remove any stale entry first: MSYS ln refuses
+              # to overwrite a real directory, and raw %GITHUB_WORKSPACE%
+              # backslashes confuse it, so convert via cygpath on Windows.
+              rm -rf llgo
+              if [[ "$RUNNER_OS" == "Windows" ]]; then
+                ln -s "$(cygpath -u "$GITHUB_WORKSPACE")" llgo
+              else
+                ln -sfn "$GITHUB_WORKSPACE" llgo
+              fi
             else
               command git "$@"
             fi

@@ -33,7 +33,7 @@ if ($GoArch -eq 'arm64') {
   $asset = $sdkName.Replace('+', '%2B') + '.tar.xz'
   Expand-ReleaseXz `
     -URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/$asset" `
-    -SHA256 'f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d681' `
+    -SHA256 'f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d6811' `
     -CacheDirectory (Join-Path $env:RUNNER_TOOL_CACHE 'llgo-release-downloads/llvm-arm64') `
     -Destination $sdkParent `
     -Entries @("$sdkName/include/*", "$sdkName/lib/*", "$sdkName/bin/llvm-config.exe", "$sdkName/bin/*.dll")
