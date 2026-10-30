@@ -70,6 +70,27 @@ func printed() {
 	}
 }
 
+func TestOwnGoFreeBranchAllocDominates(t *testing.T) {
+	const src = `package foo
+
+func branch(cond bool) int {
+	var p *int
+	if cond {
+		p = new(int)
+		*p = 1
+	} else {
+		p = new(int)
+		*p = 2
+	}
+	return *p
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func compileOwnGoFree(t *testing.T, src string, free bool) llvm.Module {
 	t.Helper()
 	ssaPkg, _, files := buildGoSSAPkg(t, src)
@@ -83,4 +104,27 @@ func compileOwnGoFree(t *testing.T, src string, free bool) llvm.Module {
 		t.Fatal(err)
 	}
 	return pkg.Module()
+}
+
+func TestOwnGoFreeStoredPointerStaysLive(t *testing.T) {
+	const src = `package foo
+
+type extra struct{ next *int }
+type head struct{ extra *extra }
+
+func grow(h *head) {
+	if h.extra == nil {
+		h.extra = new(extra)
+	}
+	h.extra.next = new(int)
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Count(mustNamedFunction(t, mod, "foo.grow").String(), "runtime.Free")
+	if got != 0 {
+		t.Errorf("foo.grow runtime.Free count = %d, want 0", got)
+	}
 }

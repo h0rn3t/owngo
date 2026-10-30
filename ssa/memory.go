@@ -529,6 +529,12 @@ func (b Builder) Store(ptr, val Expr) Expr {
 		val = checkExpr(val, raw.(*types.Pointer).Elem(), b)
 	}
 	b.assertStaticNilDeref(ptr)
+	if b.Prog.SizeOf(storageType) == 0 {
+		// Порожній запис не має байтів. ASan для доступу розміром 0
+		// перевіряє ще й байт перед адресою і хибно рапортує його.
+		b.AssertNilDeref(ptr)
+		return Expr{Type: b.Prog.Void()}
+	}
 	if storageType.kind == vkSIMD {
 		stored := b.impl.CreateStore(val.impl, ptr.impl)
 		stored.SetAlignment(int(b.Prog.AlignOf(storageType)))

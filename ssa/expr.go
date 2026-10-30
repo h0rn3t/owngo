@@ -56,12 +56,19 @@ func (v Expr) IsNil() bool {
 
 // SetOrdering sets the ordering of the atomic operation.
 func (v Expr) SetOrdering(ordering AtomicOrdering) Expr {
+	if v.impl.IsNil() {
+		return v
+	}
 	v.memoryInstruction().SetOrdering(ordering)
 	return v
 }
 
 // SetVolatile marks a load or store as volatile.
 func (v Expr) SetVolatile(volatile bool) Expr {
+	// Порожній запис не має інструкції пам'яті.
+	if v.impl.IsNil() {
+		return v
+	}
 	v.memoryInstruction().SetVolatile(volatile)
 	return v
 }

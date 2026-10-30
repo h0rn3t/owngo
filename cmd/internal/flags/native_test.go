@@ -238,7 +238,7 @@ func TestDefaultsApplyOnlyToRelevantCommands(t *testing.T) {
 }
 
 func TestUnsupportedBuildFlagsHaveHelpAndFail(t *testing.T) {
-	for _, arg := range []string{"-race", "-race=false", "-msan", "-asan", "-pgo=auto", "-asmflags=-S", "-compiler=gc", "-gccgoflags=-O2", "-installsuffix=other", "-pkgdir=tmp", "-toolexec=wrapper", "-buildvcs=false", "-linkshared", "-n", "-work", "-trimpath"} {
+	for _, arg := range []string{"-race", "-race=false", "-msan", "-pgo=auto", "-asmflags=-S", "-compiler=gc", "-gccgoflags=-O2", "-installsuffix=other", "-pkgdir=tmp", "-toolexec=wrapper", "-buildvcs=false", "-linkshared", "-n", "-work", "-trimpath"} {
 		t.Run(arg, func(t *testing.T) {
 			cmd := &base.Command{}
 			CaptureGoBuildFlags(cmd)

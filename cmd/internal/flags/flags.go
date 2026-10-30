@@ -34,6 +34,7 @@ var Verbose bool
 var CompilerVerbose bool
 var BuildMode string
 var Tags string
+var ASan bool
 var Target string
 var Emulator bool
 var Port string
@@ -214,8 +215,10 @@ func AddOptLevelFlags(fs *flag.FlagSet) {
 
 func AddBuildFlags(fs *flag.FlagSet) {
 	DeadcodeDrop = false
+	ASan = false
 	PthreadStackSize = byteSizeFlag{}
 	fs.BoolVar(&ForceRebuild, "a", false, "Force rebuilding of packages that are already up-to-date")
+	fs.BoolVar(&ASan, "asan", false, "Instrument a native host build with LLVM AddressSanitizer")
 	fs.BoolVar(&PrintCommands, "x", false, "Print the commands")
 	if buildenv.Dev {
 		fs.BoolVar(&DeadcodeDrop, "deadcodedrop", false, "Enable Go dead code drop")
@@ -415,6 +418,7 @@ func UpdateConfig(conf *build.Config) error {
 	conf.PrintCommands = PrintCommands
 	conf.DeadcodeDrop = DeadcodeDrop
 	conf.OptLevel = OptLevel
+	conf.ASan = ASan
 	conf.Target = Target
 	conf.Port = Port
 	conf.BaudRate = BaudRate

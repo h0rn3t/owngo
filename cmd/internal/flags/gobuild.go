@@ -30,7 +30,7 @@ func CaptureGoBuildFlags(cmd *base.Command) *base.PassArgs {
 	p.Help = buildFlagHelp
 	p.Bool("modcacherw")
 	p.Var("p", "gcflags", "ldflags", "mod", "modfile", "overlay")
-	for _, name := range []string{"n", "linkshared", "race", "msan", "asan", "trimpath", "work"} {
+	for _, name := range []string{"n", "linkshared", "race", "msan", "trimpath", "work"} {
 		rejectBool(&cmd.Flag, name, buildFlagHelp(name))
 	}
 	for _, name := range []string{"asmflags", "compiler", "gccgoflags", "installsuffix", "pkgdir", "toolexec", "buildvcs", "pgo"} {

@@ -145,15 +145,17 @@ type OutFmtDetails struct {
 type ModuleHook func(pkg Package)
 
 type Config struct {
-	Goos               string
-	Goarch             string
-	GO386              string // 386 floating-point implementation: sse2 or softfloat
-	GOAMD64            string // amd64 microarchitecture level: v1 through v4
-	GOARM              string // arm architecture and floating-point implementation
-	GOARM64            string // arm64 ISA version and optional lse/crypto extensions
-	GOEXPERIMENT       string // Go experiments; empty inherits cmd/go configuration, "none" disables defaults
-	Target             string // target name (e.g., "rp2040", "wasi") - takes precedence over Goos/Goarch
-	OptLevel           optlevel.Level
+	Goos         string
+	Goarch       string
+	GO386        string // 386 floating-point implementation: sse2 or softfloat
+	GOAMD64      string // amd64 microarchitecture level: v1 through v4
+	GOARM        string // arm architecture and floating-point implementation
+	GOARM64      string // arm64 ISA version and optional lse/crypto extensions
+	GOEXPERIMENT string // Go experiments; empty inherits cmd/go configuration, "none" disables defaults
+	Target       string // target name (e.g., "rp2040", "wasi") - takes precedence over Goos/Goarch
+	OptLevel     optlevel.Level
+	// ASan вмикає LLVM AddressSanitizer для нативної збірки хоста.
+	ASan               bool
 	WasmOpt            WasmOptMode
 	WasmStrip          WasmStripMode
 	LTO                lto.Mode
@@ -366,6 +368,9 @@ func resolveBuildConfig(input *Config) (*Config, error) {
 	}
 	conf.optLevelDefaulted = conf.optLevelDefaulted || conf.OptLevel == optlevel.Unset
 	conf.OptLevel = effectiveOptLevel(conf)
+	if conf.ASan && (conf.Target != "" || conf.Goos != runtime.GOOS || conf.Goarch != runtime.GOARCH) {
+		return nil, errors.New("-asan supports only a native host build")
+	}
 	return conf, nil
 }
 
@@ -2956,6 +2961,9 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 		}
 	}
 	buildArgs := []string{"-o", linkOutput}
+	if ctx.buildConf.ASan {
+		buildArgs = append(buildArgs, "-fsanitize=address")
+	}
 	buildArgs = append(buildArgs, linkArgs...)
 	siteLayoutArgs, cleanupSiteLayout, err := funcInfoSiteLayoutArgs(ctx, app)
 	if err != nil {
@@ -3536,10 +3544,13 @@ func optimizeLLVMModule(ctx *context, pkgPath string, mod gllvm.Module) error {
 	mod.SetTarget(ctx.prog.Target().Spec().Triple)
 	pbo := gllvm.NewPassBuilderOptions()
 	defer pbo.Dispose()
+	if ctx.buildConf.ASan {
+		markAddressSanitizer(mod)
+	}
 	if err := gllvm.VerifyModule(mod, gllvm.ReturnStatusAction); err != nil {
 		return fmt.Errorf("verify LLVM module for %v failed: %w", pkgPath, err)
 	}
-	if err := mod.RunPasses(llvmPassPipeline(ctx.buildConf.OptLevel, ctx.buildConf.ltoMode()), ctx.prog.TargetMachine(), pbo); err != nil {
+	if err := mod.RunPasses(llvmPassPipeline(ctx.buildConf.OptLevel, ctx.buildConf.ltoMode(), ctx.buildConf.ASan), ctx.prog.TargetMachine(), pbo); err != nil {
 		return fmt.Errorf("run LLVM passes failed for %v: %w", pkgPath, err)
 	}
 	return nil
@@ -4563,15 +4574,32 @@ func applySizeOptimizationAttributes(mod gllvm.Module, level optlevel.Level) {
 	}
 }
 
-func llvmPassPipeline(level optlevel.Level, ltoMode lto.Mode) string {
+func llvmPassPipeline(level optlevel.Level, ltoMode lto.Mode, asan bool) string {
 	name := level.Pipeline()
+	var pipeline string
 	switch ltoMode {
 	case lto.Full:
-		return "lto-pre-link<" + name + ">"
+		pipeline = "lto-pre-link<" + name + ">"
 	case lto.Thin:
-		return "thinlto-pre-link<" + name + ">"
+		pipeline = "thinlto-pre-link<" + name + ">"
 	default:
-		return "default<" + name + ">"
+		pipeline = "default<" + name + ">"
+	}
+	if asan {
+		pipeline += ",asan"
+	}
+	return pipeline
+}
+
+// markAddressSanitizer ставить атрибут, без якого прохід asan
+// інструментує лише глобальні змінні, а не читання й запис.
+func markAddressSanitizer(mod gllvm.Module) {
+	attr := mod.Context().CreateEnumAttribute(gllvm.AttributeKindID("sanitize_address"), 0)
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = gllvm.NextFunction(fn) {
+		if fn.IsDeclaration() {
+			continue
+		}
+		fn.AddFunctionAttr(attr)
 	}
 }
 

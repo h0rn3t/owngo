@@ -198,3 +198,46 @@ func TestAssertNilDerefColdCall(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreZeroSizedEmitsNoMemoryAccess(t *testing.T) {
+	prog := NewProgram(nil)
+	defer prog.Dispose()
+	prog.SetRuntime(func() *types.Package {
+		rt := types.NewPackage(PkgRuntime, "runtime")
+		params := types.NewTuple(types.NewVar(token.NoPos, nil, "nil", types.Typ[types.Bool]))
+		sig := types.NewSignatureType(nil, nil, nil, params, nil, false)
+		rt.Scope().Insert(types.NewFunc(token.NoPos, rt, "AssertNilDeref", sig))
+		return rt
+	})
+	pkg := prog.NewPackage("p", "example.com/zerostore")
+
+	empty := types.NewStruct(nil, nil)
+	emptySig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "p", types.NewPointer(empty)),
+	), nil, false)
+	fn := pkg.NewFunc("storeEmpty", emptySig, GoDecl)
+	b := fn.MakeBody(1)
+	b.Store(fn.Param(0), prog.Zero(prog.Type(empty, GoDecl))).SetVolatile(true)
+	b.Return()
+	b.EndBuild()
+	emptyIR := fn.impl.String()
+	if strings.Contains(emptyIR, "store ") {
+		t.Fatalf("Store of a zero-sized value emitted a memory access:\n%s", emptyIR)
+	}
+	if !strings.Contains(emptyIR, "AssertNilDeref") {
+		t.Fatalf("Store of a zero-sized value skipped the nil check:\n%s", emptyIR)
+	}
+
+	intSig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "p", types.NewPointer(types.Typ[types.Int])),
+	), nil, false)
+	intFn := pkg.NewFunc("storeInt", intSig, GoDecl)
+	ib := intFn.MakeBody(1)
+	ib.Store(intFn.Param(0), prog.IntVal(1, prog.Int()))
+	ib.Return()
+	ib.EndBuild()
+	intIR := intFn.impl.String()
+	if !strings.Contains(intIR, "store ") {
+		t.Fatalf("Store of an int did not emit a memory access:\n%s", intIR)
+	}
+}

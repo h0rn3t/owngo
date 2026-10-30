@@ -74,6 +74,11 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 		if !ok {
 			continue
 		}
+		// Вказівник, записаний у пам'ять, читають уже не з цього значення SSA.
+		// Free за останнім прямим читанням звільнив би об'єкт перед тим записом.
+		if pointerStored(val, users) {
+			continue
+		}
 		user := map[ssa.Instruction]bool{}
 		for _, instr := range users {
 			if instr != nil && instr.Parent() == fn {
@@ -81,6 +86,11 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 			}
 		}
 		for instr := range deaths(fn, user) {
+			// Використання аліаса в блоці, якого алокація не домінує,
+			// не має місця для free: значення LLVM там недоступне.
+			if instr.Block() == nil || site.Block() == nil || !site.Block().Dominates(instr.Block()) {
+				continue
+			}
 			out[instr] = append(out[instr], val)
 		}
 	}
@@ -90,6 +100,49 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 	return out
 }
 
+// pointerStored звітує, що саме значення вказівника кладуть у пам'ять,
+// а не дані за цим вказівником.
+func pointerStored(site ssa.Value, users []ssa.Instruction) bool {
+	seen := map[ssa.Value]bool{}
+	for _, user := range users {
+		switch user := user.(type) {
+		case *ssa.Store:
+			if carriesPointer(user.Val, site, seen) {
+				return true
+			}
+		case *ssa.MapUpdate:
+			if carriesPointer(user.Key, site, seen) || carriesPointer(user.Value, site, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func carriesPointer(v, site ssa.Value, seen map[ssa.Value]bool) bool {
+	if v == nil || seen[v] {
+		return false
+	}
+	seen[v] = true
+	if v == site {
+		return true
+	}
+	switch v := v.(type) {
+	case *ssa.Phi:
+		for _, edge := range v.Edges {
+			if carriesPointer(edge, site, seen) {
+				return true
+			}
+		}
+	case *ssa.ChangeType:
+		return carriesPointer(v.X, site, seen)
+	case *ssa.Convert:
+		return carriesPointer(v.X, site, seen)
+	case *ssa.Extract:
+		return carriesPointer(v.Tuple, site, seen)
+	}
+	return false
+}
 func deferred(users []ssa.Instruction) bool {
 	for _, user := range users {
 		if _, ok := user.(*ssa.Defer); ok {

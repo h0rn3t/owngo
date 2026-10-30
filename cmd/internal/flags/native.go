@@ -82,7 +82,7 @@ var buildFlagDescriptions = map[string]string{
 	"buildvcs":      "LLGo does not implement VCS stamping",
 	"race":          "LLGo race instrumentation is not implemented",
 	"msan":          "LLGo memory sanitizer instrumentation is not implemented",
-	"asan":          "LLGo address sanitizer instrumentation is not implemented",
+	"asan":          "address sanitizer is the -asan flag of build, run, install and test",
 	"linkshared":    "LLGo cannot link gc shared Go packages",
 	"compiler":      "LLGo uses the LLVM backend and cannot select a gc or gccgo compiler",
 	"asmflags":      "LLGo does not forward options to its assembly backend",

@@ -72,8 +72,9 @@ rejected. Malformed argument lists and unsupported package patterns are always
 rejected, including in superseded lists. For `-ldflags`, malformed syntax and
 invalid values of recognized options are still rejected in superseded lists.
 
-`-race`, `-msan`, `-asan`, `-pgo`, `-linkshared`, compiler selection and gc object
-archive controls have no implemented LLGo backend contract. `-n`, `-work`,
+`-race`, `-msan`, `-pgo`, `-linkshared`, compiler selection and gc object
+archive controls have no implemented LLGo backend contract. `-asan` instruments
+a native host build with LLVM AddressSanitizer. `-n`, `-work`,
 `-trimpath`, `-buildvcs` and build JSON are also rejected pending native artifact
 support. `-buildmode` supports `exe`, `c-archive` and `c-shared`; gc shared-package,
 plugin, PIE and other modes are rejected. `-buildenv` has been removed because it

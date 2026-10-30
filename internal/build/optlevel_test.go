@@ -110,9 +110,12 @@ func TestLLVMPassPipeline(t *testing.T) {
 		{level: optlevel.Oz, ltoMode: lto.Thin, want: "thinlto-pre-link<O2>"},
 	}
 	for _, tt := range tests {
-		if got := llvmPassPipeline(tt.level, tt.ltoMode); got != tt.want {
-			t.Fatalf("llvmPassPipeline(%v, %v) = %q, want %q", tt.level, tt.ltoMode, got, tt.want)
+		if got := llvmPassPipeline(tt.level, tt.ltoMode, false); got != tt.want {
+			t.Fatalf("llvmPassPipeline(%v, %v, false) = %q, want %q", tt.level, tt.ltoMode, got, tt.want)
 		}
+	}
+	if got := llvmPassPipeline(optlevel.O0, lto.Off, true); got != "default<O0>,asan" {
+		t.Fatalf("llvmPassPipeline(O0, off, true) = %q, want %q", got, "default<O0>,asan")
 	}
 }
 

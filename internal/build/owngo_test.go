@@ -1,6 +1,9 @@
 package build
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestApplyOwngoTag(t *testing.T) {
 	tests := []struct {
@@ -24,5 +27,24 @@ func TestApplyOwngoTag(t *testing.T) {
 				t.Errorf("applyOwngoTag(%q) = %q, want %q", test.tags, conf.Tags, test.want)
 			}
 		})
+	}
+}
+
+func TestASanRequiresNativeHost(t *testing.T) {
+	conf, err := resolveBuildConfig(&Config{ASan: true})
+	if err != nil {
+		t.Fatalf("resolveBuildConfig(host asan) error = %v", err)
+	}
+	if !conf.ASan {
+		t.Fatal("resolveBuildConfig(host asan) ASan = false")
+	}
+	if _, err := resolveBuildConfig(&Config{ASan: true, Target: "wasi"}); err == nil {
+		t.Fatal("resolveBuildConfig(asan, wasi) error = nil")
+	}
+	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		return
+	}
+	if _, err := resolveBuildConfig(&Config{ASan: true, Goos: "linux", Goarch: "amd64"}); err == nil {
+		t.Fatal("resolveBuildConfig(asan cross) error = nil")
 	}
 }

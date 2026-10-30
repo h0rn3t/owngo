@@ -97,6 +97,19 @@ func TestBuildOptimizationFlags(t *testing.T) {
 	}
 }
 
+func TestASanBuildFlag(t *testing.T) {
+	ASan = false
+	fs := flag.NewFlagSet("asan", flag.ContinueOnError)
+	fs.SetOutput(new(bytes.Buffer))
+	AddBuildFlags(fs)
+	if err := fs.Parse([]string{"-asan"}); err != nil {
+		t.Fatalf("Parse(-asan) error = %v", err)
+	}
+	if !ASan {
+		t.Fatal("ASan = false, want true")
+	}
+}
+
 func TestBuildOptimizationFlagInvalid(t *testing.T) {
 	OptLevel = optlevel.Unset
 	fs := flag.NewFlagSet("invalid", flag.ContinueOnError)

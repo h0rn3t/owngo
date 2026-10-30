@@ -171,6 +171,7 @@ func (c *context) collectCommonInputs(m *manifestBuilder) {
 	// A non-DCE link cannot resolve those predicates from a cached archive.
 	m.common.DeadcodeDrop = c.buildConf.deadcodeDropEnabled()
 	m.common.EnableLTOPlugin = c.buildConf.LTOPlugin.Enabled()
+	m.common.AddressSanitizer = c.buildConf.ASan
 	m.common.EmitDWARF = shouldEmitDebugInfo(c.buildConf, &c.crossCompile)
 	m.common.EmitCodeView = shouldEmitCodeView(c.buildConf, &c.crossCompile)
 	m.common.PCLNMode = effectivePCLNMode(c.buildConf).String()

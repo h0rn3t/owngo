@@ -132,7 +132,7 @@ func main() {
 func TestNativeUnsupportedControlsFailBeforeLoading(t *testing.T) {
 	dir := t.TempDir()
 	for _, command := range []string{"build", "install", "run", "cmptest", "test"} {
-		for _, control := range []string{"-race", "-msan", "-asan", "-pgo=off", "-trimpath", "-work", "-n", "-gcflags=-m", "-ldflags=-X main.Version=1"} {
+		for _, control := range []string{"-race", "-msan", "-pgo=off", "-trimpath", "-work", "-n", "-gcflags=-m", "-ldflags=-X main.Version=1"} {
 			t.Run(command+control, func(t *testing.T) {
 				out, code := nativeCommand(t, dir, nil, command, control, "./nonexistent-package")
 				if code == 0 || !strings.Contains(out, "unsupported") || strings.Contains(out, "nonexistent-package") {
