@@ -87,3 +87,86 @@ Mappings
 		t.Errorf("Weigh unmatched missing, Outside sum = %d objects, %d bytes", outsideObjects, outsideBytes)
 	}
 }
+
+func TestStdlibPackagesEmpty(t *testing.T) {
+	got := StdlibPackages(nil, nil, "", "")
+	if got == nil || len(got) != 0 {
+		t.Errorf("StdlibPackages(nil, nil) = %#v, want empty slice", got)
+	}
+}
+
+func TestStdlibPackages(t *testing.T) {
+	const (
+		module = "/app"
+		goroot = "/goroot"
+	)
+	raw := `
+Samples:
+alloc_objects/count alloc_space/bytes
+         10        100: 1
+         20        200: 2
+          7         70: 3
+         11         11: 4
+          3         30: 5
+          8         80: 6
+          4         40: 7
+          9         90: 8
+          0          0: 1
+          5         50: 9
+          1          8: 10
+Locations
+     1: 0x1 M=1 encoding/json.(*encodeState).marshal /goroot/src/encoding/json/encode.go:1:0 s=1
+     2: 0x2 M=1 runtime.mallocgc /goroot/src/runtime/malloc.go:2:0 s=1
+             fmt.Sprintf /goroot/src/fmt/print.go:2:0 s=1
+             encoding/json.Marshal /goroot/src/encoding/json/encode.go:3:0 s=1
+     3: 0x3 M=1 bytes.growSlice /goroot/src/bytes/buffer.go:3:0 s=1
+     4: 0x4 M=1 bytes.NewReader /goroot/src/bytes/reader.go:4:0 s=1
+     5: 0x5 M=1 fmt.TestPrint /goroot/src/fmt/print_test.go:5:0 s=1
+             bytes.growSlice /goroot/src/bytes/buffer.go:3:0 s=1
+     6: 0x6 M=1 app.miss /app/miss.go:6:0 s=1
+             fmt.Sprintf /goroot/src/fmt/print.go:2:0 s=1
+     7: 0x7 M=1 mod.F /Users/x/go/pkg/mod/github.com/foo@v1.0.0/a.go:7:0 s=1
+     8: 0x8 M=1 runtime.mallocgc /goroot/src/runtime/malloc.go:2:0 s=1
+             app.hit /app/hit.go:4:0 s=1
+     9: 0x9 M=1 runtime/pprof.(*Profile).WriteTo /goroot/src/runtime/pprof/pprof.go:9:0 s=1
+    10: 0xa M=1 runtime.mallocgc /goroot/src/runtime/malloc.go:2:0 s=1
+Mappings
+`
+	samples, err := ParseAllocProfile(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseAllocProfile() error = %v, want nil", err)
+	}
+	sites := []Site{{Category: "static", Pos: module + "/hit.go:4"}}
+	got := StdlibPackages(sites, samples, module, goroot)
+	want := []Weight{
+		{Category: "fmt", Objects: 20, Bytes: 200},
+		{Category: "encoding/json", Objects: 10, Bytes: 100},
+		{Category: "bytes", Objects: 18, Bytes: 81},
+		{Category: "runtime/pprof", Objects: 5, Bytes: 50},
+	}
+	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
+		t.Errorf("StdlibPackages(profile) = %#v, want %#v", got, want)
+	}
+
+	var gotObjects, gotBytes int64
+	for _, weight := range got {
+		gotObjects += weight.Objects
+		gotBytes += weight.Bytes
+	}
+	var stdlib Weight
+	var found bool
+	for _, weight := range Outside(sites, samples, module, goroot) {
+		if weight.Category != OutsideStdlib {
+			continue
+		}
+		found = true
+		stdlib = weight
+	}
+	if !found {
+		t.Fatalf("Outside stdlib missing, StdlibPackages sum = %d objects, %d bytes", gotObjects, gotBytes)
+	}
+	if gotObjects != stdlib.Objects || gotBytes != stdlib.Bytes {
+		t.Errorf("StdlibPackages sum = %d objects, %d bytes, want Outside stdlib %d, %d",
+			gotObjects, gotBytes, stdlib.Objects, stdlib.Bytes)
+	}
+}
