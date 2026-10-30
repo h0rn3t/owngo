@@ -471,3 +471,72 @@ func pointer() {
 		}
 	}
 }
+
+// TestOwnGoFresh — P6.6: свіжий результат NewTree належить викликачу.
+// NewTree переміщує дітей у поля без Inc; викликач, що лише читає дерево,
+// ставить DecCyclic, а той, хто його зберігає чи повертає, — ні.
+func TestOwnGoFresh(t *testing.T) {
+	const src = `package foo
+
+type Tree struct {
+	Left, Right *Tree
+}
+
+var g *Tree
+
+func NewTree(depth int) *Tree {
+	if depth > 0 {
+		return &Tree{Left: NewTree(depth - 1), Right: NewTree(depth - 1)}
+	}
+	return &Tree{}
+}
+
+func local(depth int) int {
+	a := NewTree(depth)
+	if a.Left == nil {
+		return 1
+	}
+	return 2
+}
+
+func childAfter(depth int) bool {
+	a := NewTree(depth)
+	l := a.Left
+	return l != nil && l.Left == nil
+}
+
+func stashed(depth int) {
+	g = NewTree(depth)
+}
+
+func returned(depth int) *Tree {
+	return NewTree(depth)
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	newTree := mustNamedFunction(t, mod, "foo.NewTree").String()
+	if !strings.Contains(newTree, "runtime.AllocCounted") {
+		t.Error("foo.NewTree has no runtime.AllocCounted")
+	}
+	if strings.Contains(newTree, "runtime.Inc") {
+		t.Error("foo.NewTree has runtime.Inc, want children moved into the fields")
+	}
+	for _, name := range []string{"foo.local", "foo.childAfter"} {
+		if !strings.Contains(mustNamedFunction(t, mod, name).String(), "runtime.DecCyclic") {
+			t.Errorf("%s has no runtime.DecCyclic", name)
+		}
+	}
+	// DecCyclic звільняє дерево каскадом, тож стоїть після останнього читання дитини.
+	body := mustNamedFunction(t, mod, "foo.childAfter").String()
+	if dec, load := strings.Index(body, "runtime.DecCyclic"), strings.LastIndex(body, "load ptr"); dec < load {
+		t.Errorf("foo.childAfter runtime.DecCyclic at %d before the last child load at %d", dec, load)
+	}
+	for _, name := range []string{"foo.stashed", "foo.returned"} {
+		if got := strings.Count(mustNamedFunction(t, mod, name).String(), "runtime.DecCyclic"); got != 0 {
+			t.Errorf("%s runtime.DecCyclic count = %d, want 0", name, got)
+		}
+	}
+}
