@@ -386,3 +386,15 @@
 - `go test -count=1 -v ./cl/ -run TestOwnGoImplicit` — `--- PASS: TestOwnGoImplicit`. `staticConcat`, `staticAppend` і `staticConvert` містять `FreeAccounted` не з розміром 0. `go vet ./cl/ ./owngo/bytes/imconcat/ ./owngo/bytes/imheld/` без зауважень. `golangci-lint run --new-from-rev HEAD` для цих пакетів — 0 зауважень.
 - Лишилось: P5.3, ASan на доведеному `implicit`.
 
+## 2026-10-30 — P5.3
+
+- Компілятор не змінювався. `-asan` і `-O0` ті самі, що в P4.3: читання після звільнення лишається в коді.
+- `owngo/asan/imuaf`: `"abcd" + "efgh"` звільняється через `FreeAccounted` з категорією `CatStatic`, потім читається перший байт. Алокація — `runtime.StringCat`, 8 байтів.
+- `owngo/asan/imlive`: та сама конкатенація передається в параметр `func(string)`. v1 не ставить `FreeAccounted`. Виклик повертає `'a'`, об'єкт лишається живим.
+- Прийняття, з кореня репозиторію, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`:
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/imuaf` — код 1. У виводі `ERROR: AddressSanitizer: heap-use-after-free` на 8-байтовому блоці. Звільнення — `runtime.FreeAccounted` у `main.readAfterFree`, алокація — `runtime.StringCat`. `SUMMARY: AddressSanitizer: heap-use-after-free ... in main.readAfterFree`. Раннер загортає abort trap у `exit status 1`.
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/imlive` — код 0, у виводі `asan-imlive-ok`, тексту AddressSanitizer немає.
+- `gofmt -l` на нових файлах порожньо. `go vet` і `go vet -tags owngo` для обох пакетів без зауважень. `go test -count=1` і з тегом `owngo` — `[no test files]`. `golangci-lint` (нові знахідки від HEAD, також із `--build-tags owngo`) — 0 зауважень. `go fix -diff` для цих пакетів порожній, з тегом `owngo` теж.
+- Частка 819 968 312 байтів лишається фактом заміру. Поріг 50% не застосований. Профілі наново не знімались. M:N без змін.
+- Лишилось: P5.4, гейт фази 5.
+
