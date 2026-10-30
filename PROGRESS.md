@@ -260,3 +260,14 @@
 - Частка 1 666 739 900 байтів лишається фактом заміру. Поріг 50% не застосований.
 - Лишилось: P3.3, зведення тіл цієї збірки llgo.
 
+## 2026-10-30 — P3.3
+
+- `PublishProgram` рахує спільну нерухому точку `packageSummaries(nil, …)` по всіх функціях з тілом у `ssa.Program` цієї збірки і кладе зведення лише експортованих функцій у окрему мапу `programBy`. Сховище аналізатора `summaryBy` не чіпається. Функція без тіла запису не отримує. `PublishProgram(nil)` і повторний виклик замінюють мапу цілком. `FactTypes` не вмикається.
+- `summaryOf` при `pass == nil` читає `publishedSummary` до `importSummary`. Гілка `pass == nil` у `importSummary` лишається: зведення попереднього проходу аналізатора виклик компілятора відомим не робить. Пакет, якого ця збірка не завантажила, у програму не входить.
+- `internal/build` кличе `PublishProgram(ctx.progSSA)` один раз після SSA і `configureUnusedGlobalInits`, до пулу бекендів, і лише коли `OwnGoFree`. Порядок воркерів публікацію не змінює.
+- Позичання (`Borrow`, лише читання `*int`) робить куповий `new(int)` у викликачі `static`: після останнього використання стоїть `FreeAccounted`. Запис у глобальну змінну (`Stash`) і виклик без тіла (`Gone`, зокрема після влучення кешу) об'єкт не звільняють: ні `FreeAccounted`, ні `DecAccounted`.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду: `LLGO_ROOT=$PWD go test -count=1 -v ./owngo/census/ -run OwnGoBuildSummary` — `--- PASS: TestOwnGoBuildSummary (0.00s)`; `go test -count=1 -v ./cl/ -run OwnGoBuildSummary` — `--- PASS: TestOwnGoBuildSummary (0.23s)`. Після заміни `errMissing` на `fmt.Errorf` повтор: `go test -count=1 -race -v ./owngo/census/ -run OwnGoBuildSummary` — `--- PASS: TestOwnGoBuildSummary (0.00s)`.
+- `gofmt -l` на змінених файлах порожньо. `go vet ./owngo/census/ ./cl/` без зауважень. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень. `go fix -diff` пропонує чужі модернізації, зокрема `strings.Cut` у `quotedWants`; цей diff не чіпає. `check-docs` на `./owngo/census/` — усі експортовані символи з коментарем. `govulncheck` не запускався: залежностей не змінювали.
+- Частка 1 666 739 900 байтів лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P3.4, ASan на лічильнику.
+

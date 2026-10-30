@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/ssa"
+	"golang.org/x/tools/go/ssa/ssautil"
 )
 
 // Summary — зведення параметрів однієї функції для класифікації v1.
@@ -141,6 +142,61 @@ func ResetSummaries() {
 	summaryMu.Lock()
 	summaryBy = map[string]*Summary{}
 	summaryMu.Unlock()
+}
+
+// programBy — зведення експортованих функцій, чиї тіла є в ssa.Program
+// цієї збірки. Сховище аналізатора це не замінює.
+var (
+	programMu sync.Mutex
+	programBy = map[string]*Summary{}
+)
+
+// PublishProgram записує зведення експортованих функцій, чиї тіла вже є в prog.
+// Виклик стоїть до пулу воркерів. FactTypes не вмикається. Функція без тіла запису не отримує.
+func PublishProgram(prog *ssa.Program) {
+	var funcs []*ssa.Function
+	if prog != nil {
+		for fn := range ssautil.AllFunctions(prog) {
+			if fn == nil || fn.Blocks == nil {
+				continue
+			}
+			funcs = append(funcs, fn)
+		}
+	}
+	sums := packageSummaries(nil, funcs)
+	next := map[string]*Summary{}
+	for _, fn := range funcs {
+		sum := sums[fn]
+		obj := fn.Object()
+		if obj == nil || !obj.Exported() || sum == nil {
+			continue
+		}
+		key := summaryKey(obj)
+		if key == "" {
+			continue
+		}
+		next[key] = sum
+	}
+	programMu.Lock()
+	programBy = next
+	programMu.Unlock()
+}
+
+func publishedSummary(fn *ssa.Function) *Summary {
+	if fn == nil || fn.Blocks == nil {
+		return nil
+	}
+	obj := fn.Object()
+	if obj == nil || !obj.Exported() {
+		return nil
+	}
+	key := summaryKey(obj)
+	if key == "" {
+		return nil
+	}
+	programMu.Lock()
+	defer programMu.Unlock()
+	return programBy[key]
 }
 
 func publishSummary(obj types.Object, sum *Summary) {
@@ -1052,6 +1108,11 @@ func summaryOf(v1 *v1Ctx, fn *ssa.Function) *Summary {
 			if item != nil && item.Object() == fn.Object() {
 				return s
 			}
+		}
+	}
+	if v1.pass == nil {
+		if s := publishedSummary(fn); s != nil {
+			return s
 		}
 	}
 	return importSummary(v1.pass, fn)

@@ -68,6 +68,7 @@ import (
 	"github.com/xgo-dev/llgo/internal/quoted"
 	"github.com/xgo-dev/llgo/internal/typepatch"
 	"github.com/xgo-dev/llgo/internal/wasmworkers"
+	"github.com/xgo-dev/llgo/owngo/census"
 	"github.com/xgo-dev/llgo/ssa/abi"
 	xenv "github.com/xgo-dev/llgo/xtool/env"
 	gllvm "github.com/xgo-dev/llvm"
@@ -1048,6 +1049,12 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	allPkgs := append([]*aPackage{}, pkgs...)
 	configureUnusedGlobalInits(ctx)
 	allPkgs = append(allPkgs, depPkgs...)
+	if ctx.frontendOptions.OwnGoFree {
+		// Зведення тіл цієї програми до пулу бекендів. Порядок воркерів його не змінює.
+		span := ctx.buildTrace.startCoordinator("publish owngo summaries", nil)
+		census.PublishProgram(ctx.progSSA)
+		span.done()
+	}
 	var nativeTestRoots []*packages.Package
 	if mode == ModeTest && !inv.compileOnly {
 		for _, pkg := range initial {
