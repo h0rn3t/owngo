@@ -27,7 +27,6 @@ func testCompilerUsedNames(t *testing.T, mod llvm.Module) []string {
 		}
 	}
 	return names
-	return names
 }
 
 func TestPreserveZeroInitAggregatesForLTO(t *testing.T) {

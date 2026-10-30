@@ -3589,11 +3589,12 @@ func preserveZeroInitAggregatesForLTO(conf *Config, toolchain crosscompile.Nativ
 	ctx := mod.Context()
 	ptrTy := gllvm.PointerType(ctx.Int8Type(), 0)
 	values := make([]gllvm.Value, 0, 4)
-	// Preserve any existing compiler.used entries (e.g. static itabs).
+	// Preserve any existing compiler.used entries (e.g. static itabs),
+	// normalizing their type like appendLLVMUsed does for llvm.used.
 	if used := mod.NamedGlobal("llvm.compiler.used"); !used.IsNil() {
 		if init := used.Initializer(); !init.IsNil() {
 			for i, n := 0, init.OperandsCount(); i < n; i++ {
-				values = append(values, init.Operand(i))
+				values = append(values, gllvm.ConstBitCast(init.Operand(i), ptrTy))
 			}
 		}
 		used.EraseFromParentAsGlobal()
