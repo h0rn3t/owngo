@@ -66,10 +66,12 @@ func Place(funcs []*ssa.Function) (
 			if !countedAlloc(site, label) && !countedImplicit(site, label) {
 				continue
 			}
-			counted[site] = struct{}{}
+			// Слово без Dec нічого не дає, а вказівник, що виходить із функції,
+			// мусить лишатися початком блока malloc.
 			if !decSite(site, label, pts, ctx.noDec) {
 				continue
 			}
+			counted[site] = struct{}{}
 			users := rcUsers(siteUsers(site, pts, contents))
 			if len(users) > 0 {
 				decUses[site] = users
