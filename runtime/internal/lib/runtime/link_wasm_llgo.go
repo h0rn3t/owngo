@@ -68,6 +68,7 @@ func syscall_runtimeUnsetenv(key string) {
 //go:linkname os_beforeExit os.runtime_beforeExit
 func os_beforeExit(exitCode int) {
 	_ = exitCode
+	runOwnGoExitHook()
 }
 
 // WebAssembly has no SIGPIPE delivery. This matches the official Go wasm

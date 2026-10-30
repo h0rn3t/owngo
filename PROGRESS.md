@@ -156,3 +156,14 @@
   - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/clean` — код 0, stdout `asan-clean-ok`, тексту AddressSanitizer немає.
 - `gofmt -l` на змінених файлах порожньо. `go vet` для `./ssa/`, `./cl/`, `./cmd/internal/flags/` і `./cmd/llgo/` без зауважень. `go vet ./internal/build/` як і раніше падає на копію lock у `windows_artifacts_test.go` (поза цим diff). `go test -race -count=1` зеленим пройшов `TestStoreZeroSizedEmitsNoMemoryAccess`, `TestOwnGoStaticFree`, `TestOwnGoFreeBranchAllocDominates`, `TestOwnGoFreeStoredPointerStaysLive` і сусідні перевірки `ssa`/`cl`. Прапор і пайплайн: `TestASanBuildFlag`, `TestLLVMPassPipeline`, `TestASanRequiresNativeHost`. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень. `govulncheck` не запускався: залежностей не змінювали.
 - Лишилось: P1.5, лічильник байтів, що пройшли через `free`.
+
+## 2026-10-30 — P1.5
+
+- `census.Sites` віддає категорію v1 кожного місця і читачів `static` одним проходом. Прохід `OwnGoFree` кличе `runtime.NoteAlloc(size, cat)` після купового `new` з відомим `SizeOf` і `runtime.FreeAccounted` замість `runtime.Free` на останньому читанні `static`. `stack`, нульовий розмір і місце без категорії в лічильник не входять. `MakeSlice` і решта без сталого розміру кореня як і раніше звільняються, якщо вони `static`, але байти кореня не рахуються.
+- На `os.Exit` гачок `ReportExit` друкує `owngo freed` і `owngo live <категорія>`. Без тега `owngo` гачок порожній.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`:
+  - `go run ./cmd/llgo run -tags owngo ./owngo/bytes/static` — код 0. `owngo freed 112`, `owngo live static 984`, `owngo live rc-local 1768`, `owngo live rc-shared 368`, `owngo live pinned 2892`. Місце `new([8]byte)` додало 8 до звільнених.
+  - `go run ./cmd/llgo run -tags owngo ./owngo/bytes/rclocal` — код 0. `owngo freed 104`, `owngo live static 984`, `owngo live rc-local 1776`, `owngo live rc-shared 368`, `owngo live pinned 2892`. Ті самі 8 байтів лишились у `rc-local`.
+- Числа записані в `owngo/REPORT-PHASE1.md` поруч із 12.1% (`static` після v1) і 67.6% (поза census). Частка звільненого менша за половину профілю.
+- `gofmt -l` на змінених файлах порожньо. `go vet ./cl/` і `go vet ./owngo/census/` без зауважень. `go vet -tags owngo ./internal/runtime/` у модулі `runtime` не додає зауважень у нових файлах; старі `unsafe.Pointer` у `caller.go`, `local_context_stub.go`, `stubs.go`, `z_gc.go` були й раніше. `go test -race -count=1 ./owngo/census/` зелений. `go test -race -count=1 ./cl/ -run 'TestOwnGoFreeBytes|TestOwnGoStaticFree|TestOwnGoFreeBranch|TestOwnGoFreeStored'` зелений. `golangci-lint` (нові знахідки від HEAD, базовий конфіг, для рантайму ще `--build-tags owngo`) — 0 зауважень. `go fix -diff` для `./cl/` і `./owngo/census/` не чіпає цей diff. `govulncheck` не запускався: залежностей не змінювали.
+- Лишилось: P1.6, гейт фази 1.

@@ -4,7 +4,11 @@
 
 package runtime
 
-import "unsafe"
+import (
+	"unsafe"
+
+	llruntime "github.com/xgo-dev/llgo/runtime/internal/runtime"
+)
 
 type covCounterBlob struct {
 	Counters *uint32
@@ -25,6 +29,10 @@ func runCoverageExitHook(code int) {
 	if coverageExitHook != nil {
 		coverageExitHook(code)
 	}
+}
+
+func runOwnGoExitHook() {
+	llruntime.ReportExit()
 }
 
 // registerCoverage is called once per instrumented package, before its user

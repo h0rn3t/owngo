@@ -86,8 +86,9 @@ type Options struct {
 	// type checking and before ssa.Package.Build so go/ssa does not emit
 	// one store per element. Keys use StaticByteArrayKey(pkg.Path(), name).
 	StaticByteArrays map[string][]byte
-	// OwnGoFree вставляє runtime.Free після останнього використання місця,
-	// яке census v1 позначає static. Без прапорця прохід не працює.
+	// OwnGoFree вставляє runtime.FreeAccounted після останнього використання
+	// місця, яке census v1 позначає static, і runtime.NoteAlloc для купового
+	// місця з відомим розміром. Без прапорця прохід не працює.
 	OwnGoFree bool
 }
 
@@ -245,6 +246,7 @@ type context struct {
 	staticByteArrays     map[string][]byte
 	locality             localityLowering
 	ownGoUses            map[ssa.Instruction][]ssa.Instruction
+	ownGoCat             map[ssa.Instruction]uint64
 	ownGoFreeAfter       map[ssa.Instruction][]ssa.Value
 }
 
@@ -2355,6 +2357,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		case *ssa.Jump, *ssa.If, *ssa.Return, *ssa.Panic:
 			return
 		}
+		p.emitOwnGoNote(b, instr)
 		p.emitOwnGoFree(b, instr)
 	}()
 	p.panicSitePos = token.NoPos

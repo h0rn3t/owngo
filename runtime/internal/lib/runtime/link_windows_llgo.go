@@ -87,6 +87,7 @@ func syscall_runtimeUnsetenv(key string) {
 //go:linkname os_beforeExit os.runtime_beforeExit
 func os_beforeExit(exitCode int) {
 	runCoverageExitHook(exitCode)
+	runOwnGoExitHook()
 }
 
 //go:linkname c_getpagesize C.llgo_getpagesize
