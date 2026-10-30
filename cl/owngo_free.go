@@ -25,8 +25,11 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 		return
 	}
 	funcs := ssaPackageFuncs(pkg)
-	cats, uses := census.Sites(funcs)
+	cats, uses, decUses, counted, inc := census.Place(funcs)
 	p.ownGoUses = uses
+	p.ownGoDecUses = decUses
+	p.ownGoCounted = counted
+	p.ownGoInc = inc
 	if len(cats) == 0 {
 		return
 	}
@@ -105,7 +108,7 @@ func ssaPackageFuncs(pkg *ssa.Package) []*ssa.Function {
 // об'єкт уже не живий. Гілка, де читання лишається попереду, free не отримує:
 // об'єкт доживає до виходу процесу. defer тримає аргумент до RunDefers, тож
 // таке місце в цій фазі не звільняється.
-func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction) map[ssa.Instruction][]ssa.Value {
+func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction, keepStored bool) map[ssa.Instruction][]ssa.Value {
 	if fn == nil || len(fn.Blocks) == 0 || len(uses) == 0 {
 		return nil
 	}
@@ -120,7 +123,7 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 		}
 		// Вказівник, записаний у пам'ять, читають уже не з цього значення SSA.
 		// Free за останнім прямим читанням звільнив би об'єкт перед тим записом.
-		if pointerStored(val, users) {
+		if !keepStored && pointerStored(val, users) {
 			continue
 		}
 		user := map[ssa.Instruction]bool{}
@@ -266,6 +269,7 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 }
 
 func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
+	defer p.emitOwnGoDec(b, instr)
 	sites := p.ownGoFreeAfter[instr]
 	if len(sites) == 0 {
 		return
@@ -286,6 +290,55 @@ func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
 		}
 		p.callOwnGoAccount(b, "FreeAccounted", ptr, size, cat)
 	}
+}
+
+func (p *context) emitOwnGoDec(b llssa.Builder, instr ssa.Instruction) {
+	sites := p.ownGoDecAfter[instr]
+	if len(sites) == 0 {
+		return
+	}
+	for _, site := range sites {
+		ptr := p.ownGoFreePtr(b, site)
+		if ptr.IsNil() {
+			continue
+		}
+		size, sized := p.ownGoSiteSize(site)
+		if !sized {
+			continue
+		}
+		p.callOwnGoAccount(b, "DecAccounted", ptr, size, 0)
+	}
+}
+
+func (p *context) emitOwnGoInc(b llssa.Builder, instr ssa.Instruction) {
+	sites := p.ownGoInc[instr]
+	if len(sites) == 0 {
+		return
+	}
+	for _, site := range sites {
+		if _, ok := p.bvals[site]; !ok {
+			p.compileValue(b, site)
+		}
+		ptr := p.ownGoFreePtr(b, site)
+		if ptr.IsNil() {
+			continue
+		}
+		if _, sized := p.ownGoSiteSize(site); !sized {
+			continue
+		}
+		p.callOwnGoAccount(b, "Inc", ptr, 0, 0)
+	}
+}
+
+func (p *context) emitAllocCounted(b llssa.Builder, elem llssa.Type) llssa.Expr {
+	sig := types.NewSignatureType(nil, nil, nil,
+		types.NewTuple(types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr])),
+		types.NewTuple(types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer])),
+		false)
+	raw := b.Call(p.runtimeFunc("AllocCounted", sig), p.prog.IntVal(p.prog.SizeOf(elem), p.prog.Uintptr()))
+	ret := b.PtrCast(p.prog.Pointer(elem), raw)
+	b.Store(ret, p.prog.Zero(elem))
+	return ret
 }
 
 func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
@@ -310,12 +363,26 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 		p.prog.IntVal(size, p.prog.Uintptr()),
 		p.prog.IntVal(cat, p.prog.Int32()),
 	}
-	if name == "FreeAccounted" {
+	switch name {
+	case "FreeAccounted":
 		params = append([]*types.Var{
 			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
 		}, params...)
 		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
 		args = append([]llssa.Expr{b.PtrCast(dst, ptr)}, args...)
+	case "DecAccounted":
+		params = []*types.Var{
+			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
+			types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr]),
+		}
+		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
+		args = []llssa.Expr{b.PtrCast(dst, ptr), p.prog.IntVal(size, p.prog.Uintptr())}
+	case "Inc":
+		params = []*types.Var{
+			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
+		}
+		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
+		args = []llssa.Expr{b.PtrCast(dst, ptr)}
 	}
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
 	b.Call(p.runtimeFunc(name, sig), args...)

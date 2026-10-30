@@ -249,3 +249,14 @@
 - `go test -timeout 40m ./...` без тега `owngo` падає на пакетах `owngo/BASELINE.md` і ще на `cl` (FileCheck `ifaceconv`/`ifaceprom`, meta-золоті інтерфейсів і reflect), `cmd/internal/compat`, `dev/runtimeaudit`, `internal/build` (`TestRuntimeOwnership`, `TestRuntimeAuditMemory64Layout`). Ті самі `compat`, `runtimeaudit`, `ifaceconv` і `TestRuntimeOwnership/darwin-arm64` падають після `git checkout` цього файлу. `account_owngo.go` без тега `owngo` у збірку не входить.
 - Лишилось: P3.2, вставка `Inc` / `Dec` лише для `rc-local`.
 
+## 2026-10-30 — P3.2
+
+- `census.Place` — той самий прохід v1, що й `Sites`. `Sites` тепер кличе `Place`. Куповий `Alloc` з головою мітки `rc-local` — підрахована алокація. Її читачі йдуть у `decUses`, якщо причина не `return`, `move` чи `call`, вказівник не внутрішній і невідомий виклик це місце не блокує. Спільна передача (`shared`) у функцію з відомим зведенням, без внутрішнього вказівника, пише значення в `inc`. `packageSummaries(nil)` лишається: виклик поза списком функцій невідомий. Гілка `pass == nil` у `importSummary` не знята.
+- `cl`: `prepareOwnGoFree` бере `Place`. Підрахований `Alloc` з розміром більше нуля компілюється через `AllocCounted` і нуль елемента. `static` лишається на `AllocEx` і `FreeAccounted`. Останнє доміноване живе читання отримує один `DecAccounted`. `Inc` ставиться перед `Call` і `Defer`. `emitOwnGoFree` кличе `Dec` і тоді, коли місць `FreeAccounted` немає. Записаний `rc-local` не пропускається: читачі вже включають пізні load.
+- `foo.closureUse`: SSA має два купові `Alloc` (слот змінної і `new(int)`), тож IR містить два `AllocCounted` і два `DecAccounted`. `foo.shared`, `foo.unknown`, `foo.interior` і `foo.staticNew` — нуль `DecAccounted`. `staticNew` лишає `FreeAccounted`. З `OwnGoFree: false` немає ні `DecAccounted`, ні `AllocCounted`.
+- Відомий `Inc` для спільної передачі підрахованого `rc-local` у поточному v1 фікстури не має: виклики на кшталт `id`, `box` і `capture` лишаються `static`. Повернений `rc-local` у функції-алокаторі `Dec` не отримує. Внутрішній вказівник і невідомий виклик отримують `AllocCounted` без `Dec`.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду: `LLGO_ROOT=$PWD go test -count=1 -v ./cl/ -run OwnGoRCLocal` — `--- PASS: TestOwnGoRCLocal (0.50s)`. Поруч зелені `TestOwnGoStaticFree`, `TestOwnGoFreeBytes`, `TestOwnGoFreeStoredPointer` і `go test -count=1 ./owngo/census/`.
+- `gofmt -l` на змінених файлах порожньо. `go vet ./cl/` і `go vet ./owngo/census/` без зауважень. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень. `go fix -diff` пропонує чужі модернізації, зокрема `strings.Cut` у `quotedWants`; цей diff не чіпає. `govulncheck` не запускався: залежностей не змінювали. `-race` не запускався: лічильник за фазою неатомарний, зміна — вставка IR.
+- Частка 1 666 739 900 байтів лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P3.3, зведення тіл цієї збірки llgo.
+

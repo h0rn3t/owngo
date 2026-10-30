@@ -224,8 +224,9 @@ func interior(sink func(*int)) int {
 		t.Fatal(err)
 	}
 	base := mustNamedFunction(t, mod, "foo.closureUse").String()
-	if got := strings.Count(base, "runtime.DecAccounted"); got != 1 {
-		t.Errorf("foo.closureUse runtime.DecAccounted count = %d, want 1", got)
+	// Замикання захоплює змінну: SSA тримає два купові Alloc, слот і new(int).
+	if got := strings.Count(base, "runtime.DecAccounted"); got != 2 {
+		t.Errorf("foo.closureUse runtime.DecAccounted count = %d, want 2", got)
 	}
 	if !strings.Contains(base, "runtime.AllocCounted") {
 		t.Errorf("foo.closureUse IR = missing runtime.AllocCounted, want a call")

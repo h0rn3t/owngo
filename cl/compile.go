@@ -246,8 +246,12 @@ type context struct {
 	staticByteArrays     map[string][]byte
 	locality             localityLowering
 	ownGoUses            map[ssa.Instruction][]ssa.Instruction
+	ownGoDecUses         map[ssa.Instruction][]ssa.Instruction
 	ownGoCat             map[ssa.Instruction]uint64
+	ownGoCounted         map[ssa.Instruction]struct{}
+	ownGoInc             map[ssa.Instruction][]ssa.Value
 	ownGoFreeAfter       map[ssa.Instruction][]ssa.Value
+	ownGoDecAfter        map[ssa.Instruction][]ssa.Value
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -848,7 +852,8 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			}
 			p.prepareExportedLocalContext(f)
 			p.bvals = make(map[ssa.Value]llssa.Expr)
-			p.ownGoFreeAfter = ownGoFreeAfter(f, p.ownGoUses)
+			p.ownGoFreeAfter = ownGoFreeAfter(f, p.ownGoUses, false)
+			p.ownGoDecAfter = ownGoFreeAfter(f, p.ownGoDecUses, true)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
 			p.prepareCooperativeSafepoints(f, isCgo)
 			p.prepareGCRoots(f, hasCtx)
@@ -1629,6 +1634,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	switch v := iv.(type) {
 	case *ssa.Call:
 		p.checkMethodCallReceiver(b, &v.Call)
+		p.emitOwnGoInc(b, v)
 		ret = p.call(b, llssa.Call, &v.Call)
 		if p.rangeFuncCallNeedsDeferDrain(&v.Call) {
 			b.DeferStackDrain()
@@ -1822,7 +1828,11 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 			}
 			hoistToEntry = inLoop
 		}
-		ret = b.AllocEx(elem, v.Heap, hoistToEntry)
+		if _, counted := p.ownGoCounted[v]; counted && p.prog.SizeOf(elem) > 0 {
+			ret = p.emitAllocCounted(b, elem)
+		} else {
+			ret = b.AllocEx(elem, v.Heap, hoistToEntry)
+		}
 		p.debugAlloc(b, v, ret)
 		p.markRecoverSlot(v)
 		if p.isRecoverSlotAddr(v) {
@@ -2486,6 +2496,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		b.MapUpdate(m, key, val)
 	case *ssa.Defer:
 		p.checkMethodCallReceiver(b, &v.Call)
+		p.emitOwnGoInc(b, v)
 		if v.DeferStack != nil {
 			p.callDeferStack(b, p.blkInfos[v.Block().Index].Kind, &v.Call, v.DeferStack, v.Parent())
 			return

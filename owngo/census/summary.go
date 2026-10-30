@@ -38,6 +38,10 @@ type v1Ctx struct {
 	pts      map[ssa.Value]siteSet
 	contents map[ssa.Instruction]siteSet
 	seen     map[*ssa.Function]resolved
+	// inc — спільна передача у функцію з відомим зведенням.
+	inc map[ssa.Instruction][]ssa.Value
+	// noDec — невідомий виклик, переміщення або внутрішній вказівник.
+	noDec map[ssa.Instruction]bool
 }
 
 // resolved — замкнені конкретні типи й функції однієї SSA-функції.
@@ -1089,16 +1093,56 @@ func (v1 *v1Ctx) transfer(instr ssa.Instruction, call *ssa.CallCommon, pts map[s
 		if !known || !ok || ps.Unknown {
 			raise(escape, notes, pts[arg], escapeCall, "shared")
 			raiseHeld(v1, pts[arg], escape, notes, escapeCall, "shared")
+			v1.blockDec(pts[arg])
 			continue
 		}
 		if ps.Side != 0 {
 			word := transferWord(instr, pts[arg], pts)
 			raise(escape, notes, pts[arg], escapeKind(ps.Side), word)
+			v1.noteTransfer(instr, arg, pts[arg], word)
 		}
 		if ps.Content != 0 {
 			word := transferWord(instr, pts[arg], pts)
 			raiseHeld(v1, pts[arg], escape, notes, escapeKind(ps.Content), word)
+			for obj := range pts[arg] {
+				v1.blockDec(v1.contents[obj])
+			}
 		}
+	}
+}
+
+func (v1 *v1Ctx) blockDec(sites siteSet) {
+	if v1 == nil || len(sites) == 0 {
+		return
+	}
+	if v1.noDec == nil {
+		v1.noDec = map[ssa.Instruction]bool{}
+	}
+	for site := range sites {
+		v1.noDec[site] = true
+	}
+}
+
+func (v1 *v1Ctx) noteTransfer(call ssa.Instruction, arg ssa.Value, sites siteSet, word string) {
+	if v1 == nil || len(sites) == 0 {
+		return
+	}
+	if word == "move" || interiorPointer(arg) {
+		v1.blockDec(sites)
+		return
+	}
+	if word != "shared" {
+		return
+	}
+	if v1.inc == nil {
+		v1.inc = map[ssa.Instruction][]ssa.Value{}
+	}
+	for site := range sites {
+		val, ok := site.(ssa.Value)
+		if !ok {
+			continue
+		}
+		v1.inc[call] = append(v1.inc[call], val)
 	}
 }
 
