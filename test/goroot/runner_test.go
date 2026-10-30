@@ -304,11 +304,11 @@ func TestGoRootRunCases(t *testing.T) {
 		envInfo.GOARCH = "wasm"
 		envInfo.CGOEnabled = "0"
 	}
-	targetPlatform := expectationPlatform(envInfo.GOOS, envInfo.GOARCH, os.Getenv("LLGO_WINDOWS_ABI"))
+	targetPlatform := expectationPlatform(envInfo.GOOS, envInfo.GOARCH)
 	if wasmTarget {
 		targetPlatform = *flagWasmProfile
 	}
-	hostPlatform := expectationPlatform(runtime.GOOS, runtime.GOARCH, os.Getenv("LLGO_WINDOWS_ABI"))
+	hostPlatform := expectationPlatform(runtime.GOOS, runtime.GOARCH)
 	testRoot := filepath.Join(goroot, "test")
 	info, err := os.Stat(testRoot)
 	if err != nil {
@@ -2397,10 +2397,7 @@ func matchEntry(version, platform, directive, casePattern, goVersion, goPlatform
 	return err == nil && ok
 }
 
-func expectationPlatform(goos, goarch, windowsABI string) string {
-	if goos == "windows" && (windowsABI == "msvc" || windowsABI == "mingw") {
-		goos += "-" + windowsABI
-	}
+func expectationPlatform(goos, goarch string) string {
 	return goos + "/" + goarch
 }
 

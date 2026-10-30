@@ -32,7 +32,7 @@ install_local_checkout() {
     printf 'Installing llgo from local source...\n'
     (cd "$root" && go install ./cmd/llgo)
     if [[ -n "${GITHUB_ENV:-}" ]]; then
-        printf 'LLGO_ROOT=%s\n' "$(windows_native_path "$root")" >>"$GITHUB_ENV"
+        printf 'LLGO_ROOT=%s\n' "$root" >>"$GITHUB_ENV"
     fi
     printf 'Local installation complete.\n'
 }
@@ -41,7 +41,6 @@ normalize_os() {
     case "$1" in
         Darwin | darwin) printf 'darwin\n' ;;
         Linux | linux) printf 'linux\n' ;;
-        MINGW*_NT-* | MSYS_NT-* | CYGWIN_NT-*) printf 'windows\n' ;;
         *) return 1 ;;
     esac
 }
@@ -96,71 +95,6 @@ download() {
     local output="$2"
     curl --fail --silent --show-error --location --retry 5 --retry-delay 2 \
         --output "$output" "$url"
-}
-
-windows_native_path() {
-    if command_exists cygpath; then
-        cygpath -aw "$1"
-    else
-        printf '%s\n' "$1"
-    fi
-}
-
-install_windows_release() {
-    local local_archive="$1"
-    case "${MSYSTEM:-}" in
-        CLANG64 | CLANGARM64) ;;
-        *) die "run the MinGW installer from an MSYS2 CLANG64 or CLANGARM64 shell" ;;
-    esac
-
-    local shell_root="$LLGO_INSTALL_ROOT"
-    if command_exists cygpath; then
-        shell_root="$(cygpath -au "$shell_root")"
-    fi
-
-    local powershell
-    if command_exists powershell.exe; then
-        powershell=powershell.exe
-    elif command_exists pwsh.exe; then
-        powershell=pwsh.exe
-    else
-        die "PowerShell is required to finish the Windows installation"
-    fi
-
-    local temporary
-    temporary="$(mktemp -d "${TMPDIR:-/tmp}/llgo-windows-install.XXXXXXXX")"
-    local installer="$temporary/install.ps1"
-    local source_installer=""
-    if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
-        source_installer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install.ps1"
-    fi
-    if [[ -n "$source_installer" && -f "$source_installer" ]]; then
-        cp "$source_installer" "$installer"
-    else
-        download "https://raw.githubusercontent.com/$LLGO_REPOSITORY/main/install.ps1" "$installer"
-    fi
-
-    export LLGO_ABI=mingw
-    export LLGO_VERSION LLGO_INSTALL_DEPS LLGO_UPDATE_PATH LLGO_GO_VERSION LLGO_ARCH
-    LLGO_INSTALL_ROOT="$(windows_native_path "$LLGO_INSTALL_ROOT")"
-    export LLGO_INSTALL_ROOT
-    if [[ -n "$local_archive" ]]; then
-        LLGO_ARCHIVE_PATH="$(windows_native_path "$local_archive")"
-        export LLGO_ARCHIVE_PATH
-    fi
-
-    local native_installer
-    native_installer="$(windows_native_path "$installer")"
-    local status=0
-    "$powershell" -NoProfile -ExecutionPolicy Bypass -File "$native_installer" || status=$?
-    rm -rf "$temporary"
-    if [[ "$status" == 0 ]]; then
-        # MSYS2's default minimal PATH drops Windows user PATH entries. Its own
-        # shell profile needs the POSIX path, even after PowerShell updates the
-        # Windows PATH. PowerShell already wrote native paths to GITHUB_PATH.
-        GITHUB_PATH='' update_shell_path "$shell_root"
-    fi
-    return "$status"
 }
 
 run_as_root() {
@@ -574,10 +508,6 @@ main() {
     [[ "$LLGO_UPDATE_PATH" == 0 || "$LLGO_UPDATE_PATH" == 1 ]] || die "LLGO_UPDATE_PATH must be 0 or 1"
     local os
     os="$(normalize_os "$(uname -s)")" || die "unsupported operating system: $(uname -s)"
-    if [[ "$os" == windows ]]; then
-        install_windows_release "$local_archive"
-        return
-    fi
 
     [[ -n "$LLGO_INSTALL_ROOT" && "$LLGO_INSTALL_ROOT" != / ]] || die "unsafe installation root"
     case "$LLGO_INSTALL_ROOT" in

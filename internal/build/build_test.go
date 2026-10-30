@@ -296,7 +296,7 @@ func TestResolveBuildConfigDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if windows.BuildMode != BuildModeExe || windows.AppExt != ".exe" {
+	if windows.BuildMode != BuildModeExe || windows.AppExt != "" {
 		t.Fatalf("Windows defaults = buildmode %q, app extension %q", windows.BuildMode, windows.AppExt)
 	}
 	if _, err := resolveBuildConfig(&Config{SizeReport: true, SizeLevel: "invalid"}); err == nil {

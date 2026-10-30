@@ -325,7 +325,7 @@ jobs:
 
       - name: Native debug metadata tests
         if: ${{ startsWith(matrix.os, 'macos') && matrix.os != 'macos-15-intel' }}
-        run: go test -timeout 15m ./internal/build -run '^(TestStandardDWARF|TestWindowsPDBLinkPath)$' -count=1 -v
+        run: go test -timeout 15m ./internal/build -run '^TestStandardDWARF$' -count=1 -v
 
   runtime-arm64:
     if: needs.prepare.outputs.run_code_ci == 'true'

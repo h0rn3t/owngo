@@ -18,7 +18,7 @@ class DecisionTests(unittest.TestCase):
 
     def test_only_prose_can_skip_code(self):
         report = self.decide("README.md", "doc/design/pclntab-linkphase.md",
-                             "targets/device/nrf/README.markdown", ".github/windows/WINGET.md")
+                             "targets/device/nrf/README.markdown", "THIRD_PARTY_NOTICES.md")
         self.assertFalse(report["run_code_ci"])
         self.assertTrue(report["run_doc_checks"])
 

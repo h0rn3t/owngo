@@ -161,7 +161,7 @@ type Config struct {
 	LTO                lto.Mode
 	LTOPlugin          lto.PassPlugin
 	BinPath            string
-	AppExt             string  // ".exe" on Windows, empty on Unix
+	AppExt             string  // output file extension (".wasm", ".mjs", ".a", ".so", ".dylib"); empty for native executables
 	OutFile            string  // output file, or directory for ModeBuild package executables
 	OutFmts            OutFmts // Output format specifications (only for Target != "")
 	CompileOnly        bool    // compile test binary but do not run it (only valid for ModeTest)

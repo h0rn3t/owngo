@@ -20,8 +20,6 @@ assert_equal() {
 assert_equal "$(local_checkout_root)" "$root"
 assert_equal "$(normalize_os Darwin)" darwin
 assert_equal "$(normalize_os Linux)" linux
-assert_equal "$(normalize_os MINGW64_NT-10.0-26100)" windows
-assert_equal "$(normalize_os MSYS_NT-10.0-26100)" windows
 assert_equal "$(normalize_arch x86_64)" amd64
 assert_equal "$(normalize_arch AMD64)" amd64
 assert_equal "$(normalize_arch aarch64)" arm64
@@ -126,87 +124,5 @@ dependency_root="$temporary/dependency-root"
 install_dependencies "$dependency_root" linux amd64
 install_dependencies "$dependency_root" linux amd64
 assert_equal "$dependency_calls" 2
-
-mock_bin="$temporary/mock-bin"
-mkdir -p "$mock_bin"
-cat >"$mock_bin/powershell.exe" <<'EOF'
-#!/usr/bin/env bash
-{
-    printf 'abi=%s\n' "$LLGO_ABI"
-    printf 'root=%s\n' "$LLGO_INSTALL_ROOT"
-    printf 'version=%s\n' "$LLGO_VERSION"
-    printf 'msystem=%s\n' "$MSYSTEM"
-    printf 'args=%s\n' "$*"
-} >"$LLGO_INSTALLER_TEST_CAPTURE"
-cp "${!#}" "$LLGO_INSTALLER_TEST_CAPTURE.ps1"
-EOF
-chmod +x "$mock_bin/powershell.exe"
-export PATH="$mock_bin:$PATH"
-export MSYSTEM=CLANG64
-export LLGO_VERSION=1.2.3
-export LLGO_INSTALL_ROOT="$temporary/windows-root"
-export LLGO_INSTALL_DEPS=0
-export LLGO_UPDATE_PATH=0
-export LLGO_INSTALLER_TEST_CAPTURE="$temporary/windows-installer.txt"
-install_windows_release ""
-grep -Fqx 'abi=mingw' "$LLGO_INSTALLER_TEST_CAPTURE" ||
-    fail 'MSYS2 installer did not select MinGW'
-grep -Fqx "root=$temporary/windows-root" "$LLGO_INSTALLER_TEST_CAPTURE" ||
-    fail 'MSYS2 installer did not forward the installation root'
-grep -Fqx 'version=1.2.3' "$LLGO_INSTALLER_TEST_CAPTURE" ||
-    fail 'MSYS2 installer did not forward the requested version'
-grep -Fq -- '-NoProfile -ExecutionPolicy Bypass -File ' "$LLGO_INSTALLER_TEST_CAPTURE" ||
-    fail 'MSYS2 installer did not invoke PowerShell safely'
-
-# The native delegate cannot configure MSYS2's filtered shell PATH for us.
-msys_home="$temporary/msys-home"
-mkdir -p "$msys_home"
-(
-    export HOME="$msys_home" SHELL=/bin/bash LLGO_UPDATE_PATH=1
-    export GITHUB_PATH="$temporary/github-path"
-    install_windows_release ""
-    [[ ! -e "$GITHUB_PATH" ]] || fail 'shell wrapper duplicated native GITHUB_PATH entries'
-) >/dev/null
-for profile in "$msys_home/.bashrc" "$msys_home/.profile"; do
-    grep -Fq "$temporary/windows-root/bin" "$profile" ||
-        fail 'MSYS2 shell profile did not receive its own PATH entry'
-done
-
-# File entrypoints must use the matching checkout's PowerShell script, while
-# piped entrypoints download it. Keep that network boundary deterministic and
-# check which script reaches the delegate, even before install.ps1 is on main.
-# shellcheck disable=SC2329 # The exported mocks run in the child Bash.
-(
-    uname() {
-        printf 'MINGW64_NT-10.0-26100\n'
-    }
-    curl() {
-        [[ "${!#}" == 'https://raw.githubusercontent.com/xgo-dev/llgo/main/install.ps1' ]] || return 1
-        printf '%s\n' "${!#}" >"$LLGO_INSTALLER_TEST_CAPTURE.download"
-        while [[ "$#" -gt 1 ]]; do
-            if [[ "$1" == --output ]]; then
-                cp "$LLGO_INSTALLER_TEST_PS1" "$2"
-                return
-            fi
-            shift
-        done
-        return 1
-    }
-    export -f uname curl
-    export LLGO_INSTALLER_LIBRARY_ONLY=0 LLGO_ARCHIVE_PATH="$archive"
-    export LLGO_INSTALLER_TEST_PS1="$root/install.ps1"
-
-    export LLGO_INSTALLER_TEST_CAPTURE="$temporary/windows-file"
-    bash "$root/install.sh"
-    [[ ! -e "$LLGO_INSTALLER_TEST_CAPTURE.download" ]] ||
-        fail 'file entrypoint downloaded the companion instead of using this checkout'
-    cmp "$root/install.ps1" "$LLGO_INSTALLER_TEST_CAPTURE.ps1"
-
-    export LLGO_INSTALLER_TEST_CAPTURE="$temporary/windows-pipe"
-    bash <"$root/install.sh"
-    [[ -s "$LLGO_INSTALLER_TEST_CAPTURE.download" ]] ||
-        fail 'piped entrypoint did not download its companion'
-    cmp "$root/install.ps1" "$LLGO_INSTALLER_TEST_CAPTURE.ps1"
-)
 
 printf 'install.sh tests passed\n'

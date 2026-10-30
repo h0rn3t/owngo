@@ -713,23 +713,6 @@ func TestMatchGoVersion(t *testing.T) {
 	}
 }
 
-func TestWindowsExpectationPlatform(t *testing.T) {
-	for _, tt := range []struct {
-		goos string
-		abi  string
-		want string
-	}{
-		{goos: "windows", abi: "msvc", want: "windows-msvc/amd64"},
-		{goos: "windows", abi: "mingw", want: "windows-mingw/amd64"},
-		{goos: "windows", want: "windows/amd64"},
-		{goos: "linux", abi: "msvc", want: "linux/amd64"},
-	} {
-		if got := expectationPlatform(tt.goos, "amd64", tt.abi); got != tt.want {
-			t.Errorf("expectationPlatform(%q, %q) = %q, want %q", tt.goos, tt.abi, got, tt.want)
-		}
-	}
-}
-
 func TestMatchWindowsPlatform(t *testing.T) {
 	for _, tt := range []struct {
 		want  string

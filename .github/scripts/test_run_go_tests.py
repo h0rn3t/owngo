@@ -116,29 +116,6 @@ class GoTestReportTests(unittest.TestCase):
                     stdout, stderr = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 0, stdout + stderr)
 
-    def test_windows_quarantine_still_rejects_unrelated_failures_after_json_rendering(self):
-        repo = Path(__file__).resolve().parents[2]
-        for extra in ("", "--- FAIL: TestRealFailure (0.01s)\n"):
-            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                go = root / "go"
-                go.write_text(f"#!{sys.executable}\nprint('github.com/xgo-dev/llgo')\n")
-                go.chmod(0o755)
-                diagnostic = (
-                    "fatal error: receive on synctest channel from outside bubble\n"
-                    "testing.(*T).Run\nFAIL github.com/xgo-dev/llgo/test/runtime 0.1s\n" + extra)
-                event = json.dumps({"Action": "output", "Output": diagnostic})
-                command = ["bash", str(repo / "dev/go_test_windows.sh"), sys.executable,
-                           str(repo / ".github/scripts/run_go_tests.py"), "main", sys.executable,
-                           "-c", f"import sys; print({event!r}); sys.exit(1)"]
-                output = root / "outputs"
-                output.touch()
-                result = subprocess.run(command, cwd=root, capture_output=True, text=True,
-                                        env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
-                                             "GITHUB_OUTPUT": str(output),
-                                             "GITHUB_STEP_SUMMARY": str(root / "summary")})
-                self.assertEqual(result.returncode, 1 if extra else 0, result.stderr)
-                self.assertEqual("windows_runtime_corruption=true" in output.read_text(), not extra)
 
 
 if __name__ == "__main__":

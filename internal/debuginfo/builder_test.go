@@ -148,38 +148,6 @@ func TestBuilderLifecycleAndModuleMetadata(t *testing.T) {
 	}
 }
 
-func TestBuilderWindowsDebuggerMarkerUsesComdat(t *testing.T) {
-	ctx := llvm.NewContext()
-	defer ctx.Dispose()
-	module := ctx.NewModule("windows-debug-test")
-	defer module.Dispose()
-	module.SetTarget("aarch64-pc-windows-msvc")
-
-	builder := New(module, Config{})
-	builder.CompileUnit("main.go", "/src/example")
-	builder.Finalize()
-
-	marker := module.NamedGlobal(debuggerMarkerSymbol)
-	if marker.IsNil() {
-		t.Fatal("debugger marker is missing")
-	}
-	if got := marker.Comdat().SelectionKind(); got != llvm.AnyComdatSelectionKind {
-		t.Fatalf("debugger marker COMDAT selection = %v, want any", got)
-	}
-	if got := marker.DLLStorageClass(); got != llvm.DLLExportStorageClass {
-		t.Fatalf("debugger marker DLL storage class = %v, want export", got)
-	}
-	if got := marker.Visibility(); got != llvm.DefaultVisibility {
-		t.Fatalf("debugger marker visibility = %v, want default", got)
-	}
-	if err := llvm.VerifyModule(module, llvm.ReturnStatusAction); err != nil {
-		t.Fatalf("Windows debug module is invalid: %v\n%s", err, module.String())
-	}
-	if ir := module.String(); !strings.Contains(ir, `@__llgo_debugger_marker_v1 = linkonce_odr dllexport constant i8 1`) {
-		t.Fatalf("Windows debugger marker is not exported:\n%s", ir)
-	}
-}
-
 func TestBuilderCodeViewRetainsDWARF(t *testing.T) {
 	ctx := llvm.NewContext()
 	defer ctx.Dispose()
@@ -206,7 +174,7 @@ func TestBuilderCodeViewRetainsDWARF(t *testing.T) {
 }
 
 func TestStructuredDebuggerRecordTargets(t *testing.T) {
-	for _, triple := range []string{"aarch64-apple-darwin", "x86_64-unknown-linux", "aarch64-pc-windows-msvc"} {
+	for _, triple := range []string{"aarch64-apple-darwin", "x86_64-unknown-linux"} {
 		t.Run(triple, func(t *testing.T) {
 			ctx := llvm.NewContext()
 			defer ctx.Dispose()
@@ -222,9 +190,6 @@ func TestStructuredDebuggerRecordTargets(t *testing.T) {
 			record := module.NamedGlobal(debugabi.NativeRecordSymbol)
 			if record.IsNil() || record.Alignment() != debugabi.RecordSize {
 				t.Fatal("structured debugger record missing or misaligned")
-			}
-			if strings.Contains(triple, "windows") && record.DLLStorageClass() != llvm.DLLExportStorageClass {
-				t.Fatal("COFF record is not exported")
 			}
 			if !strings.Contains(module.String(), "[2 x ptr] [ptr @__llgo_debugger_marker_v1, ptr @__llgo_debugger_abi_v1]") {
 				t.Fatal("both debugger records must survive code generation")

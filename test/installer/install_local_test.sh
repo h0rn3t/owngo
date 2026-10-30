@@ -10,26 +10,21 @@ checkout="$temporary/local checkout"
 mkdir -p "$checkout"
 cp "$repository/install.sh" "$checkout/install.sh"
 
-# Exercise the actual entrypoint without rebuilding the compiler. If checkout
-# detection fails, the Windows release path rejects this MSVC shell immediately.
+# Exercise the actual entrypoint without rebuilding the compiler.
 go() {
     [[ "$PWD" == "$LLGO_INSTALLER_TEST_CHECKOUT" ]] || return 1
     [[ "$*" == 'install ./cmd/llgo' ]] || return 1
     printf 'local go install\n'
 }
 uname() {
-    printf 'MINGW64_NT-10.0-26100\n'
+    printf 'Linux\n'
 }
 export -f go uname
 export LLGO_INSTALLER_TEST_CHECKOUT="$checkout"
 export LLGO_INSTALLER_LIBRARY_ONLY=0
-export MSYSTEM=MINGW64
 unset LLGO_ARCHIVE_PATH
 
 expected_root="$checkout"
-if command -v cygpath >/dev/null 2>&1; then
-    expected_root="$(cygpath -aw "$checkout")"
-fi
 
 for line_ending in '\n' '\r\n'; do
     printf 'module github.com/xgo-dev/llgo%b' "$line_ending" >"$checkout/go.mod"
