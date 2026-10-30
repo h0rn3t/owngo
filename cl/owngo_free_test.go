@@ -106,6 +106,58 @@ func compileOwnGoFree(t *testing.T, src string, free bool) llvm.Module {
 	return pkg.Module()
 }
 
+// TestOwnGoFreeBytes — P1.5: місце static отримує облік розміру і
+// FreeAccounted, місце rc-local лише облік, стек не обліковується.
+func TestOwnGoFreeBytes(t *testing.T) {
+	const src = `package foo
+
+func staticNew() int {
+	p := new([8]byte)
+	p[0] = 1
+	return int(p[0])
+}
+
+func escaped() *[8]byte {
+	p := new([8]byte)
+	p[0] = 7
+	return p
+}
+
+func stacked() int {
+	var x [8]byte
+	x[0] = 1
+	return int(x[0])
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	static := mustNamedFunction(t, mod, "foo.staticNew").String()
+	if !strings.Contains(static, "runtime.NoteAlloc") {
+		t.Errorf("foo.staticNew IR = missing runtime.NoteAlloc, want a call")
+	}
+	if !strings.Contains(static, "runtime.FreeAccounted") {
+		t.Errorf("foo.staticNew IR = missing runtime.FreeAccounted, want a call")
+	}
+	escaped := mustNamedFunction(t, mod, "foo.escaped").String()
+	if !strings.Contains(escaped, "runtime.NoteAlloc") {
+		t.Errorf("foo.escaped IR = missing runtime.NoteAlloc, want a call")
+	}
+	if strings.Contains(escaped, "runtime.FreeAccounted") {
+		t.Errorf("foo.escaped IR contains runtime.FreeAccounted, want none")
+	}
+	stacked := mustNamedFunction(t, mod, "foo.stacked").String()
+	if strings.Contains(stacked, "runtime.NoteAlloc") || strings.Contains(stacked, "runtime.FreeAccounted") {
+		t.Errorf("foo.stacked IR accounted a stack allocation, want neither call")
+	}
+
+	off := compileOwnGoFree(t, src, false)
+	if got := mustNamedFunction(t, off, "foo.staticNew").String(); strings.Contains(got, "runtime.NoteAlloc") || strings.Contains(got, "runtime.FreeAccounted") {
+		t.Errorf("OwnGoFree false: foo.staticNew IR accounted an allocation, want neither call")
+	}
+}
+
 func TestOwnGoFreeStoredPointerStaysLive(t *testing.T) {
 	const src = `package foo
 
