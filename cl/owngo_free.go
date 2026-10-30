@@ -3,6 +3,7 @@ package cl
 import (
 	"go/token"
 	"go/types"
+	"strconv"
 	"strings"
 
 	"github.com/xgo-dev/llgo/owngo/census"
@@ -306,8 +307,77 @@ func (p *context) emitOwnGoDec(b llssa.Builder, instr ssa.Instruction) {
 		if _, sized := p.ownGoSiteSize(site); !sized {
 			continue
 		}
+		if instr, ok := site.(ssa.Instruction); ok && p.ownGoCat[instr] == ownGoCyclic {
+			p.callDecCyclic(b, ptr, site.Type().Underlying().(*types.Pointer).Elem())
+			continue
+		}
 		p.callOwnGoAccount(b, "DecAccounted", ptr, p.ownGoSizeExpr(b, site), 0)
 	}
+}
+
+// emitOwnGoStoreInc рахує вказівник місця cyclic, записаний у поле обходу.
+func (p *context) emitOwnGoStoreInc(b llssa.Builder, store *ssa.Store, val llssa.Expr) {
+	if len(p.ownGoInc[store]) == 0 {
+		return
+	}
+	p.callOwnGoAccount(b, "Inc", val, llssa.Nil, 0)
+}
+
+func (p *context) callDecCyclic(b llssa.Builder, ptr llssa.Expr, elem types.Type) {
+	unsafePtr := types.Typ[types.UnsafePointer]
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "ptr", unsafePtr),
+		types.NewVar(token.NoPos, nil, "desc", unsafePtr),
+	), nil, false)
+	dst := p.type_(unsafePtr, llssa.GoDecl)
+	b.Call(p.runtimeFunc("DecCyclic", sig), b.PtrCast(dst, ptr), b.PtrCast(dst, p.cyclicDesc(elem)))
+}
+
+// cyclicDesc повертає глобальну runtime.CyclicDesc для elem: розмір і поля
+// з census.CyclicFields з дескрипторами їхніх цілей. Розкладка збігається
+// з runtime.CyclicDesc і runtime.CyclicEdge.
+func (p *context) cyclicDesc(elem types.Type) llssa.Expr {
+	if desc, ok := p.ownGoDescs[elem]; ok {
+		return desc
+	}
+	if p.ownGoDescs == nil {
+		p.ownGoDescs = map[types.Type]llssa.Expr{}
+	}
+	uintptrT, unsafePtr := types.Typ[types.Uintptr], types.Typ[types.UnsafePointer]
+	edgeT := types.NewStruct([]*types.Var{
+		types.NewField(token.NoPos, nil, "Off", uintptrT, false),
+		types.NewField(token.NoPos, nil, "Elem", unsafePtr, false),
+	}, nil)
+	edgesT := types.NewSlice(edgeT)
+	descT := types.NewStruct([]*types.Var{
+		types.NewField(token.NoPos, nil, "Size", uintptrT, false),
+		types.NewField(token.NoPos, nil, "Edges", edgesT, false),
+	}, nil)
+	name := p.pkg.Path() + ".__owngo_cyclic$" + strconv.Itoa(len(p.ownGoDescs))
+	global := p.pkg.NewVarEx(name, p.prog.Pointer(p.type_(descT, llssa.GoDecl)))
+	// Запис до обходу полів: дескриптор може вказувати сам на себе.
+	p.ownGoDescs[elem] = global.Expr
+
+	elemT := p.type_(elem, llssa.GoDecl)
+	fields := census.CyclicFields(elem)
+	edges := p.prog.Zero(p.type_(edgesT, llssa.GoDecl))
+	if len(fields) > 0 {
+		values := make([]llssa.Expr, len(fields))
+		st := elem.Underlying().(*types.Struct)
+		for i, field := range fields {
+			target := st.Field(field).Type().Underlying().(*types.Pointer).Elem()
+			values[i] = p.prog.ConstStruct(p.type_(edgeT, llssa.GoDecl), []llssa.Expr{
+				p.prog.IntVal(p.prog.OffsetOf(elemT, field), p.prog.Uintptr()),
+				p.cyclicDesc(target),
+			})
+		}
+		edges = p.pkg.ConstSlice(name+"$edges", p.type_(edgesT, llssa.GoDecl), values)
+	}
+	global.Init(p.prog.ConstStruct(p.type_(descT, llssa.GoDecl), []llssa.Expr{
+		p.prog.IntVal(p.prog.SizeOf(elemT), p.prog.Uintptr()),
+		edges,
+	}))
+	return global.Expr
 }
 
 func (p *context) emitOwnGoInc(b llssa.Builder, instr ssa.Instruction) {

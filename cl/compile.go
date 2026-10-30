@@ -252,6 +252,7 @@ type context struct {
 	ownGoInc             map[ssa.Instruction][]ssa.Value
 	ownGoFreeAfter       map[ssa.Instruction][]ssa.Value
 	ownGoDecAfter        map[ssa.Instruction][]ssa.Value
+	ownGoDescs           map[types.Type]llssa.Expr
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -2418,6 +2419,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		ptr := p.compileValue(b, va)
 		val := p.compileValue(b, v.Val)
+		p.emitOwnGoStoreInc(b, v, val)
 		wasmNilGuard := p.needsWasmNilGuard(va)
 		if wasmNilGuard {
 			p.recordPanicSite(b, v.Pos())

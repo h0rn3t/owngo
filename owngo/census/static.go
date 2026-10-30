@@ -1,6 +1,9 @@
 package census
 
 import (
+	"go/token"
+	"go/types"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/ssa"
@@ -34,11 +37,22 @@ func Place(funcs []*ssa.Function) (
 	staticUses = map[ssa.Instruction][]ssa.Instruction{}
 	decUses = map[ssa.Instruction][]ssa.Instruction{}
 	counted = map[ssa.Instruction]struct{}{}
+	storeInc := map[ssa.Instruction][]ssa.Value{}
 	for _, fn := range funcs {
 		if fn == nil || len(fn.Blocks) == 0 {
 			continue
 		}
 		msg, pts, contents := messages(fn, ifaceStrict, nil, ctx)
+		rings := cyclicSites(fn, msg, pts, storeInc)
+		for site := range rings {
+			counted[site] = struct{}{}
+			if ctx.noDec[site] {
+				continue
+			}
+			if users := rcUsers(siteUsers(site, pts, contents)); len(users) > 0 {
+				decUses[site] = users
+			}
+		}
 		for site, label := range msg {
 			cats[site] = label
 			head, _, _ := strings.Cut(label, ":")
@@ -63,6 +77,12 @@ func Place(funcs []*ssa.Function) (
 		}
 	}
 	inc = filterInc(ctx.inc, counted)
+	for store, vals := range storeInc {
+		if inc == nil {
+			inc = map[ssa.Instruction][]ssa.Value{}
+		}
+		inc[store] = vals
+	}
 	if len(cats) == 0 {
 		cats = nil
 	}
@@ -254,4 +274,175 @@ func readers(site ssa.Instruction, pts map[ssa.Value]siteSet) []ssa.Instruction 
 		}
 	}
 	return users
+}
+
+// cyclicSites повертає купові місця з позначкою рівно cyclic, яким DecCyclic
+// безпечний, і додає до storeInc запис їхнього вказівника в поле обходу.
+// DecCyclic читає слово перед ціллю кожного поля з CyclicFields, тож у таке
+// поле місця потрапляє лише nil або вказівник іншого такого місця. Значення,
+// що вказує на місце, вживається лише в доступі до поля, записі в поле
+// обходу, порівнянні й phi; інакше місце, а за ним і місця, що його
+// записали, лічильника не отримують.
+func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.Value]siteSet, storeInc map[ssa.Instruction][]ssa.Value) siteSet {
+	cand := siteSet{}
+	for site, label := range msg {
+		alloc, ok := site.(*ssa.Alloc)
+		if !ok || !alloc.Heap || label != "cyclic" {
+			continue
+		}
+		if len(CyclicFields(pointee(alloc.Type()))) > 0 {
+			cand.add(site)
+		}
+	}
+	for changed := len(cand) > 0; changed; {
+		changed = false
+		for v, sites := range pts {
+			// Адресу поля перевіряє fieldUses через її базове значення.
+			if _, ok := v.(*ssa.FieldAddr); ok || v.Parent() != fn || !overlaps(sites, cand) || ringUses(v, cand) {
+				continue
+			}
+			for site := range sites {
+				if _, ok := cand[site]; ok {
+					delete(cand, site)
+					changed = true
+				}
+			}
+		}
+	}
+	if len(cand) == 0 {
+		return nil
+	}
+	for _, block := range fn.Blocks {
+		for _, instr := range block.Instrs {
+			store, ok := instr.(*ssa.Store)
+			if !ok || !ringField(store.Addr) {
+				continue
+			}
+			if c, ok := store.Val.(*ssa.Const); ok && c.IsNil() {
+				continue
+			}
+			if overlaps(pts[store.Val], cand) {
+				storeInc[store] = []ssa.Value{store.Val}
+			}
+		}
+	}
+	return cand
+}
+
+func overlaps(a, b siteSet) bool {
+	for site := range a {
+		if _, ok := b[site]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// ringUses звітує, що кожне вживання v тримає його всередині кільця.
+func ringUses(v ssa.Value, cand siteSet) bool {
+	refs := v.Referrers()
+	if refs == nil {
+		return true
+	}
+	for _, ref := range *refs {
+		switch ref := ref.(type) {
+		case *ssa.Phi, *ssa.DebugRef:
+		case *ssa.BinOp:
+			if ref.Op != token.EQL && ref.Op != token.NEQ {
+				return false
+			}
+		case *ssa.FieldAddr:
+			if !fieldUses(ref, cand) {
+				return false
+			}
+		case *ssa.Store:
+			if ref.Addr == v {
+				// Запис цілого значення копіює поле без Inc; лишається нуль.
+				if _, ok := ref.Val.(*ssa.Const); !ok {
+					return false
+				}
+				continue
+			}
+			addr, ok := ref.Addr.(*ssa.FieldAddr)
+			if !ok || !ringField(addr) || !countedRef(addr.X, cand, map[ssa.Value]bool{}) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// fieldUses звітує, що адресу поля лише читають і в неї лише пишуть,
+// і що в поле обходу пишуть nil або вказівник місця з cand.
+func fieldUses(addr *ssa.FieldAddr, cand siteSet) bool {
+	refs := addr.Referrers()
+	if refs == nil {
+		return true
+	}
+	for _, ref := range *refs {
+		switch ref := ref.(type) {
+		case *ssa.DebugRef:
+		case *ssa.UnOp:
+			if ref.Op != token.MUL {
+				return false
+			}
+		case *ssa.Store:
+			if ref.Addr != addr {
+				return false
+			}
+			if ringField(addr) && !countedRef(ref.Val, cand, map[ssa.Value]bool{}) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// ringField звітує, що addr — поле з CyclicFields.
+func ringField(addr ssa.Value) bool {
+	fa, ok := addr.(*ssa.FieldAddr)
+	if !ok {
+		return false
+	}
+	return slices.Contains(CyclicFields(pointee(fa.X.Type())), fa.Field)
+}
+
+// countedRef звітує, що v — nil, місце з cand, phi таких значень або
+// читання поля обходу з такого значення: за v лежить слово AllocCounted.
+func countedRef(v ssa.Value, cand siteSet, seen map[ssa.Value]bool) bool {
+	if seen[v] {
+		return true
+	}
+	seen[v] = true
+	switch v := v.(type) {
+	case *ssa.Const:
+		return v.IsNil()
+	case *ssa.Alloc:
+		_, ok := cand[v]
+		return ok
+	case *ssa.Phi:
+		for _, edge := range v.Edges {
+			if !countedRef(edge, cand, seen) {
+				return false
+			}
+		}
+		return true
+	case *ssa.UnOp:
+		addr, ok := v.X.(*ssa.FieldAddr)
+		return ok && v.Op == token.MUL && ringField(addr) && countedRef(addr.X, cand, seen)
+	default:
+		return false
+	}
+}
+
+// pointee повертає тип за вказівником або nil.
+func pointee(t types.Type) types.Type {
+	if p, ok := t.Underlying().(*types.Pointer); ok {
+		return p.Elem()
+	}
+	return nil
 }

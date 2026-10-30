@@ -618,3 +618,27 @@ func containsRef(t types.Type) bool {
 	}
 	return walk(t)
 }
+
+// CyclicFields повертає індекси полів структури t, за якими ходить DecCyclic:
+// вказівник на структуру, тип якої cyclic у строгому режимі. Зріз, масив,
+// мапа й інтерфейс ребра обходу не дають. Тип не структура дає nil.
+func CyclicFields(t types.Type) []int {
+	if t == nil {
+		return nil
+	}
+	st, ok := t.Underlying().(*types.Struct)
+	if !ok {
+		return nil
+	}
+	var out []int
+	for i := range st.NumFields() {
+		ptr, ok := st.Field(i).Type().Underlying().(*types.Pointer)
+		if !ok {
+			continue
+		}
+		if _, ok := ptr.Elem().Underlying().(*types.Struct); ok && cyclic(ptr.Elem(), ifaceStrict, nil) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
