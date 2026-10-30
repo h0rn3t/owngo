@@ -342,6 +342,10 @@ func (p *context) emitAllocCounted(b llssa.Builder, elem llssa.Type) llssa.Expr 
 }
 
 func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
+	if instr, ok := site.(ssa.Instruction); ok && census.CountableImplicit(instr) {
+		// Розмір динамічний. Виклик Dec і Free лишається; байти рахує наступна задача.
+		return 0, true
+	}
 	alloc, ok := site.(*ssa.Alloc)
 	if !ok || !alloc.Heap {
 		return 0, false
@@ -403,6 +407,164 @@ func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	case *ssa.Alloc, *ssa.MakeMap, *ssa.MakeChan:
 		return expr
 	default:
+		instr, ok := site.(ssa.Instruction)
+		if !ok || census.ImplicitOrigin(instr) == "" {
+			return llssa.Nil
+		}
+		switch underlying := site.Type().Underlying().(type) {
+		case *types.Slice:
+			return b.SliceData(expr)
+		case *types.Basic:
+			if underlying.Kind() == types.String {
+				return b.StringData(expr)
+			}
+		}
 		return llssa.Nil
 	}
+}
+
+func (p *context) ownGoWillFree(v ssa.Value) bool {
+	for _, sites := range p.ownGoFreeAfter {
+		for _, site := range sites {
+			if site == v {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (p *context) ownGoAppendAlloc(call *ssa.Call) (string, bool) {
+	if call == nil || len(call.Call.Args) != 2 {
+		return "", false
+	}
+	builtin, ok := call.Call.Value.(*ssa.Builtin)
+	if !ok || builtin.Name() != "append" {
+		return "", false
+	}
+	if _, ok := p.ownGoCounted[call]; ok {
+		return "AllocCounted", true
+	}
+	if p.ownGoWillFree(call) {
+		return "AllocU", true
+	}
+	return "", false
+}
+
+func (p *context) ownGoCountedString(v *ssa.BinOp) bool {
+	if v == nil || v.Op != token.ADD || !isGoString(v.X.Type()) {
+		return false
+	}
+	_, ok := p.ownGoCounted[v]
+	return ok
+}
+
+func (p *context) ownGoCountedConvert(v *ssa.Convert) bool {
+	if v == nil || !byteStringConvertCL(v.X.Type(), v.Type()) {
+		return false
+	}
+	_, ok := p.ownGoCounted[v]
+	return ok
+}
+
+func (p *context) callSizedAlloc(b llssa.Builder, name string, size llssa.Expr) llssa.Expr {
+	sig := types.NewSignatureType(nil, nil, nil,
+		types.NewTuple(types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr])),
+		types.NewTuple(types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer])),
+		false)
+	return b.Call(p.runtimeFunc(name, sig), b.Convert(p.prog.Uintptr(), size))
+}
+
+func (p *context) ownGoBytes(b llssa.Builder, n llssa.Expr, elemSize uint64) llssa.Expr {
+	if elemSize == 0 {
+		return p.prog.IntVal(0, p.prog.Int())
+	}
+	if elemSize == 1 {
+		return n
+	}
+	return b.BinOp(token.MUL, n, p.prog.IntVal(elemSize, p.prog.Int()))
+}
+
+// emitOwnedAppend виділяє новий буфер. SliceAppend повертає той самий
+// data, коли cap вистачає, і FreeAccounted того вказівника звільнив би масив викликача.
+func (p *context) emitOwnedAppend(b llssa.Builder, call *ssa.Call, allocName string) llssa.Expr {
+	src := p.compileValue(b, call.Call.Args[0])
+	sliceTy := call.Type().Underlying().(*types.Slice)
+	elemGo := sliceTy.Elem()
+	elemLL := p.type_(elemGo, llssa.GoDecl)
+	elemSize := p.prog.SizeOf(elemLL)
+	oldLen := b.SliceLen(src)
+	arg := call.Call.Args[1]
+	argExpr := p.compileValue(b, arg)
+	var extraPtr llssa.Expr
+	var extraCount llssa.Expr
+	switch {
+	case isGoString(arg.Type()) && isBasicKind(elemGo, types.Byte):
+		extraPtr = b.StringData(argExpr)
+		extraCount = b.StringLen(argExpr)
+	case types.Identical(arg.Type().Underlying(), sliceTy):
+		extraPtr = b.SliceData(argExpr)
+		extraCount = b.SliceLen(argExpr)
+	default:
+		slot := b.AllocaT(elemLL)
+		b.Store(slot, argExpr)
+		extraPtr = slot
+		extraCount = p.prog.IntVal(1, p.prog.Int())
+	}
+	newLen := b.BinOp(token.ADD, oldLen, extraCount)
+	raw := p.callSizedAlloc(b, allocName, p.ownGoBytes(b, newLen, elemSize))
+	elemPtr := b.PtrCast(p.prog.Pointer(elemLL), raw)
+	b.CopyBytes(elemPtr, b.SliceData(src), p.ownGoBytes(b, oldLen, elemSize))
+	b.CopyBytes(b.Advance(elemPtr, oldLen), extraPtr, p.ownGoBytes(b, extraCount, elemSize))
+	return b.SliceFromData(elemPtr, newLen, newLen)
+}
+
+func (p *context) emitCountedStringCat(b llssa.Builder, v *ssa.BinOp) llssa.Expr {
+	x := p.compileValue(b, v.X)
+	y := p.compileValue(b, v.Y)
+	nx := b.StringLen(x)
+	ny := b.StringLen(y)
+	n := b.BinOp(token.ADD, nx, ny)
+	raw := p.callSizedAlloc(b, "AllocCounted", n)
+	dst := b.PtrCast(p.prog.Pointer(p.prog.Byte()), raw)
+	b.CopyBytes(dst, b.StringData(x), nx)
+	b.CopyBytes(b.Advance(dst, nx), b.StringData(y), ny)
+	return b.StringFromData(dst, n)
+}
+
+func (p *context) emitCountedConvert(b llssa.Builder, v *ssa.Convert) llssa.Expr {
+	x := p.compileValue(b, v.X)
+	if isGoString(v.Type()) {
+		n := b.SliceLen(x)
+		raw := p.callSizedAlloc(b, "AllocCounted", n)
+		dst := b.PtrCast(p.prog.Pointer(p.prog.Byte()), raw)
+		b.CopyBytes(dst, b.SliceData(x), n)
+		return b.StringFromData(dst, n)
+	}
+	n := b.StringLen(x)
+	raw := p.callSizedAlloc(b, "AllocCounted", n)
+	dst := b.PtrCast(p.prog.Pointer(p.prog.Byte()), raw)
+	b.CopyBytes(dst, b.StringData(x), n)
+	return b.SliceFromData(dst, n, n)
+}
+
+func isGoString(t types.Type) bool {
+	return isBasicKind(t, types.String)
+}
+
+func isBasicKind(t types.Type, kind types.BasicKind) bool {
+	basic, ok := t.Underlying().(*types.Basic)
+	return ok && basic.Kind() == kind
+}
+
+func byteStringConvertCL(from, to types.Type) bool {
+	return isGoString(from) && isByteSlice(to) || isGoString(to) && isByteSlice(from)
+}
+
+func isByteSlice(t types.Type) bool {
+	slice, ok := t.Underlying().(*types.Slice)
+	if !ok {
+		return false
+	}
+	return isBasicKind(slice.Elem(), types.Byte)
 }

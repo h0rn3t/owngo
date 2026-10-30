@@ -72,7 +72,7 @@ func (s siteSet) absorb(other siteSet) bool {
 // messages класифікує місця однієї функції.
 // Запис у об'єкт наслідує втечу цього об'єкта; запис у об'єкт, який не втікає, втечею не є.
 // Розбір без полів: будь-яке поле ділить одну множину вмісту.
-func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx) (map[ssa.Instruction]string, map[ssa.Value]siteSet) {
+func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx) (map[ssa.Instruction]string, map[ssa.Value]siteSet, map[ssa.Instruction]siteSet) {
 	var instrs []ssa.Instruction
 	for _, block := range fn.Blocks {
 		instrs = append(instrs, block.Instrs...)
@@ -87,7 +87,7 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 	pinned := pinnedSites(instrs, pts)
 	escape, notes := directEscape(instrs, pts, v1)
 	if v1 != nil {
-		markAppendAlias(instrs, pts, escape, notes)
+		markAppendAlias(instrs, pts, escape, notes, v1)
 	}
 	spread(instrs, pts, contents, escape, notes)
 
@@ -96,9 +96,9 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 		if !isSite(instr) {
 			continue
 		}
-		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe)
+		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe, v1 != nil)
 	}
-	return out, pts
+	return out, pts, contents
 }
 
 func pointTo(instrs []ssa.Instruction) (map[ssa.Value]siteSet, map[ssa.Instruction]siteSet) {
@@ -163,6 +163,11 @@ func seed(instr ssa.Instruction, ref func(ssa.Value) siteSet) bool {
 			return false
 		}
 		return ref(instr).add(instr)
+	case *ssa.Call, *ssa.BinOp, *ssa.Convert:
+		if ImplicitOrigin(instr) == "" {
+			return false
+		}
+		return ref(instr.(ssa.Value)).add(instr)
 	default:
 		return false
 	}
@@ -389,20 +394,11 @@ func noteWord(notes map[ssa.Instruction]transferNote, site ssa.Instruction, k es
 	return n.word
 }
 
-func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned bool, mode ifaceMode, universe []types.Type) string {
-	switch instr := instr.(type) {
-	case *ssa.Call:
-		if b, ok := instr.Call.Value.(*ssa.Builtin); ok && b.Name() == "append" {
-			return "implicit: append"
-		}
-	case *ssa.BinOp:
-		if instr.Op == token.ADD && isString(instr.X.Type()) {
-			return "implicit: concat"
-		}
-	case *ssa.Convert:
-		if stringSliceConvert(instr.X.Type(), instr.Type()) {
-			return "implicit: string"
-		}
+func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned bool, mode ifaceMode, universe []types.Type, own bool) string {
+	origin := ImplicitOrigin(instr)
+	// v0 лишає implicit:* . v1 знімає дострокове повернення: володіння — те, що вже доведено.
+	if origin != "" && !own {
+		return "implicit: " + origin
 	}
 	if pinned {
 		return "pinned: unsafe"
@@ -421,12 +417,64 @@ func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned boo
 		return "cyclic: " + reason
 	}
 	if k == escapeNone {
+		if origin != "" {
+			return "static: " + origin
+		}
 		return "static"
 	}
+	// return, move і call лишаються в позначці: decSite за ними не ставить Dec.
 	if k >= escapeGlobal {
 		return "rc-shared: " + reason
 	}
 	return "rc-local: " + reason
+}
+
+// ImplicitOrigin повертає append, concat або string для місця, яке v0
+// позначає implicit. Інша інструкція дає порожній рядок.
+func ImplicitOrigin(instr ssa.Instruction) string {
+	switch instr := instr.(type) {
+	case *ssa.Call:
+		if b, ok := instr.Call.Value.(*ssa.Builtin); ok && b.Name() == "append" {
+			return "append"
+		}
+	case *ssa.BinOp:
+		if instr.Op == token.ADD && isString(instr.X.Type()) {
+			return "concat"
+		}
+	case *ssa.Convert:
+		if stringSliceConvert(instr.X.Type(), instr.Type()) {
+			return "string"
+		}
+	}
+	return ""
+}
+
+// CountableImplicit повідомляє місце append, конкатенації або перетворення
+// string і []byte, чий буфер компілятор виділяє сам. []rune сюди не входить.
+func CountableImplicit(instr ssa.Instruction) bool {
+	switch instr := instr.(type) {
+	case *ssa.Call:
+		return ImplicitOrigin(instr) == "append"
+	case *ssa.BinOp:
+		return ImplicitOrigin(instr) == "concat"
+	case *ssa.Convert:
+		return byteStringConvert(instr.X.Type(), instr.Type())
+	default:
+		return false
+	}
+}
+
+func byteStringConvert(from, to types.Type) bool {
+	return byteSlice(from) && isString(to) || byteSlice(to) && isString(from)
+}
+
+func byteSlice(t types.Type) bool {
+	slice, ok := t.Underlying().(*types.Slice)
+	if !ok {
+		return false
+	}
+	basic, ok := slice.Elem().Underlying().(*types.Basic)
+	return ok && basic.Kind() == types.Byte
 }
 
 func builtinName(call *ssa.CallCommon) (string, bool) {

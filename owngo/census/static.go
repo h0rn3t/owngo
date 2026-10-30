@@ -15,9 +15,10 @@ func Sites(funcs []*ssa.Function) (map[ssa.Instruction]string, map[ssa.Instructi
 }
 
 // Place класифікує місця за правилами v1 і збирає дії компілятора.
-// staticUses — читачі static. decUses — читачі базового купового rc-local,
-// який отримує один Dec. counted — ці Alloc. inc — значення, для яких спільна
-// передача у функцію з відомим зведенням ставить Inc. Порожній funcs дає нулі.
+// staticUses — читачі static, включно з static: append|concat|string.
+// decUses — читачі базового купового rc-local, який отримує один Dec.
+// counted — ці Alloc і доведений базовий implicit. inc — значення, для яких
+// спільна передача у функцію з відомим зведенням ставить Inc. Порожній funcs дає нулі.
 func Place(funcs []*ssa.Function) (
 	cats map[ssa.Instruction]string,
 	staticUses map[ssa.Instruction][]ssa.Instruction,
@@ -37,24 +38,25 @@ func Place(funcs []*ssa.Function) (
 		if fn == nil || len(fn.Blocks) == 0 {
 			continue
 		}
-		msg, pts := messages(fn, ifaceStrict, nil, ctx)
+		msg, pts, contents := messages(fn, ifaceStrict, nil, ctx)
 		for site, label := range msg {
 			cats[site] = label
-			if label == "static" {
-				users := readers(site, pts)
+			head, _, _ := strings.Cut(label, ":")
+			if head == "static" {
+				users := siteUsers(site, pts, contents)
 				if len(users) > 0 {
 					staticUses[site] = users
 				}
 				continue
 			}
-			if !countedAlloc(site, label) {
+			if !countedAlloc(site, label) && !countedImplicit(site, label) {
 				continue
 			}
 			counted[site] = struct{}{}
 			if !decSite(site, label, pts, ctx.noDec) {
 				continue
 			}
-			users := rcUsers(site, pts)
+			users := rcUsers(siteUsers(site, pts, contents))
 			if len(users) > 0 {
 				decUses[site] = users
 			}
@@ -98,8 +100,32 @@ func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, noDe
 	}
 }
 
-func rcUsers(site ssa.Instruction, pts map[ssa.Value]siteSet) []ssa.Instruction {
+func countedImplicit(site ssa.Instruction, label string) bool {
+	if !CountableImplicit(site) {
+		return false
+	}
+	head, _, _ := strings.Cut(label, ":")
+	return head == "rc-local"
+}
+
+// siteUsers додає читачів контейнера, у contents якого лежить це місце.
+// Замикання тримає alloc змінної, а не саму конкатенацію: без цього Dec
+// став би на Store і звільнив буфер до виклику замикання.
+func siteUsers(site ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet) []ssa.Instruction {
 	users := readers(site, pts)
+	if ImplicitOrigin(site) == "" {
+		return users
+	}
+	for obj, inner := range contents {
+		if _, ok := inner[site]; !ok {
+			continue
+		}
+		users = append(users, readers(obj, pts)...)
+	}
+	return users
+}
+
+func rcUsers(users []ssa.Instruction) []ssa.Instruction {
 	extra, leaves := closureUses(users)
 	if leaves {
 		return nil

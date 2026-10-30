@@ -66,7 +66,7 @@ func run(pass *analysis.Pass) (any, error) {
 		if fn.Blocks == nil {
 			continue
 		}
-		msg, _ := messages(fn, mode, universe, ctx)
+		msg, _, _ := messages(fn, mode, universe, ctx)
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
 				if !isSite(instr) {

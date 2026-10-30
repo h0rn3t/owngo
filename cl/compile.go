@@ -1635,7 +1635,11 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	case *ssa.Call:
 		p.checkMethodCallReceiver(b, &v.Call)
 		p.emitOwnGoInc(b, v)
-		ret = p.call(b, llssa.Call, &v.Call)
+		if allocName, ok := p.ownGoAppendAlloc(v); ok {
+			ret = p.emitOwnedAppend(b, v, allocName)
+		} else {
+			ret = p.call(b, llssa.Call, &v.Call)
+		}
 		if p.rangeFuncCallNeedsDeferDrain(&v.Call) {
 			b.DeferStackDrain()
 		}
@@ -1691,6 +1695,8 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 				y = p.compileValueAs(b, v.Y, v.X.Type())
 			}
 			ret = b.StructBinOp(v.Op, x, y, xaddr, yaddr)
+		} else if p.ownGoCountedString(v) {
+			ret = p.emitCountedStringCat(b, v)
 		} else {
 			x := p.compileValueAs(b, v.X, v.Y.Type())
 			y := p.compileValueAs(b, v.Y, v.X.Type())
@@ -1795,6 +1801,10 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		t := v.Type()
 		if isUntypedNilConst(v.X) {
 			ret = p.nilOf(t)
+			break
+		}
+		if p.ownGoCountedConvert(v) {
+			ret = p.emitCountedConvert(b, v)
 			break
 		}
 		x := p.compileValue(b, v.X)

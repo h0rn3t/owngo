@@ -104,6 +104,12 @@ func (b Builder) StringData(x Expr) Expr {
 	return Expr{b.fromStorageValue(typ, ptr), typ}
 }
 
+// StringFromData builds a string header for an existing byte buffer.
+// n is a Go int. The buffer is not copied.
+func (b Builder) StringFromData(data, n Expr) Expr {
+	return b.unsafeString(data.impl, b.FitIntSize(n).impl)
+}
+
 // StringLen returns the length of a string.
 func (b Builder) StringLen(x Expr) Expr {
 	dbgInstrf("StringLen %v\n", x.impl)
@@ -121,6 +127,12 @@ func (b Builder) SliceData(x Expr) Expr {
 	typ := b.Prog.Pointer(b.Prog.rawType(tySlice.Elem()))
 	ptr := llvm.CreateExtractValue(b.impl, x.impl, 0)
 	return Expr{b.fromStorageValue(typ, ptr), typ}
+}
+
+// SliceFromData builds a slice header for an existing element buffer.
+// length and cap are Go ints. data must be a pointer to the element type.
+func (b Builder) SliceFromData(data, length, cap Expr) Expr {
+	return b.unsafeSlice(data, b.FitIntSize(length).impl, b.FitIntSize(cap).impl)
 }
 
 // SliceLen returns the length of a slice.

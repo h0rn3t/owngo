@@ -369,3 +369,12 @@
 - Поріг 50% на `implicit` не застосований: сума не перетинає ні половину двох рядків (2 321 980 536), ні половину профілю (3 669 927 840).
 - Лишилось: P5.1, `free` для доведеного `implicit`.
 
+## 2026-10-30 — P5.1
+
+- Той самий прохід v1. Для `append`, конкатенації і перетворення `string`/`[]byte`/`[]rune` позначка v0 лишається `implicit:*`. Коли v1 увімкнений, дострокове повернення зняте: `static` цього походження — `static: append|concat|string` і отримує `FreeAccounted`. Базовий `rc-local` отримує `AllocCounted` і один `DecAccounted`. `[]rune` у підрахунок не входить.
+- `append`, який цей прохід звільняє або рахує, виділяє новий буфер. `SliceAppend` за достатнього `cap` повертає той самий `data`, і `FreeAccounted` того вказівника звільнив би масив викликача. Аліас іншого зрізу того самого масиву піднімається до `rc-local: shared` і `Dec` не отримує: ні новий буфер, ні старий масив. Невідомий виклик не отримує ні `FreeAccounted`, ні `DecAccounted`.
+- Розмір у `FreeAccounted` і `DecAccounted` для цих місць лишається 0. Байти — задача P5.2. Частка 819 968 312 байтів лишається фактом заміру. Поріг 50% не застосований. Профілі наново не знімались. M:N без змін.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`: `go test -count=1 ./cl/ -run OwnGoImplicit` — `--- PASS: TestOwnGoImplicit`. `staticConcat`, `staticAppend` і `staticConvert` містять `FreeAccounted`. `aliasAppend` і `unknownConcat` не містять ні `FreeAccounted`, ні `DecAccounted`. `localConcat` має більше `AllocCounted` і `DecAccounted`, ніж `closureOnly`.
+- Корпус v0 зелений. Фікстура v1: доведений `append` без аліаса — `static: append`, аліас — `rc-local: shared`. `go test -count=1 ./owngo/census/` і `go test -race -count=1 ./owngo/census/` зелені. `go vet ./cl/ ./owngo/census/ ./ssa/` без зауважень. `golangci-lint run --new-from-rev HEAD` для цих пакетів — 0 зауважень.
+- Лишилось: P5.2, байти доведеного `implicit`.
+

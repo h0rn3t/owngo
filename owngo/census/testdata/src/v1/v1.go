@@ -178,14 +178,14 @@ func callGo() {
 
 func callGrow() {
 	s := make([]int, 1) // want "^static$"
-	s = append(s, 2)    // want "^implicit: append$" "^static$"
+	s = append(s, 2)    // want "^static: append$" "^static$"
 	_ = s[0]
 }
 
 func callAlias() {
 	a := make([]int, 1) // want "^rc-local: shared$"
 	b := a
-	a = append(a, 1) // want "^implicit: append$" "^static$"
+	a = append(a, 1) // want "^rc-local: shared$" "^static$"
 	_ = a[0]
 	_ = b[0]
 }
@@ -193,6 +193,6 @@ func callAlias() {
 func callAliasSlice() {
 	a := make([]int, 1) // want "^rc-local: shared$"
 	b := a[:]
-	a = append(a, 1) // want "^implicit: append$" "^static$"
+	a = append(a, 1) // want "^rc-local: shared$" "^static$"
 	_ = b[0]
 }

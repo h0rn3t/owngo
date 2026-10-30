@@ -1283,7 +1283,7 @@ func instrsAfter(call ssa.Instruction) map[ssa.Instruction]bool {
 	return out
 }
 
-func markAppendAlias(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote) {
+func markAppendAlias(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote, v1 *v1Ctx) {
 	for _, instr := range instrs {
 		call, ok := instr.(*ssa.Call)
 		if !ok {
@@ -1296,6 +1296,13 @@ func markAppendAlias(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, escape
 		if !liveAliasAfter(call, pts) {
 			continue
 		}
+		// Результат append теж не static: інакше компілятор звільнив би новий буфер
+		// поруч із живим аліасом. blockDec не дає Dec ні результату, ні старому масиву.
+		if escape[call] < escapeCall {
+			raise(escape, notes, siteSet{call: {}}, escapeCall, "shared")
+		}
+		v1.blockDec(pts[call.Call.Args[0]])
+		v1.blockDec(siteSet{call: {}})
 		for site := range pts[call.Call.Args[0]] {
 			if escape[site] < escapeCall {
 				raise(escape, notes, siteSet{site: {}}, escapeCall, "shared")

@@ -340,6 +340,15 @@ func (b Builder) memset(ptr, val, len, isvolatile Expr) Expr {
 	return ptr
 }
 
+// CopyBytes copies n bytes from src to dst. n is a Go int. A zero
+// length does not read either pointer.
+func (b Builder) CopyBytes(dst, src, n Expr) {
+	n = b.FitIntSize(n)
+	b.impl.CreateIntrinsic(b.Prog.Void().ll, llvm.LookupIntrinsicID("llvm.memcpy"), []llvm.Value{
+		dst.impl, src.impl, n.impl, b.Prog.Val(false).impl,
+	}, "")
+}
+
 func (b Builder) zeroinit(ptr, size Expr) Expr {
 	return b.memset(ptr, b.Prog.IntVal(0, b.Prog.Byte()), size, b.Prog.Val(false))
 }

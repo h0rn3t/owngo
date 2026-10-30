@@ -246,3 +246,84 @@ func interior(sink func(*int)) int {
 		t.Errorf("OwnGoFree false: foo.closureUse runtime.DecAccounted count = %d, want 0", got)
 	}
 }
+
+// TestOwnGoImplicit — P5.1: доведене місце append, конкатенації або
+// перетворення рядка отримує той самий облік, що й володіння v1.
+func TestOwnGoImplicit(t *testing.T) {
+	const src = `package foo
+
+func staticConcat(a, b string) int {
+	s := a + b
+	return len(s)
+}
+
+func staticAppend(s, extra []int) int {
+	s = append(s, extra...)
+	return len(s)
+}
+
+func staticConvert(b []byte) int {
+	s := string(b)
+	return len(s)
+}
+
+func aliasAppend(extra []int) int {
+	a := make([]int, 1, 8)
+	b := a
+	a = append(a, extra...)
+	return len(a) + len(b)
+}
+
+func unknownConcat(a, b string, f func(string)) int {
+	s := a + b
+	f(s)
+	return len(s)
+}
+
+func closureOnly(s string) int {
+	read := func() int { return len(s) }
+	return read() + len(s)
+}
+
+func localConcat(a, b string) int {
+	s := a + b
+	read := func() int { return len(s) }
+	return read() + len(s)
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.staticConcat", "foo.staticAppend", "foo.staticConvert"} {
+		body := mustNamedFunction(t, mod, name).String()
+		if got := strings.Count(body, "runtime.FreeAccounted"); got == 0 {
+			t.Errorf("%s runtime.FreeAccounted count = 0, want at least 1", name)
+		}
+		if got := strings.Count(body, "runtime.DecAccounted"); got != 0 {
+			t.Errorf("%s runtime.DecAccounted count = %d, want 0", name, got)
+		}
+	}
+	for _, name := range []string{"foo.aliasAppend", "foo.unknownConcat"} {
+		body := mustNamedFunction(t, mod, name).String()
+		if got := strings.Count(body, "runtime.FreeAccounted"); got != 0 {
+			t.Errorf("%s runtime.FreeAccounted count = %d, want 0", name, got)
+		}
+		if got := strings.Count(body, "runtime.DecAccounted"); got != 0 {
+			t.Errorf("%s runtime.DecAccounted count = %d, want 0", name, got)
+		}
+	}
+	closure := mustNamedFunction(t, mod, "foo.closureOnly").String()
+	local := mustNamedFunction(t, mod, "foo.localConcat").String()
+	if got, base := strings.Count(local, "runtime.AllocCounted"), strings.Count(closure, "runtime.AllocCounted"); got <= base {
+		t.Errorf("foo.localConcat runtime.AllocCounted count = %d, want more than foo.closureOnly %d", got, base)
+	}
+	if got, base := strings.Count(local, "runtime.DecAccounted"), strings.Count(closure, "runtime.DecAccounted"); got <= base {
+		t.Errorf("foo.localConcat runtime.DecAccounted count = %d, want more than foo.closureOnly %d", got, base)
+	}
+
+	off := compileOwnGoFree(t, src, false)
+	if got := strings.Count(mustNamedFunction(t, off, "foo.staticConcat").String(), "runtime.FreeAccounted"); got != 0 {
+		t.Errorf("OwnGoFree false: foo.staticConcat runtime.FreeAccounted count = %d, want 0", got)
+	}
+}
