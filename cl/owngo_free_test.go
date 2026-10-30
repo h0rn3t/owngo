@@ -540,3 +540,53 @@ func returned(depth int) *Tree {
 		}
 	}
 }
+
+// TestOwnGoReadOnly — P6.7: виклик, що лише читає дерево (рекурсивний Count),
+// DecCyclic не блокує; виклик, що пише в Left чужий вузол, — блокує.
+func TestOwnGoReadOnly(t *testing.T) {
+	const src = `package foo
+
+type Tree struct {
+	Left, Right *Tree
+}
+
+var g *Tree
+
+func NewTree(depth int) *Tree {
+	if depth > 0 {
+		return &Tree{Left: NewTree(depth - 1), Right: NewTree(depth - 1)}
+	}
+	return &Tree{}
+}
+
+func (t *Tree) Count() int {
+	if t.Left == nil {
+		return 1
+	}
+	return 1 + t.Right.Count() + t.Left.Count()
+}
+
+func graft(t, n *Tree) { t.Left = n }
+
+func counted(depth int) int {
+	a := NewTree(depth)
+	return a.Count()
+}
+
+func grafted(depth int) int {
+	a := NewTree(depth)
+	graft(a, g)
+	return a.Count()
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.counted").String(), "runtime.DecCyclic") {
+		t.Error("foo.counted has no runtime.DecCyclic")
+	}
+	if strings.Contains(mustNamedFunction(t, mod, "foo.grafted").String(), "runtime.DecCyclic") {
+		t.Error("foo.grafted has runtime.DecCyclic, want the tree live after graft")
+	}
+}
