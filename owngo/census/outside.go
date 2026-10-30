@@ -31,10 +31,10 @@ const (
 // Сума об'єктів і байтів дорівнює рядку Unmatched у Weigh.
 func Outside(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
 	count := map[string][2]int64{}
-	walkOutside(sites, samples, moduleDir, goroot, func(kind, _ string, objects, bytes int64) {
+	walkOutside(sites, samples, moduleDir, goroot, func(kind, _ string, sample AllocSample) {
 		cur := count[kind]
-		cur[0] += objects
-		cur[1] += bytes
+		cur[0] += sample.Objects
+		cur[1] += sample.Bytes
 		count[kind] = cur
 	})
 	out := []Weight{}
@@ -58,7 +58,7 @@ func Outside(sites []Site, samples []AllocSample, moduleDir, goroot string) []We
 func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
 	resolved := resolvePath(goroot)
 	count := map[string][2]int64{}
-	walkOutside(sites, samples, moduleDir, resolved, func(kind, file string, objects, bytes int64) {
+	walkOutside(sites, samples, moduleDir, resolved, func(kind, file string, sample AllocSample) {
 		if kind != OutsideStdlib {
 			return
 		}
@@ -68,8 +68,8 @@ func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot strin
 			pkg = file
 		}
 		cur := count[pkg]
-		cur[0] += objects
-		cur[1] += bytes
+		cur[0] += sample.Objects
+		cur[1] += sample.Bytes
 		count[pkg] = cur
 	})
 	out := []Weight{}
@@ -91,6 +91,23 @@ func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot strin
 	return out
 }
 
+// StdlibCategories з'єднує вибірки рядка stdlib з місцями v1 цих пакетів.
+// moduleSites — місця модуля, як у Outside: вибірка, що вже має місце, у рядок не входить.
+// stdlibSites — місця класифікатора на пакетах stdlib. Збіг file:line як у Weigh:
+// перший кадр від листа, байти діляться між місцями одного рядка.
+// Вибірка без місця — рядок unmatched. Порожній вхід дає порожній зріз, не nil.
+// Сума об'єктів і байтів дорівнює рядку stdlib у Outside.
+func StdlibCategories(moduleSites, stdlibSites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
+	var stdlib []AllocSample
+	walkOutside(moduleSites, samples, moduleDir, goroot, func(kind, _ string, sample AllocSample) {
+		if kind != OutsideStdlib {
+			return
+		}
+		stdlib = append(stdlib, sample)
+	})
+	return Weigh(stdlibSites, stdlib)
+}
+
 // ExternalModules розкладає вибірки, які Outside кладе в модулі поза -dir,
 // за шляхом модуля. З елемента pkg/mod знімається суфікс @версія.
 // Шлях, з якого модуль не читається, лишається рядком поза кешем і входить у суму.
@@ -101,7 +118,7 @@ func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot strin
 // Завантаження модулів з мережі не виконується.
 func ExternalModules(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
 	count := map[string][2]int64{}
-	walkOutside(sites, samples, moduleDir, goroot, func(kind, file string, objects, bytes int64) {
+	walkOutside(sites, samples, moduleDir, goroot, func(kind, file string, sample AllocSample) {
 		if kind != OutsideExternal {
 			return
 		}
@@ -110,8 +127,8 @@ func ExternalModules(sites []Site, samples []AllocSample, moduleDir, goroot stri
 			mod = OutsideUncached
 		}
 		cur := count[mod]
-		cur[0] += objects
-		cur[1] += bytes
+		cur[0] += sample.Objects
+		cur[1] += sample.Bytes
 		count[mod] = cur
 	})
 	out := []Weight{}
@@ -179,7 +196,7 @@ func modulePath(file string) (string, bool) {
 	return strings.Join(elems, "/"), true
 }
 
-func walkOutside(sites []Site, samples []AllocSample, moduleDir, goroot string, fn func(kind, file string, objects, bytes int64)) {
+func walkOutside(sites []Site, samples []AllocSample, moduleDir, goroot string, fn func(kind, file string, sample AllocSample)) {
 	moduleDir = resolvePath(moduleDir)
 	goroot = resolvePath(goroot)
 
@@ -238,7 +255,7 @@ func walkOutside(sites []Site, samples []AllocSample, moduleDir, goroot string, 
 			files[i] = resolve(frame.File)
 		}
 		kind, file := outsideKind(files, moduleDir, goroot)
-		fn(kind, file, sample.Objects, sample.Bytes)
+		fn(kind, file, sample)
 	}
 }
 

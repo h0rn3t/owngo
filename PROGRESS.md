@@ -203,3 +203,11 @@
 - Прийняття: `gofmt -l owngo/census/outside.go owngo/census/outside_test.go owngo/census/doc.go` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень. `go test -count=1 ./owngo/census/` і `go test -race -count=1 ./owngo/census/` зелені, включно з `TestExternalModules`. `go fix -diff ./owngo/census/` пропонує `strings.Cut` у вже наявному `quotedWants`; не чіпав. У новому `modulePath` цикл замінено на `slices.Contains`.
 - Лишилось: P2.3, категорії v1 для рядка stdlib.
 
+## 2026-10-30 — P2.3
+
+- `StdlibCategories` з'єднує вибірки, які `Outside` кладе в stdlib, з місцями v1 цих пакетів. Збіг `file:line` як у `Weigh`: перший кадр від листа, байти діляться між місцями одного рядка. Вибірка без місця — рядок `unmatched`. Вибірка з місцем модуля у рядок не входить. Порожній вхід — порожній зріз, не nil. Сума дорівнює рядку stdlib.
+- Фікстура pprof: кадр `fmt` забирає байти раніше за пізніший `encoding/json`; два місця на одному рядку `bytes` ділять об'єкти з остачею першому; місце `cyclic` без збігу лишається з нульовими байтами; `*_test.go`, модуль, чужий модуль, збіг із місцем census і голий `runtime` у рядок не входять.
+- Набір — об'єднання таблиць P2.1, 117 пакетів Go 1.27.3. Пакети по одному в порядку імпорту, `FactTypes` вимкнено, зведення в сховищі процесу. Усі 117 дали 17 816 місць. Ті самі профілі, що в P1.1. На 17 сервісах 17 955 703 об'єкти і 2 418 622 160 байтів. У `ms-faq` 63 804 об'єкти і 114 923 904 байти. Суми збігаються з рядком stdlib P2.1, і кожен сервіс окремо. Найбільші на 17 сервісах — `static` (26.8%) і `rc-local` (22.2%), разом 49.0%. `unmatched` — 20.5%. У `ms-faq` `static` і `rc-local` — 40.6% і 40.3%, разом 80.9%; `unmatched` — 1.4%. Звіт — `owngo/REPORT-PHASE2.md`.
+- Прийняття: `gofmt -l` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень. `go test -count=1 ./owngo/census/` і `go test -race -count=1 ./owngo/census/` зелені, включно з `TestStdlibCategories`. `go fix -diff ./owngo/census/` пропонує `strings.Cut` у вже наявному `quotedWants`; не чіпав.
+- Лишилось: P2.4, категорії v1 для модулів поза `-dir`.
+

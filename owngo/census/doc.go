@@ -10,5 +10,6 @@
 // Outside розкладає рядок поза census на стандартну бібліотеку,
 // модулі поза каталогом, тести, runtime і файли модуля без місця.
 // StdlibPackages ділить рядок stdlib за імпортом пакета першого кадру.
+// StdlibCategories з'єднує цей рядок з місцями v1 за file:line.
 // ExternalModules ділить рядок поза -dir за шляхом модуля з pkg/mod.
 package census
