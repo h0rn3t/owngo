@@ -303,6 +303,10 @@ func localConcat(a, b string) int {
 		if got := strings.Count(body, "runtime.DecAccounted"); got != 0 {
 			t.Errorf("%s runtime.DecAccounted count = %d, want 0", name, got)
 		}
+		// P5.2: довжина результату, не константа 0.
+		if strings.Contains(body, ", i64 0, i32 0)") {
+			t.Errorf("%s FreeAccounted size = 0, want the allocated byte count", name)
+		}
 	}
 	for _, name := range []string{"foo.aliasAppend", "foo.unknownConcat"} {
 		body := mustNamedFunction(t, mod, name).String()

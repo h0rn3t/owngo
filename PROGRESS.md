@@ -378,3 +378,11 @@
 - Корпус v0 зелений. Фікстура v1: доведений `append` без аліаса — `static: append`, аліас — `rc-local: shared`. `go test -count=1 ./owngo/census/` і `go test -race -count=1 ./owngo/census/` зелені. `go vet ./cl/ ./owngo/census/ ./ssa/` без зауважень. `golangci-lint run --new-from-rev HEAD` для цих пакетів — 0 зауважень.
 - Лишилось: P5.2, байти доведеного `implicit`.
 
+## 2026-10-30 — P5.2
+
+- Той самий прохід v1. `NoteAlloc`, `FreeAccounted` і `DecAccounted` для `append`, конкатенації і перетворення `string`/`[]byte` отримують довжину буфера, а не 0. `append`, який лишає `GrowSlice`, у підсумок не входить. `[]rune` не входить. Другий класифікатор не додавався.
+- Фікстура `owngo/bytes/imconcat`: `"abcd" + "efgh"` — `static`, 8 байтів у `freed`. Фікстура `owngo/bytes/imheld`: та сама конкатенація в `func(string)` — `rc-local: call`, без `FreeAccounted` і без `DecAccounted`, 8 байтів лишаються в `live rc-local`.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`. `go run ./cmd/llgo run -tags owngo ./owngo/bytes/imconcat` — код 0, `owngo freed 144`, `owngo live static 984`, `owngo live rc-local 1889`. `./owngo/bytes/imheld` — код 0, `owngo freed 136`, `owngo live static 984`, `owngo live rc-local 1897`. Різниця — 8 байтів. Числа в `owngo/REPORT-PHASE5.md` поруч із 819 968 312 байтами, 17.7% двох рядків і 11.2% профілю. 8 і 144 менші за половину профілю (3 669 927 840). Поріг 50% не застосований. Профілі наново не знімались. M:N без змін.
+- `go test -count=1 -v ./cl/ -run TestOwnGoImplicit` — `--- PASS: TestOwnGoImplicit`. `staticConcat`, `staticAppend` і `staticConvert` містять `FreeAccounted` не з розміром 0. `go vet ./cl/ ./owngo/bytes/imconcat/ ./owngo/bytes/imheld/` без зауважень. `golangci-lint run --new-from-rev HEAD` для цих пакетів — 0 зауважень.
+- Лишилось: P5.3, ASan на доведеному `implicit`.
+

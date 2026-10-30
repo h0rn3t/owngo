@@ -261,11 +261,10 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 	if _, has := p.bvals[val]; !has {
 		return
 	}
-	size, ok := p.ownGoSiteSize(val)
-	if !ok {
+	if _, ok := p.ownGoSiteSize(val); !ok {
 		return
 	}
-	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, size, cat)
+	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, p.ownGoSizeExpr(b, val), cat)
 }
 
 func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
@@ -279,13 +278,15 @@ func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
 		if ptr.IsNil() {
 			continue
 		}
-		size, sized := p.ownGoSiteSize(site)
+		_, sized := p.ownGoSiteSize(site)
 		cat, known := ownGoStatic, false
 		if siteInstr, isInstr := site.(ssa.Instruction); isInstr {
 			cat, known = p.ownGoCat[siteInstr]
 		}
-		if !sized || !known {
-			size = 0
+		size := p.prog.IntVal(0, p.prog.Uintptr())
+		if sized && known {
+			size = p.ownGoSizeExpr(b, site)
+		} else {
 			cat = ownGoStatic
 		}
 		p.callOwnGoAccount(b, "FreeAccounted", ptr, size, cat)
@@ -302,11 +303,10 @@ func (p *context) emitOwnGoDec(b llssa.Builder, instr ssa.Instruction) {
 		if ptr.IsNil() {
 			continue
 		}
-		size, sized := p.ownGoSiteSize(site)
-		if !sized {
+		if _, sized := p.ownGoSiteSize(site); !sized {
 			continue
 		}
-		p.callOwnGoAccount(b, "DecAccounted", ptr, size, 0)
+		p.callOwnGoAccount(b, "DecAccounted", ptr, p.ownGoSizeExpr(b, site), 0)
 	}
 }
 
@@ -326,7 +326,7 @@ func (p *context) emitOwnGoInc(b llssa.Builder, instr ssa.Instruction) {
 		if _, sized := p.ownGoSiteSize(site); !sized {
 			continue
 		}
-		p.callOwnGoAccount(b, "Inc", ptr, 0, 0)
+		p.callOwnGoAccount(b, "Inc", ptr, llssa.Nil, 0)
 	}
 }
 
@@ -343,7 +343,7 @@ func (p *context) emitAllocCounted(b llssa.Builder, elem llssa.Type) llssa.Expr 
 
 func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
 	if instr, ok := site.(ssa.Instruction); ok && census.CountableImplicit(instr) {
-		// Розмір динамічний. Виклик Dec і Free лишається; байти рахує наступна задача.
+		// Виклик лишається. Байти рахує ownGoSizeExpr, бо довжина відома лише в IR.
 		return 0, true
 	}
 	alloc, ok := site.(*ssa.Alloc)
@@ -358,13 +358,13 @@ func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
 	return n, n > 0
 }
 
-func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr, size uint64, cat uint64) {
+func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr, size llssa.Expr, cat uint64) {
 	params := []*types.Var{
 		types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr]),
 		types.NewVar(token.NoPos, nil, "cat", types.Typ[types.Int32]),
 	}
 	args := []llssa.Expr{
-		p.prog.IntVal(size, p.prog.Uintptr()),
+		size,
 		p.prog.IntVal(cat, p.prog.Int32()),
 	}
 	switch name {
@@ -380,7 +380,7 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 			types.NewVar(token.NoPos, nil, "size", types.Typ[types.Uintptr]),
 		}
 		dst := p.type_(types.Typ[types.UnsafePointer], llssa.GoDecl)
-		args = []llssa.Expr{b.PtrCast(dst, ptr), p.prog.IntVal(size, p.prog.Uintptr())}
+		args = []llssa.Expr{b.PtrCast(dst, ptr), size}
 	case "Inc":
 		params = []*types.Var{
 			types.NewVar(token.NoPos, nil, "ptr", types.Typ[types.UnsafePointer]),
@@ -390,6 +390,39 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 	}
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), nil, false)
 	b.Call(p.runtimeFunc(name, sig), args...)
+}
+
+// ownGoSizeExpr повертає байти користувача. append через GrowSlice лишає 0.
+func (p *context) ownGoSizeExpr(b llssa.Builder, site ssa.Value) llssa.Expr {
+	zero := p.prog.IntVal(0, p.prog.Uintptr())
+	instr, ok := site.(ssa.Instruction)
+	if !ok || !census.CountableImplicit(instr) {
+		n, sized := p.ownGoSiteSize(site)
+		if !sized || n == 0 {
+			return zero
+		}
+		return p.prog.IntVal(n, p.prog.Uintptr())
+	}
+	expr, ok := p.bvals[site]
+	if !ok || expr.IsNil() {
+		return zero
+	}
+	if census.ImplicitOrigin(instr) == "append" {
+		call, _ := instr.(*ssa.Call)
+		if _, counted := p.ownGoCounted[instr]; !counted && !p.ownGoWillFree(call) {
+			return zero
+		}
+	}
+	switch underlying := site.Type().Underlying().(type) {
+	case *types.Slice:
+		elem := p.prog.SizeOf(p.type_(underlying.Elem(), llssa.GoDecl))
+		return b.Convert(p.prog.Uintptr(), p.ownGoBytes(b, b.SliceLen(expr), elem))
+	case *types.Basic:
+		if underlying.Kind() == types.String {
+			return b.Convert(p.prog.Uintptr(), b.StringLen(expr))
+		}
+	}
+	return zero
 }
 
 func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
