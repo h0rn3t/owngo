@@ -140,6 +140,9 @@ jobs:
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Free disk space on Windows
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/free-windows-disk
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:

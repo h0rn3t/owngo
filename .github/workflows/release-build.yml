@@ -212,6 +212,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps: &windows-compiler-steps
       - uses: actions/checkout@v7
+      - name: Free disk space on Windows
+        uses: ./.github/actions/free-windows-disk
       - name: Install build dependencies
         uses: ./.github/actions/setup-deps
         with:
@@ -297,6 +299,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps: &windows-package-steps
       - uses: actions/checkout@v7
+      - name: Free disk space on Windows
+        uses: ./.github/actions/free-windows-disk
       - name: Cache ESP release archive
         uses: actions/cache@v6
         with:
@@ -364,6 +368,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps: &windows-test-steps
       - uses: actions/checkout@v7
+      - name: Free disk space on Windows
+        uses: ./.github/actions/free-windows-disk
       - name: Set up Go
         uses: ./.github/actions/setup-go
       - name: Download Windows archive

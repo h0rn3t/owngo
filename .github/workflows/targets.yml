@@ -87,6 +87,9 @@ jobs:
       GOFLAGS: '-p=2'
     steps:
       - uses: actions/checkout@v7
+      - name: Free disk space on Windows
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/free-windows-disk
       - uses: ./.github/actions/setup-deps
         with:
           llvm-version: '22'

@@ -90,6 +90,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Free disk space on Windows
+        if: startsWith(matrix.os, 'windows')
+        uses: ./.github/actions/free-windows-disk
+
       - name: Test local installer with LF and CRLF checkouts
         shell: bash
         run: bash test/installer/install_local_test.sh

@@ -126,6 +126,10 @@ jobs:
           path: .benchmark/head-source
           persist-credentials: false
 
+      - name: Free disk space on Windows
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/free-windows-disk
+
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
