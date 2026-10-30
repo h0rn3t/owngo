@@ -262,7 +262,8 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 	if _, has := p.bvals[val]; !has {
 		return
 	}
-	if _, ok := p.ownGoSiteSize(val); !ok {
+	if _, ok := p.ownGoSiteSize(val); !ok || ownGoFreshCall(val) {
+		// Свіжий результат уже облікував викликаний код.
 		return
 	}
 	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, p.ownGoSizeExpr(b, val), cat)
@@ -417,10 +418,10 @@ func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
 		return 0, true
 	}
 	alloc, ok := site.(*ssa.Alloc)
-	if !ok || !alloc.Heap {
+	if (!ok || !alloc.Heap) && !ownGoFreshCall(site) {
 		return 0, false
 	}
-	ptr, ok := types.Unalias(alloc.Type()).Underlying().(*types.Pointer)
+	ptr, ok := types.Unalias(site.Type()).Underlying().(*types.Pointer)
 	if !ok {
 		return 0, false
 	}
@@ -512,6 +513,9 @@ func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	expr, ok := p.bvals[site]
 	if !ok || expr.IsNil() {
 		return llssa.Nil
+	}
+	if ownGoFreshCall(site) {
+		return expr
 	}
 	switch site.(type) {
 	case *ssa.MakeSlice:
@@ -688,4 +692,11 @@ func isByteSlice(t types.Type) bool {
 		return false
 	}
 	return isBasicKind(slice.Elem(), types.Byte)
+}
+
+// ownGoFreshCall: місце — свіжий виклик census (не append). Слово дав
+// викликаний код, викликач його лише зменшує.
+func ownGoFreshCall(site ssa.Value) bool {
+	call, ok := site.(*ssa.Call)
+	return ok && census.ImplicitOrigin(call) == ""
 }

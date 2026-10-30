@@ -229,5 +229,44 @@ func movedChild(v ssa.Value, store *ssa.Store, fresh map[*ssa.Function]bool) boo
 		return false
 	}
 	refs := call.Referrers()
-	return refs != nil && len(*refs) == 1 && (*refs)[0] == store
+	if refs == nil {
+		return false
+	}
+	// DebugRef з ssa.GlobalDebug значення не тримає.
+	for _, ref := range *refs {
+		if _, debug := ref.(*ssa.DebugRef); !debug && ref != store {
+			return false
+		}
+	}
+	return true
+}
+
+// freshSites повертає статичні виклики зі свіжим результатом за зведенням
+// v1. Без v1 (v0, корпус) таких місць немає.
+func (v1 *v1Ctx) freshSites(instrs []ssa.Instruction) map[ssa.Instruction]bool {
+	if v1 == nil {
+		return nil
+	}
+	var out map[ssa.Instruction]bool
+	for _, instr := range instrs {
+		call, ok := instr.(*ssa.Call)
+		if !ok || call.Call.StaticCallee() == nil {
+			continue
+		}
+		if sum := summaryOf(v1, call.Call.StaticCallee()); sum == nil || !sum.Fresh {
+			continue
+		}
+		if out == nil {
+			out = map[ssa.Instruction]bool{}
+		}
+		out[instr] = true
+	}
+	return out
+}
+
+// freshSite: місце — свіжий виклик, а не append. Слово дав викликаний код,
+// тож таке місце звільняє лише Dec.
+func freshSite(site ssa.Instruction) bool {
+	call, ok := site.(*ssa.Call)
+	return ok && ImplicitOrigin(call) == ""
 }

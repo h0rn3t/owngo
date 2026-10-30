@@ -77,7 +77,8 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 	for _, block := range fn.Blocks {
 		instrs = append(instrs, block.Instrs...)
 	}
-	pts, contents := pointTo(instrs)
+	fresh := v1.freshSites(instrs)
+	pts, contents := pointTo(instrs, fresh)
 	if v1 != nil {
 		v1.pts = pts
 		v1.contents = contents
@@ -93,7 +94,7 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 
 	out := make(map[ssa.Instruction]string)
 	for _, instr := range instrs {
-		if !isSite(instr) {
+		if !isSite(instr) && !fresh[instr] {
 			continue
 		}
 		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe, v1 != nil)
@@ -101,9 +102,16 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 	return out, pts, contents
 }
 
-func pointTo(instrs []ssa.Instruction) (map[ssa.Value]siteSet, map[ssa.Instruction]siteSet) {
+// fresh — свіжі виклики v1, які теж є місцями. Їхніх дітей створив
+// викликаний код, тож вміст такого місця — воно саме: читання поля дає
+// аліас власника, і Dec власника стоїть після останнього вживання дитини.
+func pointTo(instrs []ssa.Instruction, fresh map[ssa.Instruction]bool) (map[ssa.Value]siteSet, map[ssa.Instruction]siteSet) {
 	pts := map[ssa.Value]siteSet{}
 	contents := map[ssa.Instruction]siteSet{}
+	for site := range fresh {
+		pts[site.(ssa.Value)] = siteSet{site: {}}
+		contents[site] = siteSet{site: {}}
+	}
 	ref := func(v ssa.Value) siteSet {
 		set := pts[v]
 		if set == nil {

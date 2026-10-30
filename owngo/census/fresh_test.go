@@ -57,9 +57,16 @@ func sharedChild() *Tree {
 }
 `
 
-// TestFresh — P6.5: свіжий результат у зведенні.
+// TestFresh — P6.5: свіжий результат у зведенні. llgo будує SSA з
+// ssa.GlobalDebug, тож DebugRef на дитині переміщення не скасовує.
 func TestFresh(t *testing.T) {
-	pkg := buildOnePackage(t, "example.com/p", freshSrc)
+	for _, mode := range []ssa.BuilderMode{ssa.SanityCheckFunctions, ssa.SanityCheckFunctions | ssa.GlobalDebug} {
+		testFresh(t, mode)
+	}
+}
+
+func testFresh(t *testing.T, mode ssa.BuilderMode) {
+	pkg := buildOnePackage(t, "example.com/p", freshSrc, mode)
 	funcs := ssaFuncs(pkg)
 	sums := packageSummaries(nil, funcs)
 	want := map[string]bool{
@@ -75,7 +82,7 @@ func TestFresh(t *testing.T) {
 	for name, fresh := range want {
 		fn := pkg.Func(name)
 		if got := sums[fn].Fresh; got != fresh {
-			t.Errorf("packageSummaries(%s).Fresh = %v, want %v", name, got, fresh)
+			t.Errorf("mode %v: packageSummaries(%s).Fresh = %v, want %v", mode, name, got, fresh)
 		}
 	}
 	_, _, _, counted, _ := Place(funcs)
@@ -91,14 +98,14 @@ func TestFresh(t *testing.T) {
 
 	// Пакет рантайму llgo свіжого результату не має: make(map) поверх makemap
 	// звільняється FreeAccounted з початку блока.
-	rt := buildOnePackage(t, "github.com/xgo-dev/llgo/runtime/internal/runtime", freshSrc)
+	rt := buildOnePackage(t, "github.com/xgo-dev/llgo/runtime/internal/runtime", freshSrc, mode)
 	rtSums := packageSummaries(nil, ssaFuncs(rt))
 	if rtSums[rt.Func("NewTree")].Fresh {
 		t.Error("packageSummaries(runtime NewTree).Fresh = true, want false")
 	}
 }
 
-func buildOnePackage(t *testing.T, path, src string) *ssa.Package {
+func buildOnePackage(t *testing.T, path, src string, mode ssa.BuilderMode) *ssa.Package {
 	t.Helper()
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "src.go", src, 0)
@@ -117,7 +124,7 @@ func buildOnePackage(t *testing.T, path, src string) *ssa.Package {
 	if err := types.NewChecker(&types.Config{}, fset, tpkg, info).Files([]*ast.File{file}); err != nil {
 		t.Fatal(err)
 	}
-	prog := ssa.NewProgram(fset, ssa.SanityCheckFunctions)
+	prog := ssa.NewProgram(fset, mode)
 	pkg := prog.CreatePackage(tpkg, []*ast.File{file}, info, true)
 	prog.Build()
 	return pkg

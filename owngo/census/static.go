@@ -62,6 +62,14 @@ func Place(funcs []*ssa.Function) (
 		for site, label := range msg {
 			cats[site] = label
 			head, _, _ := strings.Cut(label, ":")
+			if head == "static" && freshSite(site) {
+				// Слово вже є: замість FreeAccounted — DecAccounted.
+				counted[site] = struct{}{}
+				if users := siteUsers(site, pts, contents); len(users) > 0 && !ctx.noDec[site] {
+					decUses[site] = users
+				}
+				continue
+			}
 			if head == "static" {
 				users := siteUsers(site, pts, contents)
 				if len(users) > 0 {
@@ -108,7 +116,7 @@ func Place(funcs []*ssa.Function) (
 
 func countedAlloc(site ssa.Instruction, label string) bool {
 	alloc, ok := site.(*ssa.Alloc)
-	if !ok || !alloc.Heap {
+	if (!ok || !alloc.Heap) && !freshSite(site) {
 		return false
 	}
 	head, _, _ := strings.Cut(label, ":")
@@ -295,10 +303,10 @@ func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 	cand := siteSet{}
 	for site, label := range msg {
 		alloc, ok := site.(*ssa.Alloc)
-		if !ok || !alloc.Heap || label != "cyclic" {
+		if (!ok || !alloc.Heap) && !freshSite(site) || label != "cyclic" {
 			continue
 		}
-		if len(CyclicFields(pointee(alloc.Type()))) > 0 {
+		if len(CyclicFields(pointee(site.(ssa.Value).Type()))) > 0 {
 			cand.add(site)
 		}
 	}
@@ -429,8 +437,8 @@ func countedRef(v ssa.Value, cand siteSet, seen map[ssa.Value]bool) bool {
 	switch v := v.(type) {
 	case *ssa.Const:
 		return v.IsNil()
-	case *ssa.Alloc:
-		_, ok := cand[v]
+	case *ssa.Alloc, *ssa.Call:
+		_, ok := cand[v.(ssa.Instruction)]
 		return ok
 	case *ssa.Phi:
 		for _, edge := range v.Edges {
