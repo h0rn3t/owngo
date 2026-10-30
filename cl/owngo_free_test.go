@@ -436,3 +436,34 @@ func joined(b *box) *box {
 		}
 	}
 }
+
+// TestOwnGoPanicValueLives: значення panic виходить у recover, тож перед
+// паніком воно не звільняється і лічильника не зменшує.
+func TestOwnGoPanicValueLives(t *testing.T) {
+	const src = `package foo
+
+type E string
+
+func boxed() {
+	panic(E("boom"))
+}
+
+func pointer() {
+	p := new(int)
+	*p = 1
+	panic(p)
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.boxed", "foo.pointer"} {
+		body := mustNamedFunction(t, mod, name).String()
+		for _, call := range []string{"runtime.FreeAccounted", "runtime.DecAccounted"} {
+			if strings.Contains(body, call) {
+				t.Errorf("%s has %s before panic, want the value live", name, call)
+			}
+		}
+	}
+}
