@@ -1813,6 +1813,9 @@ func (b Builder) CreateFree(p Value) (v Value) {
 	return
 }
 func (b Builder) CreateLoad(t Type, p Value, name string) (v Value) {
+	if t.TypeKind() == VectorTypeKind && t.ElementType().TypeKind() == PointerTypeKind {
+		println("VECLOAD2", t.String())
+	}
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	v.C = C.LLVMBuildLoad2(b.C, t.C, p.C, cname)

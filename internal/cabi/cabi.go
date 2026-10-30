@@ -559,6 +559,9 @@ func aggregateToNative(b llvm.Builder, info *TypeInfo, value llvm.Value) llvm.Va
 }
 
 func aggregateFromNative(b llvm.Builder, info *TypeInfo, value llvm.Value) llvm.Value {
+	if native := info.nativeType(); native.TypeKind() == llvm.VectorTypeKind {
+		println("CABI VECFROM", info.Type.String(), "native", native.String())
+	}
 	return windows386AggregateFromNative(b, value, info.Type, info.nativeType())
 }
 

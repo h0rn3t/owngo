@@ -16,7 +16,7 @@ import (
 )
 
 func TestScratchErrGlobalIR(t *testing.T) {
-	src := "package p\n\ntype T struct { x int }\n\nfunc New(v int) *T { return &T{v} }\n\nvar G = New(42)\n\nfunc Use() *T { return G }\n"
+	src := "package p\n\ntype error interface { Error() string }\n\ntype errorString struct { s string }\n\nfunc (e *errorString) Error() string { return e.s }\n\nfunc New(text string) error { return &errorString{text} }\n\nvar G = New(\"hello\")\n\nfunc Use() error { return G }\n"
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "p.go", src, 0)
 	if err != nil {
