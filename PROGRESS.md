@@ -129,3 +129,11 @@
 - Ті самі профілі, що в P0.8 і P0.10. На 17 сервісах поза census 4 963 968 984 байти (67.6% профілю): stdlib 48.7%, поза `-dir` 44.8%, `*_test.go` 6.0%, runtime 0.3%, у модулі 0.2%. У `ms-faq` 160 224 496 байтів (98.8%): stdlib 71.7%, поза `-dir` 27.7%. Сума ківшів збігається з рядком поза census. Звіт — `owngo/REPORT-PHASE1.md`.
 - Прийняття: `gofmt -l owngo/census` порожньо, `go vet ./owngo/census/` без зауважень, `golangci-lint` без зауважень. `go test -count=1 ./owngo/census/` і `go test -race -count=1 ./owngo/census/` зелені.
 - Лишилось: P1.2, `runtime.Free` під тегом `owngo`.
+
+## 2026-10-30 — P1.2
+
+- Тег `owngo` у `llgo` дописує `nogc`, тож збираються файли рантайму `nogc`. `runtime.Free` (`runtime/internal/runtime/free_owngo.go`) кличе `FreeRoot`: блок `malloc` звільняється, `zerobase` лишається. Інші алокації самі не звільняються.
+- Програма `owngo/runtimefree`: `AllocU(32)` / `Free` (блок зникає з `malloc_size`) і `Free` від `AllocU(0)`. `LLGO_ROOT=$PWD` і LLVM 23 першим у `PATH`: `go run ./cmd/llgo run -tags owngo ./owngo/runtimefree` — код 0.
+- `go test -timeout 40m ./...` без тега `owngo`: падіння лише з `owngo/BASELINE.md` (`cmd/internal/browser`, `internal/build` — архів і wasm SjLj, `internal/targets` — Memory64).
+- Прийняття: `gofmt -l` на змінених файлах порожньо. `go test -count=1 -run TestApplyOwngoTag ./internal/build/` і `go test -race -count=1 -run TestApplyOwngoTag ./internal/build/` зелені. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень для `./internal/build/`, `./owngo/runtimefree/` і `runtime/internal/runtime` з тегами `owngo,nogc`.
+- Лишилось: P1.3, вставка `free` лише для `static`.
