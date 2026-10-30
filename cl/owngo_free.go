@@ -133,7 +133,7 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 				user[instr] = true
 			}
 		}
-		for instr := range deaths(fn, user) {
+		for instr := range deaths(fn, user, site) {
 			// Використання аліаса в блоці, якого алокація не домінує,
 			// не має місця для free: значення LLVM там недоступне.
 			if instr.Block() == nil || site.Block() == nil || !site.Block().Dominates(instr.Block()) {
@@ -200,12 +200,21 @@ func deferred(users []ssa.Instruction) bool {
 	return false
 }
 
-func deaths(fn *ssa.Function, user map[ssa.Instruction]bool) map[ssa.Instruction]struct{} {
+// deaths шукає блоки, після яких місце вже не живе. Блок визначення
+// живучість назад не пропускає, а читач у ньому після site живим на вході
+// його не робить: кожне виконання site створює новий об'єкт, тож через
+// зворотне ребро циклу попередній об'єкт живим не лишається. Об'єкт, який
+// несе phi, має свого читача в заголовку і лишається живим.
+func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instruction) map[ssa.Instruction]struct{} {
 	n := len(fn.Blocks)
+	def := site.Block()
 	used := make([]bool, n)
 	for instr := range user {
 		block := instr.Block()
 		if block == nil || block.Parent() != fn || block.Index < 0 || block.Index >= n {
+			continue
+		}
+		if block == def && !precedes(instr, site) {
 			continue
 		}
 		used[block.Index] = true
@@ -222,7 +231,7 @@ func deaths(fn *ssa.Function, user map[ssa.Instruction]bool) map[ssa.Instruction
 					break
 				}
 			}
-			in := used[i] || out
+			in := used[i] || out && fn.Blocks[i] != def
 			if in != liveIn[i] || out != liveOut[i] {
 				liveIn[i], liveOut[i] = in, out
 				changed = true
@@ -234,7 +243,7 @@ func deaths(fn *ssa.Function, user map[ssa.Instruction]bool) map[ssa.Instruction
 	}
 	out := map[ssa.Instruction]struct{}{}
 	for _, block := range fn.Blocks {
-		if block == nil || !liveIn[block.Index] || liveOut[block.Index] {
+		if block == nil || !liveIn[block.Index] && block != def || liveOut[block.Index] {
 			continue
 		}
 		var last ssa.Instruction
@@ -699,4 +708,17 @@ func isByteSlice(t types.Type) bool {
 func ownGoFreshCall(site ssa.Value) bool {
 	call, ok := site.(*ssa.Call)
 	return ok && census.ImplicitOrigin(call) == ""
+}
+
+// precedes: a стоїть у тому самому блоці раніше за b.
+func precedes(a, b ssa.Instruction) bool {
+	for _, instr := range a.Block().Instrs {
+		switch instr {
+		case a:
+			return true
+		case b:
+			return false
+		}
+	}
+	return false
 }
