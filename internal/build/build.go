@@ -4836,16 +4836,14 @@ func clFile(ctx *context, args []string, cFile, expFile, pkgPath string, verbose
 // in one place prevents cache keys from drifting away from compilation.
 func llgoFileCompilerArgs(ctx *context, args []string, source string) []string {
 	// A configured C++ driver must not change the source language or mangle C
-	// symbols. Put these defaults before explicit flags so cgo can override
-	// the language of generated .c preambles (for example, -x objective-c).
-	// Extensions are case-sensitive: Clang treats .C as C++ and .M as
-	// Objective-C++, so leave those to the driver rather than forcing C.
+	// symbols. Put these defaults before explicit flags so cgo can still
+	// override the language of generated .c preambles if needed.
+	// Extensions are case-sensitive: Clang treats .C as C++, so leave it
+	// to the driver rather than forcing C.
 	var defaults []string
 	switch filepath.Ext(source) {
 	case ".c":
 		defaults = []string{"-x", "c"}
-	case ".m":
-		defaults = []string{"-x", "objective-c"}
 	}
 	return slices.Concat(defaults, args, debugInfoCompilerArgs(ctx.buildConf, &ctx.crossCompile))
 }

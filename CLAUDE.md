@@ -4,7 +4,7 @@ This document provides essential information for AI assistants to help fix bugs 
 
 ## About LLGo
 
-LLGo is a Go compiler based on LLVM designed to better integrate Go with the C ecosystem, including JavaScript. It's a subproject of the XGo project that aims to expand the boundaries of Go/XGo for game development, AI and data science, WebAssembly, and embedded development.
+LLGo is a Go compiler based on LLVM designed to better integrate Go with the C ecosystem. It's a subproject of the XGo project that aims to expand the boundaries of Go/XGo for game development, AI and data science, WebAssembly, and embedded development.
 
 ## Language
 

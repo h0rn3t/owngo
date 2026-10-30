@@ -576,7 +576,7 @@ import "unsafe"
 	if err := os.WriteFile(goFile, []byte(src), 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"foo.c", "bar.cc", "baz.cpp", "qux.cxx", "objc.m", "skip_test.cpp", "skip_test.m"} {
+	for _, name := range []string{"foo.c", "bar.cc", "baz.cpp", "qux.cxx", "skip_test.cpp"} {
 		if err := os.WriteFile(filepath.Join(dir, name), nil, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -603,7 +603,6 @@ import "unsafe"
 		"bar.cc":  true,
 		"baz.cpp": true,
 		"qux.cxx": true,
-		"objc.m":  false,
 	}
 	if !reflect.DeepEqual(gotFiles, wantFiles) {
 		t.Fatalf("parseCgo_ files = %#v, want %#v", gotFiles, wantFiles)
@@ -664,7 +663,7 @@ import "unsafe"
 	if err := os.WriteFile(goFile, []byte(goSrc), 0644); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"skip.cpp", "skip.m"} {
+	for _, name := range []string{"skip.cpp"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("//go:build missingtag\n\n"), 0644); err != nil {
 			t.Fatal(err)
 		}

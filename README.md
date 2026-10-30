@@ -9,7 +9,7 @@ LLGo - A Go compiler based on LLVM
 [![GoDoc](https://pkg.go.dev/badge/github.com/xgo-dev/llgo.svg)](https://pkg.go.dev/github.com/xgo-dev/llgo)
 [![XGo](https://img.shields.io/badge/project-XGo-blue.svg)](https://github.com/goplus/xgo)
 
-LLGo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem, including JavaScript. It's a subproject of [the XGo project](https://github.com/goplus/xgo).
+LLGo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem. It's a subproject of [the XGo project](https://github.com/goplus/xgo).
 
 LLGo aims to expand the boundaries of Go/XGo, providing limitless possibilities such as:
 
@@ -25,7 +25,7 @@ How can these be achieved?
 LLGo := Go * C ecosystem
 ```
 
-LLGo is compatible with the C ecosystem through the C **Application Binary Interface (ABI)**, while LLGo is compatible with Go at the **source-code level**. The C ecosystem includes languages that expose C-compatible interfaces (e.g. C/C++, Python, JavaScript, Objective-C, and Swift).
+LLGo is compatible with the C ecosystem through the C **Application Binary Interface (ABI)**, while LLGo is compatible with Go at the **source-code level**. The C ecosystem means C/C++ libraries accessible through the C ABI.
 
 
 ## Go support

@@ -352,7 +352,6 @@ func parseCgoWithCommandEnv(commands commandEnv, buildCtx *build.Context, pkg *a
 		name := filepath.Base(match)
 		switch {
 		case strings.HasSuffix(name, "_test.c"),
-			strings.HasSuffix(name, "_test.m"),
 			strings.HasSuffix(name, "_test.cc"),
 			strings.HasSuffix(name, "_test.cpp"),
 			strings.HasSuffix(name, "_test.cxx"):
@@ -376,7 +375,6 @@ func parseCgoWithCommandEnv(commands commandEnv, buildCtx *build.Context, pkg *a
 			isCXX bool
 		}{
 			{glob: "*.c"},
-			{glob: "*.m"},
 			{glob: "*.cc", isCXX: true},
 			{glob: "*.cpp", isCXX: true},
 			{glob: "*.cxx", isCXX: true},

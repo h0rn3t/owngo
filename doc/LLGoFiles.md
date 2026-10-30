@@ -12,7 +12,7 @@ cgo already solves a version of this problem, but its approach — pasting C sou
 - **No file-level separation.** A single package tied to one comment block encourages either a giant blob of C++ in one place, or awkward multi-file/multi-package contortions to split it up.
 - **Poor fit for real C++.** Bindings to C++ libraries (as opposed to C) often need proper `.cpp`/`.hpp` files, multiple translation units, and library-specific compiler/linker flags — things cgo's comment-embedding model was never designed around.
 - **Diffs and reviews suffer.** Native code changes and Go code changes are interleaved in the same file, making history and review harder to read.
-- **Limited to one native language.** cgo's `import "C"` model is inherently tied to C. Since LLGoFiles just hands files off to the compiler by extension, it extends naturally to other native languages LLVM/clang can handle — Objective-C (`.m`/`.mm`) being an immediate case, with room to grow further as LLGo's needs expand.
+- **Limited to one native language.** cgo's `import "C"` model is inherently tied to C. LLGoFiles instead selects the toolchain by file extension, covering both C and C++ sources.
 
 LLGoFiles addresses this by treating the native sources — and the flags needed to compile them — as first-class, self-contained build metadata that lives next to the package, without changing how the Go side of the package looks or is written.
 
@@ -28,7 +28,7 @@ A package opts in by declaring an untyped string constant named `LLGoFiles`, who
 
 That is: the value is a semicolon-separated list of one or more native source file paths, optionally preceded by a compiler-flags segment and a colon separator.
 
-- **File list** (required). One or more paths to C/C++/Objective-C source files, relative to the Go package's directory, separated by `;`.
+- **File list** (required). One or more paths to C/C++ source files, relative to the Go package's directory, separated by `;`.
 - **`<cflags>` segment** (optional). If a colon (`:`) appears in the value, everything before it is treated as the compiler flags to use when compiling every file in the list that follows; everything after it is the file list. If no colon is present, the entire value is the file list and no extra flags are passed beyond LLGo's defaults.
 
 A bare file list, with no cflags segment:
@@ -84,7 +84,7 @@ Because `LLGoFiles` is an ordinary Go constant, it composes naturally with Go's 
 
 package embind
 
-const LLGoFiles = "_wrap/emval_darwin.mm"
+const LLGoFiles = "_wrap/emval_darwin.cpp"
 ```
 
 ```go
@@ -117,7 +117,7 @@ When LLGo builds a package that declares `LLGoFiles`:
 
 1. The declared value is parsed into an optional cflags segment and a file list, as described above.
 2. If the cflags segment contains a whitelisted command substitution, that command is run and its output is resolved into the literal flags for this build.
-3. Each listed file is compiled with the appropriate native compiler, selected by file extension (`clang` for `.c`, `clang++` for `.cpp`, `clang` in Objective-C mode for `.m`/`.mm`, and so on), passing it the resolved cflags.
+3. Each listed file is compiled with the appropriate native compiler, selected by file extension (`clang` for `.c`, `clang++` for `.cpp`/`.cc`/`.cxx`), passing it the resolved cflags.
 4. The resulting object code is linked into the same LLVM module / final binary as the package's Go-derived code.
 
 From the perspective of a consumer of the package, nothing changes: they still `import` it like any other Go package. `LLGoFiles` is purely a build-time instruction to the LLGo compiler.
@@ -132,9 +132,9 @@ From the perspective of a consumer of the package, nothing changes: they still `
 | Compiler flags | Via `#cgo CFLAGS`/`#cgo pkg-config` directives in the comment | Via the optional `<cflags>:` segment, including whitelisted `pkg-config`/`llvm-config` substitution |
 | C++ support | Partial, C-oriented | First-class |
 | Go-side syntax | `import "C"` + pseudo-package `C` | Unchanged; declared via `const LLGoFiles = ...` |
-| Native language support | C only | Any language clang/LLVM can compile, selected by file extension (C, C++, Objective-C, and beyond) |
+| Native language support | C only | C and C++, selected by file extension |
 
-LLGoFiles is not intended to replace cgo's `import "C"` mechanism for existing cgo code — LLGo continues to support that for compatibility with the official toolchain's behavior. LLGoFiles is offered as LLGo's own, additional mechanism for cases where genuine native source files, rather than inline snippets, are the natural fit. Because the mechanism is just "compile this file with the toolchain that understands its extension," it also extends more readily than cgo: adding support for a new native language is a matter of teaching the build step a new extension, not designing a new inline-embedding syntax. This matters in practice for platforms like Apple's, where wrapping system frameworks means binding against Objective-C, not just C/C++.
+LLGoFiles is not intended to replace cgo's `import "C"` mechanism for existing cgo code — LLGo continues to support that for compatibility with the official toolchain's behavior. LLGoFiles is offered as LLGo's own, additional mechanism for cases where genuine native source files, rather than inline snippets, are the natural fit. Because the mechanism is just "compile this file with the toolchain that understands its extension," it keeps native sources as ordinary files compiled with the matching C/C++ toolchain.
 
 ## Example
 
