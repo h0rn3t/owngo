@@ -713,17 +713,12 @@ func TestMatchGoVersion(t *testing.T) {
 	}
 }
 
-func TestMatchWindowsPlatform(t *testing.T) {
+func TestMatchPlatformExact(t *testing.T) {
 	for _, tt := range []struct {
 		want  string
 		got   string
 		match bool
 	}{
-		{want: "windows/amd64", got: "windows-msvc/amd64", match: true},
-		{want: "windows/amd64", got: "windows-mingw/amd64", match: true},
-		{want: "windows-msvc/amd64", got: "windows-msvc/amd64", match: true},
-		{want: "windows-msvc/amd64", got: "windows-mingw/amd64", match: false},
-		{want: "windows/arm64", got: "windows-msvc/amd64", match: false},
 		{want: "linux/amd64", got: "linux/amd64", match: true},
 	} {
 		if got := matchPlatform(tt.want, tt.got); got != tt.match {

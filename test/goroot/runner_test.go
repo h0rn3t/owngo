@@ -2411,10 +2411,6 @@ func matchPlatform(want, got string) bool {
 	case "W32-WASI":
 		return want == "wasip1/wasm"
 	}
-	if strings.HasPrefix(got, "windows-msvc/") || strings.HasPrefix(got, "windows-mingw/") {
-		_, arch, ok := strings.Cut(got, "/")
-		return ok && want == "windows/"+arch
-	}
 	return false
 }
 

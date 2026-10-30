@@ -416,3 +416,12 @@
 - Тригер закрито в `INTENT.md`. Профілі наново не знімались. Поріг 50% стоїть лише в гейті P6.5.
 - Лишилось: P6.1, `DecCyclic` під тегом `owngo`.
 
+
+## 2026-10-31 — видалення Windows-підтримки (поза PLAN.md)
+
+- За рішенням власника прибрано підтримку Windows (раніше вже прибрано Python-інтероп і звужено C-екосистему в README до C/C++): тільки Linux/macOS (і WASM/embedded цілі).
+- Код: видалено ~190 `*_windows.go`/`_wrap/*windows*`/windows-тестів і фікстур; ObjC-гілки cgo/LLGoFiles — раніше; `//llgo:stdcall` і `stdcall.`-namespace видалено повністю (`ssa/stdcall.go`, `CallConv.Stdcall`, валідатори, funcval/callback-адаптери, директива, тести); MSVC ABI (`arch_msvc.go`, `windows_vector.go`), `windows_toolchain.go`, `resolveWindowsToolchain`/`parseNativeToolchainInput`/`usesWindowsToolchainProfile`, `LowerWindowsVectorParams`, `lowerWindowsCgoImportPointers`, CodeView/PDB/COFF-гілки, `windows_target_triple`, `defaultAppExt` для windows тепер порожній.
+- CI: видалено windows-jobs/матриці/степи з `llgo/go/targets/benchmark/build-cache/doc/mise/pixi/installer-shells` workflow'ів, `release-build` windows-білди і `prepare-winget`/`submit-winget`, `winget.yml`, actions `setup-llvm-mingw`/`activate-windows-target`/`free-windows-disk`/`test-windows-cross` і windows-частини `setup-deps`/`setup-demo-deps`/`setup-go`/`setup-gdb`/`setup-binaryen`/`setup-embed-deps`/`setup-llgo-cache`, `.ps1`/windows-скрипти, `.github/windows/`, `install.ps1` + windows-гілки `install.sh` і його тестів, `WINDOWS.md`, windows-секції README/доків/`mise.toml`/`pixi.toml`/`.goreleaser.yaml`, 48 windows-записів `xfail.yaml`.
+- Контрактні CI-тести (`test_ci_workflows`, `test_run_go_tests`, `test_ci_policy`) оновлено під нову структуру; `dev/go_test_windows.sh` і windows-quarantine видалено.
+- Перевірено: `go build ./...` зелений; `go vet` чистий по всіх зачеплених пакетах; цільові `go test` зелені (`internal/build`, `cabi`, `crosscompile`, `clang`, `xtool/*`, `debuginfo`, `ssa`, `cl`, `test/go`, `test/cgo`, `test/goroot`, CI-скрипти, installer-тести).
+- Відомі залишки: `TestNativeDebugInfoPolicy/freebsd` падає і на чистому HEAD (pre-existing, не чіпали); `swiftself` в `closure_abi.go` — LLVM-атрибут ARM64, не підтримка Swift, лишено; COFF-константи типів лишено (мертві гілки без windows-цілей); `!windows` build-теги лишено як коректні.

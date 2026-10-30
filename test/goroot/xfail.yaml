@@ -1,5 +1,3 @@
-# Windows platform selectors may use windows/ARCH for both ABIs or the more
-# specific windows-msvc/ARCH and windows-mingw/ARCH forms.
 host_skips:
   - directive: run
     case: fixedbugs/issue16016.go
@@ -71,21 +69,6 @@ timeouts:
     case: fixedbugs/issue79186.go
     timeout: 90s
     reason: the 51.2 million-operation RWMutex stress loop needs load-dependent runtime slack
-  - platform: windows/amd64
-    directive: run
-    case: fixedbugs/issue79186.go
-    timeout: 90s
-    reason: the 51.2 million-operation RWMutex stress loop needs load-dependent runtime slack
-  - platform: windows/arm64
-    directive: run
-    case: fixedbugs/issue79186.go
-    timeout: 90s
-    reason: the 51.2 million-operation RWMutex stress loop needs load-dependent runtime slack
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/issue79186.go
-    timeout: 90s
-    reason: the 51.2 million-operation RWMutex stress loop needs load-dependent runtime slack
   - version: go1.26
     platform: darwin/arm64
     directive: run
@@ -98,52 +81,6 @@ timeouts:
     case: abi/uglyfib.go
     timeout: 1m
     reason: uglyfib runs close to the default timeout on loaded linux/amd64 runners
-  - platform: windows/386
-    directive: run
-    case: abi/uglyfib.go
-    timeout: 90s
-    reason: uglyfib can exceed the default timeout on loaded Windows 386 runners
-  - platform: windows/386
-    directive: runoutput
-    case: index0.go
-    timeout: 120s
-    reason: the generated index stress program passed in 93-95s on a hosted Windows 386 runner, exceeding the previous 90s budget
-  - version: go1.26
-    platform: windows/386
-    directive: run
-    case: fixedbugs/issue16037_run.go
-    timeout: 3m
-    reason: the test builds generated source with 5000 fields and getter methods at runtime; its LLGo artifact exceeded the default one-minute run limit on loaded Windows MSVC and MinGW 386 runners
-  - platform: windows/amd64
-    directive: run
-    case: fixedbugs/issue25897a.go
-    timeout: 90s
-    reason: the single-P continuous-GC loop needs load-dependent runtime slack on Windows amd64
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/issue25897a.go
-    timeout: 90s
-    reason: the single-P continuous-GC loop needs load-dependent runtime slack on Windows 386
-  - platform: windows/arm64
-    directive: run
-    case: fixedbugs/issue25897a.go
-    timeout: 90s
-    reason: the single-P continuous-GC loop needs load-dependent runtime slack on Windows ARM64
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/issue30041.go
-    timeout: 90s
-    reason: the continuous-GC and reflect.MakeFunc stress loop needs load-dependent runtime slack on Windows 386
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/issue39541.go
-    timeout: 2m
-    reason: the one-million reflect.MakeFunc loop passes isolated replays but exceeded 90s beside the paired Go-version compiler on Windows MSVC 386; retain a bounded run with all output and exit checks
-  - platform: windows/amd64
-    directive: run
-    case: fixedbugs/issue39541.go
-    timeout: 2m
-    reason: the one-million reflect.MakeFunc concurrent call loop exceeded the default minute on a paired Windows MSVC/amd64 runner; retain a bounded run with all output and exit checks
   - platform: darwin/amd64
     directive: runoutput
     case: rangegen.go
@@ -169,16 +106,6 @@ timeouts:
     case: rangegen.go
     timeout: 10m
     reason: rangegen generates a 6.4 MB compiler torture test; allow bounded build time while its 3 GiB heap target stays under the 4 GiB host guard
-  - platform: windows-mingw/amd64
-    directive: runoutput
-    case: rangegen.go
-    timeout: 10m
-    reason: both Go 1.26 and 1.27 generated builds exceeded the default 3m timeout on Windows MinGW/amd64, peaking at 3.3 GiB each; keep the case enabled with bounded build time
-  - platform: windows/arm64
-    directive: runoutput
-    case: rangegen.go
-    timeout: 10m
-    reason: the generated build still reached the 4 GiB guard with a 2 GiB Go heap target on Windows MSVC/ARM64; allow bounded build time with a case-local 1 GiB target while retaining the host resource guard
   - version: go1.26
     platform: linux/amd64
     directive: run
@@ -187,159 +114,6 @@ timeouts:
     reason: nosplit run runs past the default timeout on linux/amd64
 flakes:
 xfails:
-  - platform: windows/amd64
-    directive: run
-    case: fixedbugs/issue58300.go
-    reason: LLGo emits unexpected runtime output for the unsafe string conversion test on Windows amd64
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/bug114.go
-    reason: the Go baseline cannot build this case in the Windows 386 target environment
-  - platform: windows/386
-    directive: run
-    case: gcgort.go
-    reason: LLGo fails the concurrent GC stress test on Windows 386
-  - platform: windows/386
-    directive: run
-    case: printbig.go
-    reason: the Go baseline cannot build this large-constant case in the Windows 386 target environment
-  - platform: windows/386
-    directive: run
-    case: fixedbugs/issue23305.go
-    reason: the Go baseline cannot build this case in the Windows 386 target environment
-  - version: go1.27
-    platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue34968.go
-    reason: the Go 1.27 baseline cannot build this cgo checkptr case in the Windows MSVC 386 target environment
-  - version: go1.26
-    platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue34968.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC 386 target environment
-  - version: go1.26
-    platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue34968.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue34968.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC arm64 target environment
-  - version: go1.27
-    platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue47227.go
-    reason: the Go 1.27 baseline cannot build this cgo case in the Windows MSVC 386 target environment
-  - version: go1.26
-    platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue47227.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC 386 target environment
-  - version: go1.26
-    platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue47227.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue47227.go
-    reason: the Go 1.26 baseline cannot build runtime/cgo because Clang rejects -mthreads in the Windows MSVC arm64 target environment
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue40954.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue40954.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue40954.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue46903.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue46903.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue46903.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue51733.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue51733.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue51733.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/bug514.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/bug514.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/bug514.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue42032.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue42032.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue42032.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - platform: windows-msvc/386
-    directive: run
-    case: fixedbugs/issue42076.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC 386 target environment
-  - platform: windows-msvc/amd64
-    directive: run
-    case: fixedbugs/issue42076.go
-    reason: the Go baseline cannot build or run this cgo case in the Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: fixedbugs/issue42076.go
-    reason: Go 1.26 cgo passes the unsupported -mthreads flag to Clang/MSVC; Go 1.27 no longer does (golang/go#80290)
-  - version: go1.26
-    platform: windows-msvc/386
-    directive: run
-    case: linkmain_run.go
-    reason: the nested baseline go run exits unsuccessfully in the Go 1.26 Windows MSVC 386 target environment
-  - version: go1.26
-    platform: windows-msvc/amd64
-    directive: run
-    case: linkmain_run.go
-    reason: the nested baseline go run exits unsuccessfully in the Go 1.26 Windows MSVC amd64 target environment
-  - version: go1.26
-    platform: windows-msvc/arm64
-    directive: run
-    case: linkmain_run.go
-    reason: the nested baseline go run exits unsuccessfully in the Go 1.26 Windows MSVC arm64 target environment
   - directive: errorcheck
     case: fixedbugs/issue4776.go
     reason: llgo parser uses a different missing-package-clause diagnostic
