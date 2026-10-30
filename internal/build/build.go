@@ -560,6 +560,7 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	if err != nil {
 		return nil, err
 	}
+	applyOwngoTag(conf)
 	// Keep child Go invocations (notably cmptest's baseline) on the same
 	// architecture level as the LLVM build. GOOS/GOARCH retain their existing
 	// per-command handling.
@@ -1560,6 +1561,18 @@ func cSharedImportLibraryArgs(toolchain crosscompile.NativeToolchain, output str
 	// import library.
 	imports := strings.TrimSuffix(output, filepath.Ext(output)) + ".lib"
 	return []string{"-Xlinker", "--out-implib", "-Xlinker", imports}
+}
+
+// applyOwngoTag вибирає файли рантайму nogc, коли заданий тег owngo.
+func applyOwngoTag(conf *Config) {
+	tags := splitSourcePatchBuildTags(conf.Tags)
+	if !slices.Contains(tags, "owngo") || slices.Contains(tags, "nogc") {
+		return
+	}
+	if conf.Tags != "" {
+		conf.Tags += ","
+	}
+	conf.Tags += "nogc"
 }
 
 // DefaultBuildTags returns the build tags LLGo always enables.
