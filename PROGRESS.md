@@ -475,3 +475,14 @@
 - Прийняття, з кореня, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `go run ./cmd/llgo run -tags owngo ./owngo/bytes/ring` — код 0, `owngo freed 576`, рядка `live cyclic` немає. `./owngo/bytes/ringheld` — код 0, `owngo freed 544`, `owngo live cyclic 32`. Різниця — 32 байти, два вузли. Числа в `owngo/REPORT-PHASE6.md` поруч із 1 528 993 142 байтами, 66.9% приписаної купи і 20.8% профілю. Поріг 50% не застосований. Профілі наново не знімались. M:N без змін.
 - `gofmt -l` порожньо, `go vet` з тегом `owngo` і без — без зауважень, `golangci-lint --new-from-rev HEAD` (також `--build-tags owngo`) — 0 зауважень.
 - Лишилось: P6.4, ASan на кільці.
+
+## 2026-10-30 — P6.4
+
+- Компілятор не змінювався. `-asan` і `-O0` ті самі, що в P4.3. Фікстури будують кільце двох вузлів так само, як прохід: `AllocCounted` з обнуленням, `Inc` на кожен запис у `next`, і кличуть `DecCyclic` з дескриптором `{16, [{0, self}]}` явно.
+- `owngo/asan/ringuaf`: два `DecCyclic` звільняють кільце, потім читається `a.val`. `owngo/asan/ringlive`: додатковий `Inc` на `a` тримає кільце; обидві спроби відновлюють слова, вузли й поля `next` цілі.
+- Прийняття, з кореня, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`, `ASAN_OPTIONS=detect_leaks=0` (на Linux LeakSanitizer інакше звітує витоки без GC):
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/ringuaf` — код 1. У виводі `ERROR: AddressSanitizer: heap-use-after-free`, звільнення — `runtime.FreeRoot` з `runtime.DecCyclic`, `SUMMARY: AddressSanitizer: heap-use-after-free .../owngo/asan/ringuaf/main.go:58:12`. Раннер загортає abort у `exit status 1`.
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/ringlive` — код 0, `asan-ringlive-ok`, тексту AddressSanitizer немає.
+- `gofmt -l` порожньо, `go vet` з тегом `owngo` і без — без зауважень, `golangci-lint --new-from-rev HEAD` (також `--build-tags owngo`) — 0 зауважень.
+- Частка 1 528 993 142 байтів лишається фактом заміру. Поріг 50% не застосований. M:N без змін.
+- Лишилось: P6.5, свіжий результат у зведенні.
