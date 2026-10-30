@@ -467,3 +467,11 @@
 - Census v1: `&Tree{...}` і `&Tree{}` у `NewTree` — `cyclic: return`; `longLivedTree` — `cyclic: go`; `WaitGroup`, `outBuff`, замикання — `rc-shared: go`; масиви аргументів `Sprintf` — `static`. Дерева в горутинах — результати `NewTree`, тож без власника у викликача їх ніхто не звільняє.
 - Задачі: P6.5 свіжий результат у зведенні (крім пакетів рантайму llgo), P6.6 власник свіжого результату у викликача і переміщення в поле без `Inc`, P6.7 ознака запису параметра для викликів на кшталт `Count`, P6.8 `DecCyclic` без рекурсії, P6.9 сама програма: вивід побайтно, пікова RSS ≤ 1 GiB, звіт поруч із `go` і llgo.
 - Лишилось: P6.3, байти кільця.
+
+## 2026-10-30 — P6.3
+
+- Компілятор не змінювався: P6.2 уже ставить `AllocCounted`, `Inc` і `DecCyclic`, а `NoteAlloc` і `DecCyclic` ведуть облік з `CatCyclic`.
+- `owngo/bytes/ring`: локальне кільце двох вузлів `node{next *node; val int}` звільняє 32 байти користувача, `live cyclic` не змінюється. `owngo/bytes/ringheld`: те саме кільце передане в `func(*node)` — `cyclic: shared`, `freed` не змінюється, 32 байти в `live cyclic`.
+- Прийняття, з кореня, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `go run ./cmd/llgo run -tags owngo ./owngo/bytes/ring` — код 0, `owngo freed 576`, рядка `live cyclic` немає. `./owngo/bytes/ringheld` — код 0, `owngo freed 544`, `owngo live cyclic 32`. Різниця — 32 байти, два вузли. Числа в `owngo/REPORT-PHASE6.md` поруч із 1 528 993 142 байтами, 66.9% приписаної купи і 20.8% профілю. Поріг 50% не застосований. Профілі наново не знімались. M:N без змін.
+- `gofmt -l` порожньо, `go vet` з тегом `owngo` і без — без зауважень, `golangci-lint --new-from-rev HEAD` (також `--build-tags owngo`) — 0 зауважень.
+- Лишилось: P6.4, ASan на кільці.
