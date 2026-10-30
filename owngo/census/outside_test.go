@@ -170,3 +170,89 @@ Mappings
 			gotObjects, gotBytes, stdlib.Objects, stdlib.Bytes)
 	}
 }
+
+func TestExternalModulesEmpty(t *testing.T) {
+	got := ExternalModules(nil, nil, "", "")
+	if got == nil || len(got) != 0 {
+		t.Errorf("ExternalModules(nil, nil) = %#v, want empty slice", got)
+	}
+}
+
+func TestExternalModules(t *testing.T) {
+	const (
+		module = "/app"
+		goroot = "/goroot"
+	)
+	raw := `
+Samples:
+alloc_objects/count alloc_space/bytes
+         10        100: 1
+          4         40: 2
+          3         30: 3
+          2         20: 4
+          5         50: 5
+          6         60: 6
+          1         15: 7
+          8         80: 8
+          9          9: 9
+          0          0: 1
+         12         12: 10
+          7         70: 11
+          1         11: 12
+Locations
+     1: 0x1 M=1 mod.F /Users/x/go/pkg/mod/github.com/foo/bar@v1.2.3/a.go:1:0 s=1
+     2: 0x2 M=1 mod.F /Users/x/go/pkg/mod/github.com/foo/bar@v1.2.4/b.go:2:0 s=1
+     3: 0x3 M=1 yaml.F /Users/x/go/pkg/mod/gopkg.in/yaml.v3@v3.0.1/yaml.go:3:0 s=1
+     4: 0x4 M=1 null.F /Users/x/go/pkg/mod/github.com/guregu/null@v4.0.0+incompatible/null.go:4:0 s=1
+     5: 0x5 M=1 local.F /opt/other/local/mod.go:5:0 s=1
+     6: 0x6 M=1 plain.F /Users/x/go/pkg/mod/github.com/plain/mod/file.go:6:0 s=1
+     7: 0x7 M=1 mock.F /Users/x/go/pkg/mod/github.com/!d!a!t!a-!d!o!g/go-sqlmock@v1.5.2/sqlmock.go:7:0 s=1
+     8: 0x8 M=1 runtime.mallocgc /goroot/src/runtime/malloc.go:8:0 s=1
+             sys.F /Users/x/go/pkg/mod/golang.org/x/sys@v0.0.0-20240101120000-abcdef012345/unix/sys.go:8:0 s=1
+     9: 0x9 M=1 dep.TestF /Users/x/go/pkg/mod/github.com/foo/bar@v1.2.3/a_test.go:9:0 s=1
+    10: 0xa M=1 runtime.mallocgc /goroot/src/runtime/malloc.go:8:0 s=1
+             app.hit /app/hit.go:4:0 s=1
+    11: 0xb M=1 fmt.Sprintf /goroot/src/fmt/print.go:11:0 s=1
+    12: 0xc M=1 vend.F /opt/vendor/foo@v1.0.0/a.go:12:0 s=1
+Mappings
+`
+	samples, err := ParseAllocProfile(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseAllocProfile() error = %v, want nil", err)
+	}
+	sites := []Site{{Category: "static", Pos: module + "/hit.go:4"}}
+	got := ExternalModules(sites, samples, module, goroot)
+	want := []Weight{
+		{Category: "github.com/foo/bar", Objects: 14, Bytes: 140},
+		{Category: OutsideUncached, Objects: 12, Bytes: 121},
+		{Category: "golang.org/x/sys", Objects: 8, Bytes: 80},
+		{Category: "gopkg.in/yaml.v3", Objects: 3, Bytes: 30},
+		{Category: "github.com/guregu/null", Objects: 2, Bytes: 20},
+		{Category: "github.com/!d!a!t!a-!d!o!g/go-sqlmock", Objects: 1, Bytes: 15},
+	}
+	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
+		t.Errorf("ExternalModules(profile) = %#v, want %#v", got, want)
+	}
+
+	var gotObjects, gotBytes int64
+	for _, weight := range got {
+		gotObjects += weight.Objects
+		gotBytes += weight.Bytes
+	}
+	var external Weight
+	var found bool
+	for _, weight := range Outside(sites, samples, module, goroot) {
+		if weight.Category != OutsideExternal {
+			continue
+		}
+		found = true
+		external = weight
+	}
+	if !found {
+		t.Fatalf("Outside external missing, ExternalModules sum = %d objects, %d bytes", gotObjects, gotBytes)
+	}
+	if gotObjects != external.Objects || gotBytes != external.Bytes {
+		t.Errorf("ExternalModules sum = %d objects, %d bytes, want Outside external %d, %d",
+			gotObjects, gotBytes, external.Objects, external.Bytes)
+	}
+}

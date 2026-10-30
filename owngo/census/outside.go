@@ -20,6 +20,8 @@ const (
 	// OutsideModule — вибірка поза census у нетестовому файлі каталогу -dir:
 	// рядок не збігся з місцем.
 	OutsideModule = "module"
+	// OutsideUncached — вибірка рядка поза -dir, з шляху якої модуль не читається.
+	OutsideUncached = "поза кешем"
 )
 
 // Outside розкладає вибірки, які Weigh лишає поза census.
@@ -89,6 +91,48 @@ func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot strin
 	return out
 }
 
+// ExternalModules розкладає вибірки, які Outside кладе в модулі поза -dir,
+// за шляхом модуля. З елемента pkg/mod знімається суфікс @версія.
+// Шлях, з якого модуль не читається, лишається рядком поза кешем і входить у суму.
+// Кадр пакета runtime провалюється так само, як у Outside.
+// Модулі впорядковано за спаданням байтів, потім об'єктів, потім імені.
+// Немає таких вибірок — порожній зріз, не nil.
+// Сума об'єктів і байтів дорівнює рядку OutsideExternal.
+// Завантаження модулів з мережі не виконується.
+func ExternalModules(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
+	count := map[string][2]int64{}
+	walkOutside(sites, samples, moduleDir, goroot, func(kind, file string, objects, bytes int64) {
+		if kind != OutsideExternal {
+			return
+		}
+		mod, ok := modulePath(file)
+		if !ok {
+			mod = OutsideUncached
+		}
+		cur := count[mod]
+		cur[0] += objects
+		cur[1] += bytes
+		count[mod] = cur
+	})
+	out := []Weight{}
+	for mod, cur := range count {
+		if cur[0] == 0 && cur[1] == 0 {
+			continue
+		}
+		out = append(out, Weight{Category: mod, Objects: cur[0], Bytes: cur[1]})
+	}
+	slices.SortFunc(out, func(a, b Weight) int {
+		if c := cmp.Compare(b.Bytes, a.Bytes); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(b.Objects, a.Objects); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Category, b.Category)
+	})
+	return out
+}
+
 func stdlibImport(file, goroot string) string {
 	rel, err := filepath.Rel(filepath.Join(goroot, "src"), file)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -99,6 +143,40 @@ func stdlibImport(file, goroot string) string {
 		return ""
 	}
 	return filepath.ToSlash(dir)
+}
+
+// modulePath читає шлях модуля з елемента pkg/mod без суфікса @версія і повертає false, якщо елемента немає.
+func modulePath(file string) (string, bool) {
+	parts := strings.Split(filepath.ToSlash(file), "/")
+	at := -1
+	for i, part := range parts {
+		if strings.Contains(part, "@") {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return "", false
+	}
+	mod := -1
+	for i := at - 1; i >= 1; i-- {
+		if parts[i] == "mod" && parts[i-1] == "pkg" {
+			mod = i
+			break
+		}
+	}
+	if mod < 0 {
+		return "", false
+	}
+	name, ver, ok := strings.Cut(parts[at], "@")
+	if !ok || name == "" || ver == "" {
+		return "", false
+	}
+	elems := slices.Concat(parts[mod+1:at], []string{name})
+	if slices.Contains(elems, "") {
+		return "", false
+	}
+	return strings.Join(elems, "/"), true
 }
 
 func walkOutside(sites []Site, samples []AllocSample, moduleDir, goroot string, fn func(kind, file string, objects, bytes int64)) {

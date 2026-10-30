@@ -227,3 +227,162 @@
 | iter | 1 | 0.0 | 16 | 0.0 |
 | weak | 1 | 0.0 | 16 | 0.0 |
 | разом | 63804 | 100.0 | 114923904 | 100.0 |
+
+## P2.2 Модулі поза `-dir`
+
+`ExternalModules` бере вибірку, яку `Outside` кладе в модулі поза `-dir`, і називає її шляхом модуля. З елемента `pkg/mod` знімається суфікс `@версія`: `github.com/foo/bar@v1.2.3` і `github.com/foo/bar@v1.2.4` — один модуль `github.com/foo/bar`. Шлях, з якого модуль не читається, лишається рядком `поза кешем` і входить у суму. Кадр пакета `runtime` провалюється, як у `Outside`. Літера `!` у каталозі кеша лишається в імені: знімається лише суфікс версії. Завантаження модулів з мережі не виконується. Відсоток ділить на байти цього рядка. Округлення до одного знака, як у `FormatWeights`.
+
+Байтів поза `-dir` по сервісах ті самі, що в таблиці P1.1. Сума модулів дорівнює рядку.
+
+| Сервіс | Байти поза `-dir` |
+| --- | ---: |
+| ms-zv | 22480840 |
+| ms-ap | 29392232 |
+| ms-notifications | 89601392 |
+| ms-users | 557011728 |
+| ms-gateway | 742442696 |
+| ms-export | 241392096 |
+| ms-reference-book | 18278416 |
+| ms-files | 59750000 |
+| ms-events | 25652288 |
+| ms-search | 66219600 |
+| ms-companies | 132297632 |
+| ms-auth | 927504 |
+| ms-ved | 47479752 |
+| ms-converter | 128240824 |
+| ms-public | 27875184 |
+| ms-settings | 8477976 |
+| ms-sync | 27818752 |
+| 17 сервісів | 2225338912 |
+| ms-faq | 44337552 |
+
+На 17 сервісах 96 модулів, 6 868 063 об'єкти і 2 225 338 912 байтів. Найбільші — `gopkg.in/yaml.v3` (725 650 128, 32.6%), `golang.org/x/crypto` (524 339 152, 23.6%) і `go.elastic.co/apm/v2` (482 555 088, 21.7%). Разом 1 732 544 368 байтів, 77.9% рядка. `поза кешем` — 87 480 байтів, 0.0% рядка.
+
+| Модуль | Об'єкти | % об'єктів | Байти | % байтів |
+| --- | ---: | ---: | ---: | ---: |
+| gopkg.in/yaml.v3 | 3472215 | 50.6 | 725650128 | 32.6 |
+| golang.org/x/crypto | 466 | 0.0 | 524339152 | 23.6 |
+| go.elastic.co/apm/v2 | 30192 | 0.4 | 482555088 | 21.7 |
+| github.com/xuri/excelize/v2 | 899285 | 13.1 | 192681456 | 8.7 |
+| github.com/go-pdf/fpdf | 89565 | 1.3 | 88464120 | 4.0 |
+| github.com/elastic/go-sysinfo | 6272 | 0.1 | 51226880 | 2.3 |
+| gorm.io/gorm | 845417 | 12.3 | 47301584 | 2.1 |
+| github.com/xuri/nfp | 986938 | 14.4 | 37395744 | 1.7 |
+| github.com/valyala/bytebufferpool | 1607 | 0.0 | 18224328 | 0.8 |
+| github.com/gofiber/fiber/v3 | 125097 | 1.8 | 16384568 | 0.7 |
+| github.com/carlos7ags/folio | 188014 | 2.7 | 14520408 | 0.7 |
+| github.com/valyala/fasthttp | 21339 | 0.3 | 3398896 | 0.2 |
+| go.temporal.io/sdk | 17156 | 0.2 | 2337584 | 0.1 |
+| github.com/andybalholm/brotli | 24 | 0.0 | 2160384 | 0.1 |
+| google.golang.org/protobuf | 4679 | 0.1 | 2106984 | 0.1 |
+| github.com/!d!a!t!a-!d!o!g/go-sqlmock | 26102 | 0.4 | 2046640 | 0.1 |
+| go.temporal.io/api | 279 | 0.0 | 1314088 | 0.1 |
+| github.com/goccy/go-json | 9982 | 0.1 | 1178552 | 0.1 |
+| github.com/stretchr/testify | 20291 | 0.3 | 1168272 | 0.1 |
+| github.com/jackc/pgx/v5 | 3437 | 0.1 | 1119832 | 0.1 |
+| go.elastic.co/fastjson | 2330 | 0.0 | 1084336 | 0.0 |
+| gorm.io/driver/postgres | 12908 | 0.2 | 928856 | 0.0 |
+| golang.org/x/text | 4792 | 0.1 | 854888 | 0.0 |
+| github.com/mattn/go-sqlite3 | 17705 | 0.3 | 806384 | 0.0 |
+| github.com/flosch/pongo2/v7 | 4605 | 0.1 | 675824 | 0.0 |
+| github.com/ilyakaznacheev/cleanenv | 4859 | 0.1 | 624024 | 0.0 |
+| go.yaml.in/yaml/v3 | 5476 | 0.1 | 588952 | 0.0 |
+| howett.net/plist | 11592 | 0.2 | 494336 | 0.0 |
+| github.com/go-playground/validator/v10 | 3166 | 0.0 | 425096 | 0.0 |
+| github.com/go-resty/resty/v2 | 3352 | 0.0 | 374296 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/apicore | 6377 | 0.1 | 281568 | 0.0 |
+| github.com/google/uuid | 8123 | 0.1 | 271152 | 0.0 |
+| gorm.io/driver/sqlite | 3011 | 0.0 | 190160 | 0.0 |
+| github.com/caarlos0/env/v11 | 597 | 0.0 | 188224 | 0.0 |
+| github.com/wk8/go-ordered-map/v2 | 5467 | 0.1 | 183752 | 0.0 |
+| github.com/caarlos0/env/v10 | 501 | 0.0 | 172944 | 0.0 |
+| github.com/minio/minio-go/v7 | 2001 | 0.0 | 162392 | 0.0 |
+| github.com/gofiber/schema | 1457 | 0.0 | 151800 | 0.0 |
+| go.uber.org/goleak | 19 | 0.0 | 132320 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/fiber/v3/xuser | 1026 | 0.0 | 116816 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/time | 2846 | 0.0 | 96488 | 0.0 |
+| golang.org/x/net | 8 | 0.0 | 92720 | 0.0 |
+| github.com/bahlo/generic-list-go | 1858 | 0.0 | 87920 | 0.0 |
+| поза | 3452 | 0.1 | 87480 | 0.0 |
+| github.com/tiendc/go-deepcopy | 1634 | 0.0 | 67384 | 0.0 |
+| github.com/jinzhu/now | 1212 | 0.0 | 64640 | 0.0 |
+| golang.org/x/sys | 1558 | 0.0 | 56744 | 0.0 |
+| github.com/redis/go-redis/v9 | 160 | 0.0 | 55152 | 0.0 |
+| github.com/golang/mock | 666 | 0.0 | 51848 | 0.0 |
+| github.com/pbnjay/grate | 795 | 0.0 | 42000 | 0.0 |
+| google.golang.org/grpc | 657 | 0.0 | 30264 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/error-provider | 500 | 0.0 | 26984 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/fiber/v3/error-provider | 740 | 0.0 | 26840 | 0.0 |
+| go.elastic.co/apm/module/apmhttp/v2 | 279 | 0.0 | 24952 | 0.0 |
+| github.com/tinylib/msgp | 70 | 0.0 | 22400 | 0.0 |
+| golang.org/x/sync | 261 | 0.0 | 21344 | 0.0 |
+| github.com/lib/pq | 101 | 0.0 | 20232 | 0.0 |
+| go.elastic.co/apm/module/apmfasthttp/v2 | 521 | 0.0 | 20080 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/fiber/v3/apmfiber | 414 | 0.0 | 19352 | 0.0 |
+| github.com/facebookgo/clock | 279 | 0.0 | 19248 | 0.0 |
+| github.com/emersion/go-message | 164 | 0.0 | 18664 | 0.0 |
+| github.com/samber/lo | 403 | 0.0 | 16064 | 0.0 |
+| github.com/gofiber/utils/v2 | 290 | 0.0 | 7872 | 0.0 |
+| github.com/golang-jwt/jwt/v5 | 67 | 0.0 | 7808 | 0.0 |
+| github.com/h0rn3t/docx2pdf | 32 | 0.0 | 7088 | 0.0 |
+| gorm.io/datatypes | 219 | 0.0 | 6648 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/redyska | 218 | 0.0 | 6008 | 0.0 |
+| github.com/klauspost/compress | 2 | 0.0 | 5376 | 0.0 |
+| github.com/pkg/errors | 57 | 0.0 | 4960 | 0.0 |
+| github.com/gogo/protobuf | 4 | 0.0 | 4960 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/http | 103 | 0.0 | 4616 | 0.0 |
+| github.com/shopspring/decimal | 143 | 0.0 | 4528 | 0.0 |
+| github.com/jinzhu/inflection | 1 | 0.0 | 4096 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/fiber/v3/store/redyska | 154 | 0.0 | 3696 | 0.0 |
+| go.elastic.co/apm/module/apmsql/v2 | 99 | 0.0 | 3624 | 0.0 |
+| github.com/jackc/puddle/v2 | 45 | 0.0 | 2584 | 0.0 |
+| github.com/grpc-ecosystem/grpc-gateway/v2 | 17 | 0.0 | 2144 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/try | 58 | 0.0 | 2048 | 0.0 |
+| github.com/avast/retry-go/v4 | 30 | 0.0 | 1600 | 0.0 |
+| github.com/joho/godotenv | 22 | 0.0 | 1560 | 0.0 |
+| github.com/shakinm/xls!reader | 56 | 0.0 | 1264 | 0.0 |
+| github.com/armon/go-radix | 22 | 0.0 | 1016 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/env | 50 | 0.0 | 800 | 0.0 |
+| google.golang.org/genproto/googleapis/api | 1 | 0.0 | 768 | 0.0 |
+| go.elastic.co/apm/module/apmgormv2/v2 | 12 | 0.0 | 448 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/gorm/apmdriver | 10 | 0.0 | 352 | 0.0 |
+| github.com/bsm/redislock | 9 | 0.0 | 240 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/gorm | 7 | 0.0 | 224 | 0.0 |
+| github.com/grpc-ecosystem/go-grpc-middleware/v2 | 6 | 0.0 | 192 | 0.0 |
+| github.com/guregu/null | 11 | 0.0 | 176 | 0.0 |
+| go.opentelemetry.io/otel/trace | 5 | 0.0 | 176 | 0.0 |
+| github.com/r3labs/diff/v3 | 3 | 0.0 | 160 | 0.0 |
+| github.com/pquerna/otp | 5 | 0.0 | 96 | 0.0 |
+| github.com/gabriel-vasile/mimetype | 1 | 0.0 | 96 | 0.0 |
+| github.com/mattn/go-colorable | 3 | 0.0 | 48 | 0.0 |
+| github.com/guregu/null/v5 | 2 | 0.0 | 32 | 0.0 |
+| разом | 6868063 | 100.0 | 2225338912 | 100.0 |
+
+У `ms-faq` 23 модулі, 22 513 об'єктів і 44 337 552 байти. `go.elastic.co/apm/v2` тримає 34 972 800 байтів, 78.9% рядка. `поза кешем` — 864 байти.
+
+| Модуль | Об'єкти | % об'єктів | Байти | % байтів |
+| --- | ---: | ---: | ---: | ---: |
+| go.elastic.co/apm/v2 | 2179 | 9.7 | 34972800 | 78.9 |
+| github.com/elastic/go-sysinfo | 507 | 2.3 | 7158848 | 16.1 |
+| github.com/gofiber/fiber/v3 | 10380 | 46.1 | 1382888 | 3.1 |
+| github.com/valyala/fasthttp | 2560 | 11.4 | 372384 | 0.8 |
+| gorm.io/gorm | 4313 | 19.2 | 207224 | 0.5 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/ext/fiber/v3/xuser | 694 | 3.1 | 84768 | 0.2 |
+| go.elastic.co/fastjson | 160 | 0.7 | 72480 | 0.2 |
+| howett.net/plist | 882 | 3.9 | 37728 | 0.1 |
+| github.com/valyala/bytebufferpool | 144 | 0.6 | 9248 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/error-provider | 152 | 0.7 | 8464 | 0.0 |
+| gorm.io/driver/postgres | 88 | 0.4 | 7216 | 0.0 |
+| github.com/gofiber/utils/v2 | 131 | 0.6 | 6160 | 0.0 |
+| github.com/google/uuid | 180 | 0.8 | 5824 | 0.0 |
+| golang.org/x/text | 1 | 0.0 | 3456 | 0.0 |
+| github.com/klauspost/compress | 1 | 0.0 | 2688 | 0.0 |
+| go.elastic.co/apm/module/apmhttp/v2 | 30 | 0.1 | 1920 | 0.0 |
+| поза | 18 | 0.1 | 864 | 0.0 |
+| go.elastic.co/apm/module/apmgormv2/v2 | 22 | 0.1 | 792 | 0.0 |
+| go.elastic.co/apm/module/apmfasthttp/v2 | 24 | 0.1 | 688 | 0.0 |
+| go.elastic.co/apm/module/apmsql/v2 | 22 | 0.1 | 616 | 0.0 |
+| github.com/jackc/pgx/v5 | 12 | 0.1 | 288 | 0.0 |
+| gitlab.datahub.ua.energy/tko/dhcore-go/env | 8 | 0.0 | 128 | 0.0 |
+| github.com/lib/pq | 5 | 0.0 | 80 | 0.0 |
+| разом | 22513 | 100.0 | 44337552 | 100.0 |
