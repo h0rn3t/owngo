@@ -104,7 +104,7 @@ jobs:
       - uses: ./.github/actions/setup-gdb
       - name: Install Linux emulator and LLDB
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y qemu-system-arm lldb-22
+        run: sudo apt-get install -y qemu-system-arm lldb-23
       - name: Install macOS emulator
         if: runner.os == 'macOS'
         run: brew install qemu

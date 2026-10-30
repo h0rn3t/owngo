@@ -372,12 +372,13 @@ runs:
           throw "llvm-config failed to report the Windows system libraries"
         }
         $systemLibNames = ($systemLibOutput -split '\s+') |
-          Where-Object { $_ -and ($_ -notin @("libxml2s.lib", "xml2s.lib")) }
+          Where-Object { $_ -and ($_ -notin @("libxml2s.lib", "xml2s.lib", "zs.lib", "zstd_static.lib")) }
         # The official archives have reported both libxml2s and xml2s for
         # optional XML-backed Windows-manifest support without shipping that
-        # library. The LLVM Go bindings do not use that component; retaining
-        # it would make every host compiler depend on an unrelated third-party
-        # archive.
+        # library. LLVM 23 also reports static zstd import libraries that the
+        # archive does not ship. The LLVM Go bindings do not use those
+        # components; retaining them would make every host compiler depend on
+        # unrelated third-party archives.
         $libraryFlags = (@($llvmLibNames) + @($systemLibNames)) | ForEach-Object {
           if (-not $_.EndsWith(".lib", [StringComparison]::OrdinalIgnoreCase)) {
             throw "llvm-config reported an unsupported Windows library argument: $_"
