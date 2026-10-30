@@ -19,9 +19,9 @@ import ci_policy
 WORKFLOWS = Path(__file__).resolve().parents[1] / "workflows"
 PREPARE = "./.github/workflows/ci-prepare.yml"
 CODE_WORKFLOWS = {
-    "llgo.yml": 21, "go.yml": 6, "targets.yml": 4, "build-cache.yml": 4,
-    "benchmark.yml": 9, "release-build.yml": 24, "doc.yml": 6, "fmt.yml": 1,
-    "mise.yml": 5, "pixi.yml": 5,
+    "llgo.yml": 11, "go.yml": 4, "targets.yml": 3, "build-cache.yml": 2,
+    "benchmark.yml": 3, "release-build.yml": 8, "doc.yml": 4, "fmt.yml": 1,
+    "mise.yml": 4, "pixi.yml": 4,
 }
 BOOTSTRAP_RUNNER_JOBS = {
     ("ci-prepare.yml", "prepare"), ("ci-policy.yml", "policy"),
@@ -130,35 +130,6 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(step["env"]["LLGO_TEST_EXTENDED_ABI"],
                          "${{ runner.os == 'Linux' && '1' || '0' }}")
 
-    def test_gdb_windows_acceptance_covers_both_abis_and_all_native_architectures(self):
-        job = load("llgo.yml")["jobs"]["llgo"]
-        entries = job["strategy"]["matrix"]["include"]
-        windows = {(entry["windows_abi"], entry["windows_arch"])
-                   for entry in entries if entry["os"].startswith("windows")}
-        self.assertEqual(windows, {(abi, arch) for abi in ("msvc", "mingw")
-                                   for arch in ("amd64", "386", "arm64")})
-        steps = job["steps"]
-        install = next(step for step in steps
-                       if step.get("name") == "Install Windows GDB")
-        test = next(step for step in steps
-                    if step.get("name") == "GDB native values and registry (Windows)")
-        self.assertEqual(install["if"], "runner.os == 'Windows'")
-        self.assertEqual(test["if"], "runner.os == 'Windows'")
-        self.assertNotIn("continue-on-error", test)
-        self.assertEqual(test["env"]["LLGO_GDB_INTEGRATION"], "1")
-        # Its isolated MSYS2 setup changes the shell helper: it belongs after
-        # all existing LLDB/host-shell gates, not before target qualification.
-        shell_tests = [index for index, step in enumerate(steps)
-                       if step.get("name", "").startswith(("LLDB integration", "Test from the"))]
-        self.assertGreater(steps.index(install), max(shell_tests))
-        complete = next(step for step in steps
-                        if step.get("name") == "GDB complete worker unwind (Windows amd64 and 386)")
-        self.assertEqual(complete["if"], "runner.os == 'Windows' && matrix.windows_arch != 'arm64'")
-        self.assertIn("^TestGDBCompleteWorkerUnwind$", complete["run"])
-        self.assertNotIn("continue-on-error", complete)
-        linux = next(step for step in steps
-                     if step.get("name") == "GDB values, registry and complete worker unwind (Linux)")
-        self.assertIn("^TestGDB(Integration|CompleteWorkerUnwind)$", linux["run"])
 
     def test_intel_macos_runs_both_native_debuggers(self):
         job = load("llgo.yml")["jobs"]["native-debuggers-intel"]
@@ -189,10 +160,9 @@ class WorkflowContractTests(unittest.TestCase):
     def test_go_suite_scheduling_preserves_overlays_and_propagates_failures(self):
         step = next(step for step in load("go.yml")["jobs"]["test"]["steps"]
                     if step.get("id") == "test_coverage")
-        script = step["run"].replace("${{ matrix.windows_abi }}", "msvc")
-        scenarios = [("Linux", "", ""), ("macOS", "", ""), ("Windows", "", ""),
-                     ("Windows", "C:/runner temp/runtime-overlay.json", "")]
-        scenarios += [(runner, "", suite) for runner in ("Linux", "macOS", "Windows")
+        script = step["run"]
+        scenarios = [("Linux", "", ""), ("macOS", "", "")]
+        scenarios += [(runner, "", suite) for runner in ("Linux", "macOS")
                       for suite in ("main", "build", "compiler", "language")]
         for runner, overlay, failure in scenarios:
             with self.subTest(runner=runner, overlay=overlay, failure=failure), tempfile.TemporaryDirectory() as directory:
@@ -232,7 +202,6 @@ else:
 """)
                 fake_go.chmod(0o755)
                 (root / "dev").mkdir()
-                (root / "dev/go_test_windows.sh").write_text('exec "$@"\n')
                 helper = root / ".github/scripts/run_go_tests.py"
                 helper.parent.mkdir(parents=True)
                 shutil.copyfile(WORKFLOWS.parent / "scripts/run_go_tests.py", helper)
@@ -293,35 +262,15 @@ sys.exit(subprocess.call(command + ['./internal/build']))
                     self.assertIn("-coverprofile=coverage-build.txt", build)
                     self.assertIn("-coverpkg=./...", build)
                     self.assertEqual(sum("./internal/build" in args for args in calls), 1)
-                    self.assertEqual(any(arg.startswith("-ldflags=-linkmode=external") for arg in build),
-                                     runner == "Windows")
                 self.assertFalse(any("github.com/xgo-dev/llgo/internal/build" in args
                                      for args in calls))
                 self.assertTrue(all("-json" in args for args in calls))
 
-    def test_cross_host_windows_checks_keep_every_host_target_pair(self):
-        job = load("llgo.yml")["jobs"]["windows-gnu-cross"]
-        entries = job["strategy"]["matrix"]["include"]
-        checks = [step for step in job["steps"]
-                  if step.get("uses") == "./.github/actions/test-windows-cross"]
-        actual = set()
-        for entry in entries:
-            for step in checks:
-                arch = step["with"]["windows-arch"]
-                if entry["windows_arch"] in {"all", arch}:
-                    actual.add((entry["os"], arch))
-                self.assertIn("!cancelled()", step["if"])
-                self.assertIn("steps.host_compiler.outcome == 'success'", step["if"])
-                self.assertIn(f"matrix.windows_arch == '{arch}'", step["if"])
-                self.assertNotIn("continue-on-error", step)
-        self.assertEqual(actual, {(host, arch) for host in ("ubuntu-24.04", "macos-latest")
-                                  for arch in ("amd64", "arm64", "386")})
-        self.assertEqual(sum(entry["os"] == "macos-latest" for entry in entries), 1)
 
     def test_embedded_debuggers_share_setup_without_losing_backend_failures(self):
         job = load("targets.yml")["jobs"]["embedded-debug"]
         self.assertCountEqual(job["strategy"]["matrix"]["os"],
-                              ["ubuntu-24.04", "macos-15", "windows-2022"])
+                              ["ubuntu-24.04", "macos-15"])
         self.assertNotIn("backend", job["strategy"]["matrix"])
         for backend in ("gdb", "lldb"):
             step = next(step for step in job["steps"]
@@ -362,30 +311,6 @@ sys.exit(subprocess.call(command + ['./internal/build']))
         self.assertEqual(steps[cache]["with"]["crosscompile-cache-mode"], "readwrite")
         self.assertIn("matrix.suite != 'workers'", steps[cache]["with"]["wasmer-cache-mode"])
 
-    def test_benchmark_runtime_manifest_keeps_versions_and_full_demo_dependencies(self):
-        root = WORKFLOWS.parents[1]
-        full = json.loads((root / ".github/windows/vcpkg/vcpkg.json").read_text())
-        runtime = json.loads((root / ".github/windows/vcpkg-runtime/vcpkg.json").read_text())
-        self.assertEqual(full["builtin-baseline"], runtime["builtin-baseline"])
-        self.assertEqual(full["overrides"], runtime["overrides"])
-        runtime_names = {dep if isinstance(dep, str) else dep["name"]
-                         for dep in runtime["dependencies"]}
-        full_names = {dep if isinstance(dep, str) else dep["name"]
-                      for dep in full["dependencies"]}
-        self.assertEqual(runtime_names, {"bdwgc", "libffi", "libuv", "pkgconf", "zlib"})
-        self.assertEqual(full_names - runtime_names, {"openssl", "cjson", "sqlite3"})
-        self.assertIn({"name": "pkgconf", "host": True}, runtime["dependencies"])
-        action = yaml.load((root / ".github/actions/setup-deps/action.yml").read_text(),
-                           Loader=yaml.BaseLoader)
-        self.assertEqual(action["inputs"]["windows-msvc-dependencies"]["default"], "full")
-        cache = next(step for step in action["runs"]["steps"]
-                     if step.get("id") == "windows_vcpkg_cache")
-        self.assertIn("steps.windows_profile.outputs.manifest-hash", cache["with"]["key"])
-        self.assertIn("steps.windows_profile.outputs.manifest-hash", cache["with"]["path"])
-        steps = load("benchmark.yml")["jobs"]["benchmark"]["steps"]
-        deps = next(step for step in steps
-                    if step.get("uses") == "./.github/actions/setup-deps")
-        self.assertEqual(deps["with"]["windows-msvc-dependencies"], "runtime")
 
     def test_cache_scopes_preserve_legacy_keys_and_isolate_package_workloads(self):
         root = WORKFLOWS.parents[1]
@@ -406,15 +331,14 @@ sys.exit(subprocess.call(command + ['./internal/build']))
                     env={**os.environ, "PATH": f"{directory}{os.pathsep}{os.environ['PATH']}",
                          "BUILD_CACHE_MODE": "readwrite", "CROSSCOMPILE_CACHE_MODE": "readwrite",
                          "WASMER_CACHE_MODE": "off", "BUILD_CACHE_SCOPE": scope,
-                         "LLGO_WINDOWS_ABI": "native", "LLGO_WINDOWS_ARCH": "native",
                          "GITHUB_OUTPUT": str(output)}, capture_output=True, text=True)
                 if scope == "bad/scope":
                     self.assertNotEqual(result.returncode, 0)
                     continue
                 self.assertEqual(result.returncode, 0, result.stderr)
                 values = dict(line.split("=", 1) for line in output.read_text().splitlines())
-                self.assertEqual(values["profile"], "native-native")
-                self.assertEqual(values["build-profile"], "native-native" + (f"-{scope}" if scope else ""))
+                self.assertEqual(values["profile"], "native")
+                self.assertEqual(values["build-profile"], "native" + (f"-{scope}" if scope else ""))
                 profiles.append(values["build-profile"])
             self.assertEqual(len(profiles), len(set(profiles)))
 
@@ -468,77 +392,16 @@ sys.exit(subprocess.call(command + ['./internal/build']))
             with self.subTest(workflow=filename):
                 self.assertEqual(count, expected)
 
-    def test_windows_release_covers_all_architectures_with_native_x86_toolchains(self):
-        jobs = load("release-build.yml")["jobs"]
-        for name in ("build-windows", "test-windows-artifacts"):
-            matrix = jobs[name]["strategy"]["matrix"]
-            self.assertCountEqual(matrix["abi"], ["msvc", "mingw"])
-            self.assertCountEqual(matrix["goarch"], ["amd64", "arm64"])
-            x86 = jobs[name + "-x86"]["strategy"]["matrix"]
-            self.assertCountEqual(x86["abi"], ["msvc", "mingw"])
-            self.assertEqual(x86["goarch"], ["386"])
-            self.assertEqual(x86["os"], ["windows-2022"])
-            self.assertEqual(jobs[name]["steps"], jobs[name + "-x86"]["steps"])
-        self.assertIn("build-windows-compiler", needs(jobs["build-windows"]))
-        self.assertIn("build-windows-compiler-x86", needs(jobs["build-windows-x86"]))
-        compiler = jobs["build-windows-compiler"]
-        self.assertCountEqual(compiler["strategy"]["matrix"]["goarch"], ["amd64", "arm64"])
-        self.assertEqual(jobs["build-windows-compiler-x86"]["strategy"]["matrix"]["goarch"], ["386"])
-        self.assertEqual(compiler["steps"], jobs["build-windows-compiler-x86"]["steps"])
-        self.assertNotIn("abi", compiler["strategy"]["matrix"])
-        host = next(step for step in compiler["steps"]
-                    if step.get("uses") == "./.github/actions/setup-deps")
-        self.assertEqual(host["with"]["windows-abi"], "msvc")
-        upload = next(step for step in compiler["steps"]
-                      if step.get("name") == "Upload shared host compiler")
-        download = next(step for step in jobs["build-windows"]["steps"]
-                        if step.get("name") == "Download shared host compiler")
-        self.assertEqual(upload["with"]["name"], download["with"]["name"])
-    def test_windows_release_uses_checksum_pinned_official_toolchains(self):
-        jobs = load("release-build.yml")["jobs"]
-        self.assertNotIn("build-windows-x86-toolchains", jobs)
-        self.assertFalse((WORKFLOWS.parent / "windows/build-x86-toolchains.sh").exists())
-        pins = json.loads((WORKFLOWS.parent / "windows/espressif-toolchain.json").read_text())
-        self.assertRegex(pins["release"], r"^23\.1\.4_\d{8}(\.\d+)?$")
-        self.assertRegex(pins["producer_commit"], r"^[0-9a-f]{40}$")
-        self.assertEqual(pins["sdk"]["version"], "23.1.4")
-        self.assertEqual(pins["sdk"]["asset"], "llvm-sdk-23.1.4-i686-w64-mingw32.tar.xz")
-        self.assertRegex(pins["sdk"]["sha256"], r"^[0-9a-f]{64}$")
-        self.assertEqual(set(pins["payloads"]), {"386", "amd64", "arm64"})
-        for arch, target in (("386", "i686"), ("amd64", "x86_64"), ("arm64", "aarch64")):
-            pin = pins["payloads"][arch]
-            self.assertEqual(pin["asset"], f"clang-esp-{pins['release']}-{target}-w64-mingw32.tar.xz")
-            self.assertRegex(pin["sha256"], r"^[0-9a-f]{64}$")
-        for name in ("build-windows-compiler", "build-windows-compiler-x86"):
-            step = next(step for step in jobs[name]["steps"]
-                        if step.get("name") == "Cache Windows x86 LLVM SDK archive")
-            self.assertEqual(step["if"], "matrix.goarch == '386'")
-            self.assertIn("espressif-toolchain.json", step["with"]["key"])
-            self.assertEqual(step["with"]["path"], "${{ runner.tool_cache }}/llgo-release-downloads/llvm-x86")
-        for name in ("build-windows", "build-windows-x86"):
-            step = next(step for step in jobs[name]["steps"]
-                        if step.get("name") == "Cache ESP release archive")
-            self.assertNotIn("if", step)
-            self.assertIn("espressif-toolchain.json", step["with"]["key"])
-        for filename in ("build-compiler.ps1", "build-release.ps1"):
-            script = (WORKFLOWS.parent / "windows" / filename).read_text()
-            self.assertIn("espressif-toolchain.json", script)
-            self.assertIn("https://github.com/xgo-dev/espressif-llvm-project-prebuilt/releases/download/", script)
-            self.assertNotIn("Expand-ReleaseLocalXz", script)
-            self.assertNotIn("cpunion/espressif", script)
 
     def test_release_artifact_dependencies_and_tag_guard_are_preserved(self):
         jobs = load("release-build.yml")["jobs"]
         for consumer, producer in {
-            "build": "populate-linux-sysroot", "build-windows": "build",
-            "test-windows-artifacts": "build-windows", "prepare-winget": "test-windows-artifacts",
-            "test-windows-artifacts-x86": "build-windows-x86",
+            "build": "populate-linux-sysroot",
             "test-artifacts": "build", "test-linux-distributions": "build",
         }.items():
             self.assertIn(producer, needs(jobs[consumer]))
         self.assertEqual(set(needs(jobs["release"])), {
-            "prepare", "prepare-winget", "test-artifacts", "test-windows-artifacts", "test-windows-artifacts-x86", "test-linux-distributions", "populate-linux-sysroot"})
-        self.assertIn("test-windows-artifacts-x86", needs(jobs["prepare-winget"]))
+            "prepare", "test-artifacts", "test-linux-distributions", "populate-linux-sysroot"})
         self.assertIn("startsWith(github.ref, 'refs/tags/')", jobs["release"]["if"])
 
     def test_linux_distribution_ci_builds_packages_without_publishing(self):
@@ -574,24 +437,6 @@ sys.exit(subprocess.call(command + ['./internal/build']))
                 expected = "true" if tag in {"v1.2.3", "v0.0.0"} else "false"
                 self.assertEqual(output.read_text(), f"stable={expected}\n")
 
-    def test_winget_submission_follows_stable_release_and_has_a_read_only_preview(self):
-        jobs = load("release-build.yml")["jobs"]
-        call = jobs["submit-winget"]
-        self.assertEqual(set(needs(call)), {"prepare", "release"})
-        self.assertIn("github.repository == 'xgo-dev/llgo'", call["if"])
-        self.assertIn("needs.release.outputs.stable == 'true'", call["if"])
-        self.assertEqual(jobs["release"]["outputs"]["stable"], "${{ steps.release-type.outputs.stable }}")
-        self.assertEqual(call["uses"], "./.github/workflows/winget.yml")
-        workflow = load("winget.yml")
-        self.assertEqual(set(workflow["on"]), {"workflow_call", "workflow_dispatch"})
-        self.assertEqual(workflow["permissions"], {"contents": "read"})
-        self.assertEqual(workflow["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"], "true")
-        self.assertEqual(workflow["on"]["workflow_call"]["inputs"]["dry_run"]["default"], "false")
-        job = workflow["jobs"]["submit"]
-        self.assertEqual(job["if"], "github.repository == 'xgo-dev/llgo' || inputs.dry_run")
-        step = next(step for step in job["steps"] if step.get("name") == "Submit release manifests")
-        self.assertEqual(step["env"]["WINGET_PR_TOKEN"], "${{ !inputs.dry_run && secrets.WINGET_PR_TOKEN || '' }}")
-        self.assertNotIn("${{", step["run"])
 
     def test_fury_upload_validates_packages_and_stops_on_failure(self):
         steps = load("release-build.yml")["jobs"]["release"]["steps"]
@@ -680,12 +525,10 @@ sys.exit(subprocess.call(command + ['./internal/build']))
                 self.assertEqual(job["runs-on"],
                                  "${{ matrix.os == 'ubuntu-24.04' && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}")
                 self.assertCountEqual(job["strategy"]["matrix"]["os"],
-                                      ["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-2025"])
+                                      ["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel"])
 
     def test_release_artifact_runner_migration_keeps_native_architectures(self):
         jobs = load("release-build.yml")["jobs"]
-        self.assertEqual(jobs["prepare-winget"]["runs-on"],
-                         "${{ fromJSON(needs.prepare.outputs.linux_runner) }}")
         job = jobs["test-artifacts"]
         self.assertEqual(job["runs-on"],
                          "${{ matrix.os == 'ubuntu-latest' && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}")
