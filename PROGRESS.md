@@ -528,3 +528,10 @@
 - Регресія: `go test ./cl/ -run OwnGo` зелений. `owngo/bytes/*` — код 0. ASan `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive` — код 0 без звітів; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free` (`ringuaf` — у `main.go:58`, після `DecCyclic`). binary-trees під ASan на `12` — код 0 без звітів.
 - binary-trees `21` (на прохання розробника, 8 ядер, `ulimit -v 4194304`): `go` (`GOAMD64=v2`) — 6.09 с, 597 МБ; llgo без тега — 39.30 с, 797 МБ; `owngo` до P6.8 — 56.63 с, 475 МБ; після P6.8 — 56.87 с, 688 МБ. Вивід усіх побайтно як в офіційного. Різниця RSS між двома прогонами `owngo` — не від обходу (він не виділяє); повтори і звіт — P6.9.
 - Лишилось: P6.9, binary-trees 21.
+
+## 2026-10-30 — P6.9
+
+- `owngo/bench/binarytrees`: програма Go #2 з Benchmarks Game, лише `gofmt` (оригінал з відступом у три пробіли), заголовок із джерелом, повний текст Revised BSD у `LICENSE`. `testdata/expected-21.txt` — вивід `go run` на `21`, він збігається з виводом на сторінці бенчмарку.
+- Прийняття, Debian 13 amd64, 8 ядер, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`, `ulimit -v 4194304`: `llgo build -tags owngo` і `./binarytrees 21` — тричі код 0, вивід побайтно як очікуваний, 56.94 / 56.25 / 55.45 с, пікова RSS 688 МБ (≤ 1 GiB). Поруч: `GOAMD64=v2 go build` — 5.55–5.77 с, 555–618 МБ; llgo без тега — 38.59–40.04 с, 736–814 МБ. Під `-O0 -asan` з `ASAN_OPTIONS=detect_leaks=0` на `12` — код 0 без тексту ASan. Числа й історія заміру — `owngo/REPORT-BINARYTREES.md`.
+- `longLivedTree` (`cyclic: go`) живе до виходу, як і в Go. Відставання за часом не профілювалось; кандидати названі у звіті.
+- Лишилось: P6.10, гейт фази 6.
