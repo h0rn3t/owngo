@@ -47,9 +47,10 @@ func TestTypeBackgroundAndParsePkgSyntaxCoverage(t *testing.T) {
 	if got := callConvBg(doc2); got != "C" {
 		t.Fatalf("typeCallConv(// llgo:type C)=%q, want C", got)
 	}
+	// The removed //llgo:type stdcall spelling is silently ignored now.
 	doc3 := &ast.CommentGroup{List: []*ast.Comment{{Text: "//llgo:type stdcall"}}}
-	if got := callConvBg(doc3); got != "stdcall" {
-		t.Fatalf("typeCallConv(//llgo:type stdcall)=%q, want stdcall", got)
+	if got := callConvBg(doc3); got != "" {
+		t.Fatalf("typeCallConv(//llgo:type stdcall)=%q, want empty", got)
 	}
 
 	// New directives resolve to the matching background.
@@ -57,9 +58,10 @@ func TestTypeBackgroundAndParsePkgSyntaxCoverage(t *testing.T) {
 	if got := callConvBg(doc4); got != "C" {
 		t.Fatalf("typeCallConv(//llgo:cdecl)=%q, want C", got)
 	}
+	// The removed //llgo:stdcall spelling is silently ignored now.
 	doc5 := &ast.CommentGroup{List: []*ast.Comment{{Text: "// llgo:stdcall"}}}
-	if got := callConvBg(doc5); got != "stdcall" {
-		t.Fatalf("typeCallConv(// llgo:stdcall)=%q, want stdcall", got)
+	if got := callConvBg(doc5); got != "" {
+		t.Fatalf("typeCallConv(// llgo:stdcall)=%q, want empty", got)
 	}
 
 	// A //llgo:type with an unrelated argument is not a calling-convention

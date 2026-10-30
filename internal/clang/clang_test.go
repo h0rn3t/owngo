@@ -21,10 +21,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -118,28 +116,6 @@ func TestCXXCompilerFallsBackToCCCommand(t *testing.T) {
 	}
 }
 
-func TestWriteWindowsResponseArg(t *testing.T) {
-	tests := []struct {
-		arg  string
-		want string
-	}{
-		{"plain", `"plain"`},
-		{`C:\path with spaces\object.o`, `"C:\path with spaces\object.o"`},
-		{`quote"and\slash`, `"quote\"and\slash"`},
-		{`trailing\`, `"trailing\\"`},
-		{"", `""`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.arg, func(t *testing.T) {
-			var got strings.Builder
-			writeWindowsResponseArg(&got, tt.arg)
-			if got.String() != tt.want {
-				t.Fatalf("quoted response argument = %q, want %q", got.String(), tt.want)
-			}
-		})
-	}
-}
-
 func TestWriteGNUResponseArg(t *testing.T) {
 	tests := []struct {
 		arg  string
@@ -162,38 +138,6 @@ func TestWriteGNUResponseArg(t *testing.T) {
 	}
 }
 
-func TestResolveMSVCImportLibraries(t *testing.T) {
-	root := t.TempDir()
-	for _, dir := range []string{"first", "second"} {
-		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	clangImport := filepath.Join(root, "first", "libclang.lib")
-	for _, file := range []string{
-		clangImport,
-		filepath.Join(root, "first", "libgnu.dll.a"),
-		filepath.Join(root, "first", "libnative.dll.a"),
-		filepath.Join(root, "second", "native.lib"),
-	} {
-		if err := os.WriteFile(file, nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	args := []string{"-target", "x86_64-pc-windows-msvc", "-Lfirst", "-L", "second", "-lclang", "-lgnu", "-lnative", "-lmissing", "-l:exact.a"}
-	// Keep -lnative because the MSVC driver resolves it as native.lib across
-	// the complete search path, even though an earlier directory contains the
-	// GNU-only libnative.dll.a spelling.
-	want := []string{"-target", "x86_64-pc-windows-msvc", "-Lfirst", "-L", "second", clangImport, filepath.Join(root, "first", "libgnu.dll.a"), "-lnative", "-lmissing", "-l:exact.a"}
-	if got := resolveMSVCImportLibraries(root, args); !slices.Equal(got, want) {
-		t.Fatalf("resolved libraries = %q, want %q", got, want)
-	}
-	args[1] = "x86_64-w64-windows-gnu"
-	if got := resolveMSVCImportLibraries(root, args); !slices.Equal(got, args) {
-		t.Fatalf("GNU target libraries changed to %q", got)
-	}
-}
-
 func TestWriteResponseFile(t *testing.T) {
 	args := []string{"plain", `C:\path with spaces\object.o`, `quote"and\slash`, `trailing\`, ""}
 	for _, tt := range []struct {
@@ -202,7 +146,6 @@ func TestWriteResponseFile(t *testing.T) {
 		want  string
 	}{
 		{"gnu", ResponseFileGNU, `"plain" "C:\\path with spaces\\object.o" "quote\"and\\slash" "trailing\\" ""` + "\n"},
-		{"windows", ResponseFileWindows, `"plain" "C:\path with spaces\object.o" "quote\"and\slash" "trailing\\" ""` + "\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			name, err := writeResponseFile(args, tt.style)
@@ -241,76 +184,15 @@ func TestWriteResponseFile(t *testing.T) {
 	if _, err := os.Stat(closedName); !os.IsNotExist(err) {
 		t.Fatalf("failed response file was not removed: %v", err)
 	}
-	if runtime.GOOS == "windows" {
-		err := New("clang", Config{}).exec(strings.Repeat("x", windowsCommandLineLimit))
-		if err == nil || !strings.Contains(err.Error(), "write clang response file") {
-			t.Fatalf("long Windows command error = %v, want response-file error", err)
-		}
-	}
 }
 
 func TestResponseFileStyle(t *testing.T) {
-	for _, tt := range []struct {
-		app  string
-		want ResponseFileStyle
-	}{
-		{"clang", ResponseFileGNU},
-		{"clang++.exe", ResponseFileGNU},
-		{"clang-cl.exe", ResponseFileWindows},
-		{"lld-link.exe", ResponseFileWindows},
-		{"link.exe", ResponseFileWindows},
-		{"cl.exe", ResponseFileWindows},
-	} {
-		t.Run(tt.app, func(t *testing.T) {
-			if got := New(tt.app, Config{}).responseFileStyle(); got != tt.want {
-				t.Fatalf("response file style = %v, want %v", got, tt.want)
+	for _, app := range []string{"clang", "clang++.exe", "clang-cl.exe", "lld-link.exe", "link.exe", "cl.exe"} {
+		t.Run(app, func(t *testing.T) {
+			if got := New(app, Config{}).responseFileStyle(); got != ResponseFileGNU {
+				t.Fatalf("response file style = %v, want GNU", got)
 			}
 		})
-	}
-	if got := New("clang", Config{ResponseFileStyle: ResponseFileWindows}).responseFileStyle(); got != ResponseFileWindows {
-		t.Fatalf("explicit response file style = %v", got)
-	}
-}
-
-func TestUseResponseFile(t *testing.T) {
-	longArg := strings.Repeat("x", windowsCommandLineLimit)
-	if useResponseFileForGOOS("linux", "clang++", []string{longArg}) {
-		t.Fatal("non-Windows command unexpectedly uses a response file")
-	}
-	if useResponseFileForGOOS("windows", "clang++", []string{"short"}) {
-		t.Fatal("short Windows command unexpectedly uses a response file")
-	}
-	if !useResponseFileForGOOS("windows", "clang++", []string{longArg}) {
-		t.Fatal("long Windows command does not use a response file")
-	}
-}
-
-func TestLongWindowsCommandUsesClangResponseFile(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("requires Clang's Windows response-file parser")
-	}
-	clang, err := exec.LookPath("clang")
-	if err != nil {
-		t.Skip("clang is not installed")
-	}
-	dir := t.TempDir()
-	source := filepath.Join(dir, "source file.c")
-	object := filepath.Join(dir, "object file.o")
-	if err := os.WriteFile(source, []byte("int response_file_fixture;\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	args := []string{"-c", source, "-o", object}
-	for index := 0; index < 1800; index++ {
-		args = append(args, fmt.Sprintf("-DLLGO_RESPONSE_%04d=%d", index, index))
-	}
-	if !useResponseFile(clang, args) {
-		t.Fatal("fixture does not exceed the Windows command-line limit")
-	}
-	if err := New(clang, Config{}).Compile(args...); err != nil {
-		t.Fatalf("compile through response file: %v", err)
-	}
-	if _, err := os.Stat(object); err != nil {
-		t.Fatalf("response-file output: %v", err)
 	}
 }
 

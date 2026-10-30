@@ -58,7 +58,7 @@ func TestRuntimeNativeOwnersAreUnique(t *testing.T) {
 }
 
 func TestRuntimeNativeProvidersRejectDuplicates(t *testing.T) {
-	for _, symbol := range []string{"C.shared", "stdcall.Shared"} {
+	for _, symbol := range []string{"C.shared", "C.another"} {
 		for _, sameEntry := range []bool{false, true} {
 			owners := []runtimeNativeOwner{
 				{symbol + " C.first", "first adapter", "first.c"},

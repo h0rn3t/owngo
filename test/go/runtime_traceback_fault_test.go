@@ -1,10 +1,8 @@
-//go:build linux || darwin || windows
+//go:build linux || darwin
 
 package gotest
 
 import (
-	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -22,16 +20,6 @@ func tracebackFault(depth int, p *byte) byte {
 }
 
 func TestRuntimeCallersDeepFault(t *testing.T) {
-	// Match the other Windows fault tests: isolate the upstream Go exception
-	// recovery issue (golang/go#81238) from unrelated tests in this process.
-	if runtime.GOOS == "windows" && os.Getenv("LLGO_DEEP_FAULT_CHILD") != "1" {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestRuntimeCallersDeepFault$")
-		cmd.Env = append(os.Environ(), "LLGO_DEEP_FAULT_CHILD=1")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("deep fault child: %v\n%s", err, out)
-		}
-		return
-	}
 	oldGC := debug.SetGCPercent(-1)
 	defer debug.SetGCPercent(oldGC)
 
@@ -45,7 +33,6 @@ func TestRuntimeCallersDeepFault(t *testing.T) {
 			defer workers.Done()
 			old := debug.SetPanicOnFault(true)
 			defer debug.SetPanicOnFault(old)
-			ensureWindowsExceptionStackHeadroom()
 			for repeat := 0; repeat < 3; repeat++ {
 				func() {
 					defer func() {

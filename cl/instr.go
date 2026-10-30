@@ -2653,7 +2653,7 @@ func (p *context) callEx(b llssa.Builder, act llssa.DoAction, call *ssa.CallComm
 		aFn, ftype := p.compileFunction(cv)
 		// TODO(xsw): check ca != llssa.Call
 		switch ftype {
-		case cFunc, stdcallFunc:
+		case cFunc:
 			p.inCFunc = true
 			args := p.compileValues(b, args, kind)
 			p.inCFunc = false

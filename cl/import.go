@@ -724,7 +724,6 @@ const (
 	ignoredFunc = iota
 	goFunc      = int(llssa.GoDecl)
 	cFunc       = int(llssa.CDecl)
-	stdcallFunc = int(llssa.Stdcall)
 	llgoInstr   = -1
 
 	llgoInstrBase   = 0x80
@@ -877,9 +876,6 @@ func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 		if strings.HasPrefix(v, "C.") {
 			return nil, v[2:], cFunc
 		}
-		if strings.HasPrefix(v, "stdcall.") {
-			return nil, v[len("stdcall."):], stdcallFunc
-		}
 		if strings.HasPrefix(v, "llgo.") {
 			return nil, v[5:], llgoInstr
 		}
@@ -925,9 +921,6 @@ func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtyp
 		if v, ok := p.prog.Linkname(name); ok {
 			if strings.HasPrefix(v, "C.") {
 				return v[2:], cVar, false
-			}
-			if strings.HasPrefix(v, "stdcall.") {
-				panic(fmt.Errorf("stdcall linkname namespace applies only to functions: %s", name))
 			}
 			if strings.HasPrefix(v, "go:") {
 				if llssa.PathOf(pkg) == "runtime" {
@@ -1142,28 +1135,27 @@ func embeddedStructFieldPos(expr ast.Expr) token.Pos {
 
 // Directive names, normalized by the directive package (the "//" / "// "
 // prefix and any arguments are stripped). These identify directive spellings;
-// they are distinct from the background values ("C" / "stdcall") they map to.
+// they are distinct from the background value ("C") they map to.
 const (
-	nameType    = "llgo:type"
-	nameCdecl   = "llgo:cdecl"
-	nameStdcall = "llgo:stdcall"
+	nameType  = "llgo:type"
+	nameCdecl = "llgo:cdecl"
 )
 
 // callConv is the calling-convention directive resolved for a type declaration.
 type callConv struct {
-	bg          string    // normalized background value: "C", "stdcall", or ""
+	bg          string    // normalized background value: "C" or ""
 	name        string    // human-readable directive spelling for diagnostics
 	pos         token.Pos // position of the directive comment
 	replacement string    // non-empty when the directive is deprecated: the spelling to use instead
 }
 
 // typeCallConv scans doc for calling-convention directives on a type
-// declaration. It recognizes the new //llgo:cdecl and //llgo:stdcall forms as
-// well as the deprecated //llgo:type C / //llgo:type stdcall forms. For the
-// deprecated forms it records the replacement spelling in the returned
-// callConv; the caller emits the deprecation warning only once placement is
-// validated. More than one calling-convention directive on the same
-// declaration is reported as an error.
+// declaration. It recognizes the new //llgo:cdecl form as well as the
+// deprecated //llgo:type C form. For the deprecated form it records the
+// replacement spelling in the returned callConv; the caller emits the
+// deprecation warning only once placement is validated. More than one
+// calling-convention directive on the same declaration is reported as an
+// error.
 func typeCallConv(fset *token.FileSet, doc *ast.CommentGroup) (cc callConv, err error) {
 	seen := false
 	for _, d := range directive.ParseGroup(doc) {
@@ -1174,19 +1166,12 @@ func typeCallConv(fset *token.FileSet, doc *ast.CommentGroup) (cc callConv, err 
 				return cc, fmt.Errorf("%s: //llgo:cdecl does not accept arguments", fset.Position(d.Pos))
 			}
 			bg, name = "C", "//llgo:cdecl"
-		case nameStdcall:
-			if d.Args != "" {
-				return cc, fmt.Errorf("%s: //llgo:stdcall does not accept arguments", fset.Position(d.Pos))
-			}
-			bg, name = "stdcall", "//llgo:stdcall"
 		case nameType:
-			// //llgo:type has other forms beyond the two calling-convention
-			// values; only C and stdcall are affected by this task.
+			// //llgo:type has other forms beyond the calling-convention
+			// value; only C is affected here, the rest are ignored.
 			switch d.Args {
 			case "C":
 				bg, name, replacement = "C", "//llgo:type C", "//llgo:cdecl"
-			case "stdcall":
-				bg, name, replacement = "stdcall", "//llgo:type stdcall", "//llgo:stdcall"
 			default:
 				continue
 			}
@@ -1206,8 +1191,6 @@ func toCallConv(cc string) llssa.CallConv {
 	switch cc {
 	case "C":
 		return llssa.CDecl
-	case "stdcall":
-		return llssa.Stdcall
 	}
 	return llssa.GoDecl
 }

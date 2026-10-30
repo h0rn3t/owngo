@@ -1,4 +1,4 @@
-//go:build llgo && arm64 && (linux || darwin || windows)
+//go:build llgo && arm64 && (linux || darwin)
 
 #include "hfa_arm64.h"
 #define FP_SUM (a+b+c+d+e+f+g+h)

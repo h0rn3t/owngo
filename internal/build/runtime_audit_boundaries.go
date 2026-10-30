@@ -35,7 +35,7 @@ func (a *runtimeAuditor) externalBoundaries(report *RuntimeOwnership) error {
 			continue
 		}
 		boundary := RuntimeBoundary{Symbol: symbol.Name, Target: symbol.Linkname}
-		if strings.HasPrefix(symbol.Linkname, "C.") || strings.HasPrefix(symbol.Linkname, "stdcall.") {
+		if strings.HasPrefix(symbol.Linkname, "C.") {
 			provider, ok := nativeProviders[symbol.Linkname]
 			if !ok {
 				report.UnresolvedBoundaries = append(report.UnresolvedBoundaries, RuntimeUse{symbol.Linkname, symbol.Source, "native-provider"})

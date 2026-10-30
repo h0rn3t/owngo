@@ -33,9 +33,6 @@ func TestESPClangHostDownload(t *testing.T) {
 		{"darwin", "amd64", "x86_64-apple-darwin"},
 		{"linux", "arm64", "aarch64-linux-gnu"},
 		{"linux", "amd64", "x86_64-linux-gnu"},
-		{"windows", "386", "x86_64-w64-mingw32"},
-		{"windows", "amd64", "x86_64-w64-mingw32"},
-		{"windows", "arm64", "aarch64-w64-mingw32"},
 	}
 	for _, test := range tests {
 		platform := getESPClangPlatform(test.goos, test.goarch)
@@ -51,8 +48,8 @@ func TestESPClangHostDownload(t *testing.T) {
 
 func TestESPClangCacheSeparatesHosts(t *testing.T) {
 	legacy := filepath.Join(cacheDir(), "esp-clang-"+espClangVersion)
-	x64 := espClangCacheDir(getESPClangPlatform("windows", "amd64"))
-	arm64 := espClangCacheDir(getESPClangPlatform("windows", "arm64"))
+	x64 := espClangCacheDir(getESPClangPlatform("linux", "amd64"))
+	arm64 := espClangCacheDir(getESPClangPlatform("linux", "arm64"))
 	if x64 == arm64 || x64 == legacy || arm64 == legacy {
 		t.Fatalf("ESP payload caches overlap: x64=%q arm64=%q legacy=%q", x64, arm64, legacy)
 	}
@@ -948,7 +945,7 @@ func TestWasmProfileValidationErrors(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := useWithGOARMAndToolchain(
 				"js", "wasm", "", false, optlevel.O2, lto.Off, false,
-				NativeToolchainInput{}, test.profile, test.provider,
+				test.profile, test.provider,
 			)
 			if err == nil || !strings.Contains(err.Error(), "unsupported WebAssembly profile/provider") {
 				t.Fatalf("invalid direct profile/provider error = %v", err)
@@ -1126,7 +1123,6 @@ func TestNativeToolchain(t *testing.T) {
 	}{
 		{"darwin", NativeToolchain{ABI: PlatformABIDarwin, ObjectFormat: ObjectFormatMachO, Driver: DriverFlavorClangGNU, Linker: LinkerFlavorMachO}},
 		{"linux", NativeToolchain{ABI: PlatformABIGNU, ObjectFormat: ObjectFormatELF, Driver: DriverFlavorClangGNU, Linker: LinkerFlavorELFLLD}},
-		{"windows", NativeToolchain{ABI: PlatformABIMsvc, ObjectFormat: ObjectFormatCOFF, Driver: DriverFlavorClangGNU, Linker: LinkerFlavorCOFFLLD}},
 		{"freebsd", NativeToolchain{}},
 	}
 	for _, tt := range tests {
@@ -1146,7 +1142,6 @@ func TestNativeDebugInfoPolicy(t *testing.T) {
 	}{
 		{goos: "darwin", omit: []string{"-Wl,-S"}},
 		{goos: "linux", omit: []string{"-Wl,-S"}},
-		{goos: "windows", omit: []string{"-Wl,/debug:none"}, preserve: []string{"-Wl,/debug:dwarf"}},
 		{goos: "freebsd"},
 	}
 	for _, tt := range tests {
@@ -1236,160 +1231,18 @@ func TestLTOLinkerOptFlag(t *testing.T) {
 	}
 }
 
-func TestNativeWindowsLLDFlags(t *testing.T) {
-	toolchain := nativeToolchain("windows")
-	flags := nativeLLDFlags(toolchain, optlevel.O2, lto.Off)
-	for _, want := range []string{
-		"-fuse-ld=lld",
-		"-Wl,/errorlimit:0",
-		"-Wl,/opt:noicf",
-	} {
-		if !slices.Contains(flags, want) {
-			t.Errorf("native Windows LLD flags = %v, want %q", flags, want)
-		}
-	}
-	for _, unwanted := range []string{"-Wl,--error-limit=0", "-Wl,--icf=none"} {
-		if slices.Contains(flags, unwanted) {
-			t.Errorf("native Windows LLD flags = %v, do not want %q", flags, unwanted)
-		}
-	}
-
-	thin := nativeLLDFlags(toolchain, optlevel.O3, lto.Thin)
-	for _, want := range []string{"-flto=thin", "-Wl,/opt:lldlto=3"} {
-		if !slices.Contains(thin, want) {
-			t.Errorf("native Windows ThinLTO flags = %v, want %q", thin, want)
-		}
-	}
-	if slices.Contains(thin, "-Wl,--lto-O3") {
-		t.Errorf("native Windows ThinLTO flags = %v, contain ELF LTO syntax", thin)
-	}
-}
-
-func TestCOFFLTOLevel(t *testing.T) {
-	for _, tt := range []struct {
-		level optlevel.Level
-		want  string
-	}{
-		{optlevel.O0, "0"},
-		{optlevel.O1, "1"},
-		{optlevel.O2, "2"},
-		{optlevel.O3, "3"},
-		{optlevel.Os, "2"},
-		{optlevel.Oz, "2"},
-	} {
-		if got := coffLTOLevel(tt.level); got != tt.want {
-			t.Errorf("coffLTOLevel(%s) = %q, want %q", tt.level, got, tt.want)
-		}
-	}
-}
-
-func TestNativeWindowsSectionFlags(t *testing.T) {
-	ccflags, ldflags := nativeSectionFlags(nativeToolchain("windows"))
-	for _, want := range []string{"-fdata-sections", "-ffunction-sections"} {
-		if !slices.Contains(ccflags, want) {
-			t.Errorf("native Windows CCFLAGS = %v, want %q", ccflags, want)
-		}
-	}
-	for _, want := range []string{"-fdata-sections", "-ffunction-sections", "--rtlib=compiler-rt", "-Wl,/opt:ref", "-llegacy_stdio_definitions"} {
-		if !slices.Contains(ldflags, want) {
-			t.Errorf("native Windows LDFLAGS = %v, want %q", ldflags, want)
-		}
-	}
-	for _, unwanted := range []string{"--gc-sections", "-latomic", "-lpthread", "-ldl"} {
-		if slices.Contains(ldflags, unwanted) {
-			t.Errorf("native Windows LDFLAGS = %v, do not want %q", ldflags, unwanted)
-		}
-	}
-}
-
-func TestNativeWindowsExportFlags(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("requires a native Windows host")
-	}
-
-	export, err := use("windows", runtime.GOARCH, false, optlevel.O2, lto.Thin, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantTriple, err := windowsTargetTriple(runtime.GOARCH, export.Toolchain.ABI)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if export.Toolchain.ObjectFormat != ObjectFormatCOFF ||
-		export.Toolchain.Driver != DriverFlavorClangGNU ||
-		export.Toolchain.TargetTriple != wantTriple {
-		t.Fatalf("native Windows toolchain = %+v", export.Toolchain)
-	}
-	var wanted, unwanted []string
-	switch export.Toolchain.ABI {
-	case PlatformABIMsvc:
-		if export.Toolchain.Linker != LinkerFlavorCOFFLLD ||
-			export.Toolchain.CRT != CRTFlavorUCRT ||
-			export.Toolchain.CXXRuntime != CXXRuntimeMSVC {
-			t.Fatalf("native MSVC toolchain = %+v", export.Toolchain)
-		}
-		wanted = []string{
-			"-Wl,/errorlimit:0",
-			"-Wl,/opt:noicf",
-			"-Wl,/opt:ref",
-			"-Wl,/opt:lldlto=2",
-			"-llegacy_stdio_definitions",
-		}
-		unwanted = []string{
-			"-Wl,--error-limit=0",
-			"-Wl,--icf=none",
-			"--gc-sections",
-		}
-	case PlatformABIGNU:
-		if export.Toolchain.Linker != LinkerFlavorMinGWLLD ||
-			export.Toolchain.CRT != CRTFlavorUnknown ||
-			export.Toolchain.CXXRuntime != CXXRuntimeUnknown {
-			t.Fatalf("native GNU/MinGW toolchain = %+v", export.Toolchain)
-		}
-		wanted = []string{
-			"-Wl,--error-limit=0",
-			"-Wl,--icf=none",
-			"-Wl,--gc-sections",
-			"-Wl,--lto-O2",
-		}
-		unwanted = []string{
-			"-Wl,/errorlimit:0",
-			"-Wl,/opt:noicf",
-			"-Wl,/opt:ref",
-			"-Wl,/opt:lldlto=2",
-			"-llegacy_stdio_definitions",
-		}
-	default:
-		t.Fatalf("unsupported native Windows ABI: %+v", export.Toolchain)
-	}
-	for _, want := range wanted {
-		if !slices.Contains(export.LDFLAGS, want) {
-			t.Errorf("native Windows LDFLAGS = %v, want %q", export.LDFLAGS, want)
-		}
-	}
-	for _, flag := range append(unwanted, "-latomic", "-lpthread", "-ldl") {
-		if slices.Contains(export.LDFLAGS, flag) {
-			t.Errorf("native Windows LDFLAGS = %v, do not want %q", export.LDFLAGS, flag)
-		}
-	}
-}
-
 func TestUsesNativePlatformToolchain(t *testing.T) {
 	for _, test := range []struct {
 		name                                   string
 		hostOS, hostArch, targetOS, targetArch string
-		resolveWindows, want                   bool
+		want                                   bool
 	}{
 		{name: "same platform", hostOS: "linux", hostArch: "amd64", targetOS: "linux", targetArch: "amd64", want: true},
-		{name: "Windows linked cross architecture", hostOS: "windows", hostArch: "amd64", targetOS: "windows", targetArch: "arm64", resolveWindows: true, want: true},
-		{name: "Windows IR-only cross architecture", hostOS: "windows", hostArch: "amd64", targetOS: "windows", targetArch: "arm64"},
-		{name: "Windows linked cross host", hostOS: "darwin", hostArch: "arm64", targetOS: "windows", targetArch: "386", resolveWindows: true, want: true},
-		{name: "Windows IR-only cross host", hostOS: "linux", hostArch: "amd64", targetOS: "windows", targetArch: "amd64"},
-		{name: "non-Windows cross architecture", hostOS: "darwin", hostArch: "arm64", targetOS: "darwin", targetArch: "amd64"},
-		{name: "cross OS", hostOS: "windows", hostArch: "amd64", targetOS: "linux", targetArch: "amd64"},
+		{name: "cross architecture", hostOS: "darwin", hostArch: "arm64", targetOS: "darwin", targetArch: "amd64"},
+		{name: "cross OS", hostOS: "linux", hostArch: "amd64", targetOS: "darwin", targetArch: "amd64"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := usesNativePlatformToolchain(test.hostOS, test.hostArch, test.targetOS, test.targetArch, test.resolveWindows); got != test.want {
+			if got := usesNativePlatformToolchain(test.hostOS, test.hostArch, test.targetOS, test.targetArch); got != test.want {
 				t.Fatalf("usesNativePlatformToolchain() = %v, want %v", got, test.want)
 			}
 		})
@@ -1474,9 +1327,6 @@ func TestDevLTOGlobalDCEUseLTOFlagsControlledByOption(t *testing.T) {
 }
 
 func nativeLTOOptFlag(toolchain NativeToolchain, level optlevel.Level) string {
-	if toolchain.Linker == LinkerFlavorCOFFLLD {
-		return "-Wl,/opt:lldlto=" + coffLTOLevel(level)
-	}
 	return "-Wl," + ltoLinkerOptFlag(level)
 }
 

@@ -83,13 +83,9 @@ func TestLLVMIntrinsicDeclarationOrder(t *testing.T) {
 
 func TestLLVMIntrinsicDeclarationConflicts(t *testing.T) {
 	for _, cached := range []bool{false, true} {
-		for _, kind := range []string{"parameter", "result", "Go ABI", "stdcall ABI", "LLVM convention", "instantiated", "environment"} {
+		for _, kind := range []string{"parameter", "result", "Go ABI", "LLVM convention", "instantiated", "environment"} {
 			t.Run(fmt.Sprintf("%s/cached=%v", kind, cached), func(t *testing.T) {
-				var target *Target
-				if kind == "stdcall ABI" {
-					target = &Target{GOOS: "windows", GOARCH: "386"}
-				}
-				pkg := intrinsicDeclarationPackage(t, target)
+				pkg := intrinsicDeclarationPackage(t, nil)
 				buildIntrinsicTrapCaller(pkg, "first", nil)
 				if cached {
 					pkg.NewFunc("llvm.trap", NoArgsNoRet, CDecl)
@@ -111,8 +107,6 @@ func TestLLVMIntrinsicDeclarationConflicts(t *testing.T) {
 					invoke = func() { pkg.NewFunc("llvm.trap", sig, CDecl) }
 				case "Go ABI":
 					invoke = func() { pkg.NewFunc("llvm.trap", NoArgsNoRet, GoDecl) }
-				case "stdcall ABI":
-					invoke = func() { pkg.NewFunc("llvm.trap", NoArgsNoRet, Stdcall) }
 				case "LLVM convention":
 					existing.SetFunctionCallConv(llvm.FastCallConv)
 				case "instantiated":

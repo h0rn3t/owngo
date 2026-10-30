@@ -444,9 +444,6 @@ func (p Package) newFunc(
 		}
 	}
 	llvmName := name
-	if cc == Stdcall {
-		llvmName = p.Prog.stdcallSymbolName(name)
-	}
 	fn := llvm.AddFunction(p.mod, llvmName, t.ll)
 	if isNativeCallConv(cc) {
 		p.Prog.nativeIntegerAttrs(entrySig, t.ll, fn.AddAttributeAtIndex)
@@ -459,9 +456,6 @@ func (p Package) newFunc(
 		// bytes, or panic. Attach the contract to declarations as well as
 		// definitions so every module can use it without LTO or inlining.
 		fn.AddAttributeAtIndex(0, p.Prog.ctx.CreateEnumAttribute(llvm.AttributeKindID("nonnull"), 0))
-	}
-	if cc == Stdcall {
-		fn.SetFunctionCallConv(p.Prog.stdcallCallConv())
 	}
 	if envType != nil {
 		p.Prog.markClosureEnvFunction(fn, 0)

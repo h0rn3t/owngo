@@ -1,4 +1,4 @@
-//go:build darwin || linux || windows
+//go:build darwin || linux
 
 package build
 
@@ -15,9 +15,6 @@ import (
 )
 
 func TestNativeDebuggerRegistrySurvivesLTO(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix visibility/section retention; Windows uses dllexport")
-	}
 	clang, err := exec.LookPath("clang")
 	if err != nil {
 		t.Fatal("clang is required for the native traceback test:", err)
@@ -80,7 +77,10 @@ func TestNativeTracebackCaptureFaultAndTimeout(t *testing.T) {
 }
 
 func TestNativeTracebackFaultBufferCapacity(t *testing.T) {
-	if runtime.GOOS == "windows" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("dynamic Unix unwinder requires Darwin/Linux")
+	}
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Skip("dynamic Unix unwinder requires Darwin/Linux amd64/arm64")
 	}
 	testNativeTraceback(t, "capacity.c")
@@ -94,19 +94,9 @@ func testNativeTraceback(t *testing.T, source string) {
 	}
 	bin := filepath.Join(t.TempDir(), "traceback-native")
 	args := []string{"-std=c11", "-O2", "-fno-omit-frame-pointer", "-Wall", "-Wextra", "-Werror", "-I../../runtime/internal/stacktrace/_wrap"}
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
-		if target := os.Getenv("LLGO_WINDOWS_TARGET_TRIPLE"); target != "" {
-			args = append(args, "--target="+target)
-		}
-		args = append(args, "-fuse-ld=lld", "testdata/tracebacknative/windows.c",
-			"../../runtime/internal/runtime/_wrap/setjmp_windows_amd64.c",
-			"../../runtime/internal/runtime/_wrap/setjmp_windows_arm64.c")
-	} else {
-		args = append(args, "-pthread", filepath.Join("testdata/tracebacknative", source))
-		if runtime.GOOS == "linux" {
-			args = append(args, "-ldl")
-		}
+	args = append(args, "-pthread", filepath.Join("testdata/tracebacknative", source))
+	if runtime.GOOS == "linux" {
+		args = append(args, "-ldl")
 	}
 	cmd := exec.Command(clang, append(args, "-o", bin)...)
 	if out, err := cmd.CombinedOutput(); err != nil {

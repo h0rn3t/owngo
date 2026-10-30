@@ -63,11 +63,7 @@ func TestRunInEmulatorValidation(t *testing.T) {
 }
 
 func TestWASIHostDirectories(t *testing.T) {
-	work, temp, cwd := wasiHostDirectories(`C:\project with spaces`, `D:\Temp`, true)
-	if work != `C:\project with spaces:/work` || temp != `D:\Temp:/tmp` || cwd != "/work" {
-		t.Fatalf("Windows WASI directories = %q, %q, %q", work, temp, cwd)
-	}
-	work, temp, cwd = wasiHostDirectories("/project with spaces", "/host-temp", false)
+	work, temp, cwd := wasiHostDirectories("/project with spaces", "/host-temp")
 	if work != "/project with spaces" || temp != "/tmp" || cwd != "/project with spaces" {
 		t.Fatalf("Unix WASI directories = %q, %q, %q", work, temp, cwd)
 	}

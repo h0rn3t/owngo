@@ -740,11 +740,6 @@ func TestBinOpSignedMinIntDivisionOverflow(t *testing.T) {
 }
 
 func TestBinOpIntegerDivideByZeroPanics(t *testing.T) {
-	if !enterWindowsExceptionTest(t) {
-		return
-	}
-
-	ensureWindowsExceptionStackHeadroom()
 	defer func() {
 		if recover() == nil {
 			t.Fatal("division by zero did not panic")
@@ -755,11 +750,6 @@ func TestBinOpIntegerDivideByZeroPanics(t *testing.T) {
 }
 
 func TestBinOpIntegerRemainderByZeroPanics(t *testing.T) {
-	if !enterWindowsExceptionTest(t) {
-		return
-	}
-
-	ensureWindowsExceptionStackHeadroom()
 	defer func() {
 		if recover() == nil {
 			t.Fatal("remainder by zero did not panic")

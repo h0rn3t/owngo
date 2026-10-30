@@ -18,8 +18,6 @@ func TestArm64HFAParameterLayout(t *testing.T) {
 		stackAlign   uint64
 	}{
 		{"linux", "aarch64-unknown-linux-gnu", 8},
-		{"windows", "aarch64-pc-windows-gnu", 0},
-		{"windows", "aarch64-pc-windows-msvc", 0},
 		{"darwin", "arm64-apple-darwin", 0},
 		{"darwin", "aarch64-unknown-darwin", 0},
 		{"darwin", "aarch64-APPLE-DARWIN", 0},

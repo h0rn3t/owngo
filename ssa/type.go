@@ -579,11 +579,6 @@ func (p Program) toLLVMFunc(sig *types.Signature) llvm.Type {
 
 func (p Program) toLLVMFuncBackground(sig *types.Signature, cc CallConv) llvm.Type {
 	valueBackground := cc
-	if cc == Stdcall {
-		// Stdcall validation applies to the function type as a whole; its scalar
-		// parameter and result types use the same native storage rules as C.
-		valueBackground = CDecl
-	}
 	tParams := sig.Params()
 	n := tParams.Len()
 	hasVArg := HasNameValist(sig)
@@ -665,9 +660,6 @@ func isPkgScope(parent, pkgScope *types.Scope) bool {
 }
 
 func (p Program) toNamed(raw *types.Named) Type {
-	if background, ok := p.packageTypeCallConv(namedLinkname(raw)); ok && background == Stdcall {
-		p.validateStdcallType(raw)
-	}
 	name := p.llvmNameOf(raw)
 	if typ, ok := p.named[name]; ok {
 		if namedTypeEquivalent(typ.raw.Type, raw) || p.namedStructLayoutEquivalent(typ, raw) {

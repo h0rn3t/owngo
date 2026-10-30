@@ -17,9 +17,6 @@ func TestAggregateReturnStoragePromotes(t *testing.T) {
 		{"linux", "386"},
 		{"linux", "arm"},
 		{"linux", "riscv64"},
-		{"windows", "amd64"},
-		{"windows", "arm64"},
-		{"windows", "386"},
 		{"wasip1", "wasm"},
 	} {
 		t.Run(target.goos+"/"+target.goarch, func(t *testing.T) {

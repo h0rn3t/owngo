@@ -1,7 +1,6 @@
 package build
 
 import (
-	"go/token"
 	"go/types"
 	"strings"
 	"testing"

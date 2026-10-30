@@ -16,7 +16,6 @@ var nativeIntegerABITests = func() []struct {
 } {
 	narrow := []string{"", "signext", "zeroext", "signext", "zeroext", "zeroext", "", ""}
 	riscv64 := []string{"", "signext", "zeroext", "signext", "zeroext", "zeroext", "signext", "signext"}
-	windows64 := []string{"", "", "", "", "", "zeroext", "", ""}
 	return []struct {
 		target Target
 		attrs  []string
@@ -32,12 +31,6 @@ var nativeIntegerABITests = func() []struct {
 		{Target{GOOS: "linux", GOARCH: "arm", Target: "riscv64", LLVMTarget: "riscv64-unknown-elf"}, riscv64},
 		{Target{GOOS: "linux", GOARCH: "arm64", Target: "riscv64", LLVMTarget: "riscv64-unknown-elf"}, riscv64},
 		{Target{GOOS: "linux", GOARCH: "arm", Target: "custom", LLVMTarget: "aarch64-unknown-linux-gnu"}, nil},
-		{Target{GOOS: "windows", GOARCH: "amd64"}, windows64},
-		{Target{GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-w64-windows-gnu"}, windows64},
-		{Target{GOOS: "windows", GOARCH: "386"}, narrow},
-		{Target{GOOS: "windows", GOARCH: "386", LLVMTarget: "i686-w64-windows-gnu"}, narrow},
-		{Target{GOOS: "windows", GOARCH: "arm64"}, nil},
-		{Target{GOOS: "windows", GOARCH: "arm64", LLVMTarget: "aarch64-w64-windows-gnu"}, nil},
 		{Target{GOOS: "wasip1", GOARCH: "wasm", WasmProfile: "w32", WasmProvider: "wasi"}, narrow},
 		{Target{GOOS: "js", GOARCH: "wasm"}, narrow},
 	}
@@ -78,12 +71,6 @@ func TestNativeNarrowIntegerAttributes(t *testing.T) {
 				call := body.Call(native.Expr, args...)
 				checkNarrowAttrs(t, call.impl, true, want)
 				checkNarrowAttrs(t, caller.impl, false, make([]string, len(want)))
-				if target.GOOS == "windows" {
-					stdcall := pkg.NewFunc("stdcall."+name, sig, Stdcall)
-					stdcall.MakeBody(1).Return(stdcall.Param(resultIndex))
-					checkNarrowAttrs(t, stdcall.impl, false, want)
-					checkNarrowAttrs(t, body.Call(stdcall.Expr, args...).impl, true, want)
-				}
 				body.Return(call)
 
 				pointerName := "Pointer" + name

@@ -1,4 +1,4 @@
-//go:build linux || darwin || windows
+//go:build linux || darwin
 
 /*
  * Copyright (c) 2026 The XGo Authors (xgo.dev). All rights reserved.

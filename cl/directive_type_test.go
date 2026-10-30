@@ -87,28 +87,6 @@ func use(cb Callback, v int32) int32 {
 }
 `
 
-// stdcallTmpl exercises a stdcall callback through the stdcall linkname
-// namespace. %s is the directive on Callback.
-const stdcallTmpl = `package equiv
-
-import _ "unsafe"
-
-%s
-type Callback func(int32) int32
-
-//go:linkname invoke stdcall.Invoke
-func invoke(Callback, int32) int32
-
-//go:linkname direct stdcall.Direct
-func direct(int32) int32
-
-func callback(v int32) int32 { return v + 1 }
-
-func use(cb Callback, v int32) int32 {
-	return direct(v) + cb(v) + invoke(callback, v)
-}
-`
-
 // structTmpl exercises an opaque C struct (the documented JSON/Reader pattern)
 // passed by pointer to a linked C function. The //llgo:cdecl / //llgo:type C
 // directive sits on the struct *type* declaration, not a field. %s is the
@@ -128,12 +106,11 @@ func use(p *Opaque) int32 {
 }
 `
 
-// TestCdeclStdcallEquivalentToLegacyType asserts that the new //llgo:cdecl and
-// //llgo:stdcall directives generate exactly the same code, ABI and calling
-// convention as the deprecated //llgo:type C / //llgo:type stdcall forms. The
-// comparison is done on the fully compiled IR so it covers the whole codegen
-// path, not just the parsed background value.
-func TestCdeclStdcallEquivalentToLegacyType(t *testing.T) {
+// TestCdeclEquivalentToLegacyType asserts that the new //llgo:cdecl directive
+// generates exactly the same code, ABI and calling convention as the deprecated
+// //llgo:type C form. The comparison is done on the fully compiled IR so it
+// covers the whole codegen path, not just the parsed background value.
+func TestCdeclEquivalentToLegacyType(t *testing.T) {
 	cases := []struct {
 		name   string
 		tmpl   string
@@ -145,9 +122,6 @@ func TestCdeclStdcallEquivalentToLegacyType(t *testing.T) {
 		// //llgo:cdecl on a struct type (the opaque-C-struct case) must be
 		// honored exactly like the legacy //llgo:type C spelling.
 		{"cdecl struct", structTmpl, "//llgo:cdecl", "//llgo:type C", nil},
-		// stdcall only diverges from the C ABI on windows/386; use that target
-		// to exercise the dedicated x86 stdcall path.
-		{"stdcall", stdcallTmpl, "//llgo:stdcall", "//llgo:type stdcall", &llssa.Target{GOOS: "windows", GOARCH: "386"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -161,9 +135,9 @@ func TestCdeclStdcallEquivalentToLegacyType(t *testing.T) {
 	}
 }
 
-// TestLegacyTypeEmitsDeprecationWarning asserts that //llgo:type C and
-// //llgo:type stdcall still work but print a deprecation warning naming the
-// replacement, while the new directives are silent.
+// TestLegacyTypeEmitsDeprecationWarning asserts that //llgo:type C still works
+// but prints a deprecation warning naming the replacement, while the new
+// directive is silent.
 func TestLegacyTypeEmitsDeprecationWarning(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -176,18 +150,8 @@ func TestLegacyTypeEmitsDeprecationWarning(t *testing.T) {
 			wantMsg: "//llgo:cdecl",
 		},
 		{
-			name:    "legacy stdcall warns and names stdcall",
-			src:     "package p\n//llgo:type stdcall\ntype Callback func()\n",
-			wantMsg: "//llgo:stdcall",
-		},
-		{
 			name:    "new cdecl is silent",
 			src:     "package p\n//llgo:cdecl\ntype Callback func()\n",
-			wantMsg: "",
-		},
-		{
-			name:    "new stdcall is silent",
-			src:     "package p\n//llgo:stdcall\ntype Callback func()\n",
 			wantMsg: "",
 		},
 		{
@@ -225,16 +189,6 @@ func TestTypeCallConvConflictsAndInvalidPlacement(t *testing.T) {
 		want string
 	}{
 		{
-			name: "two new directives conflict",
-			src:  "package p\n//llgo:cdecl\n//llgo:stdcall\ntype Callback func()\n",
-			want: "conflicting calling-convention directives",
-		},
-		{
-			name: "new and legacy conflict",
-			src:  "package p\n//llgo:cdecl\n//llgo:type stdcall\ntype Callback func()\n",
-			want: "conflicting calling-convention directives",
-		},
-		{
 			name: "duplicate same directive conflicts",
 			src:  "package p\n//llgo:cdecl\n//llgo:cdecl\ntype Callback func()\n",
 			want: "conflicting calling-convention directives",
@@ -267,7 +221,7 @@ func TestTypeCallConvConflictsAndInvalidPlacement(t *testing.T) {
 // rejected. The directive's background value is checked separately via
 // typeCallConv in TestTypeBackgroundAndParsePkgSyntaxCoverage; IR-level
 // equivalence with the legacy spelling is covered by
-// TestCdeclStdcallEquivalentToLegacyType.
+// TestCdeclEquivalentToLegacyType.
 func TestCdeclOnStructTypeAccepted(t *testing.T) {
 	cases := []struct {
 		name string

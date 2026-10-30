@@ -61,16 +61,16 @@ const (
 	ccUnknown CallConv = iota
 	GoDecl
 	CDecl
-	Stdcall
 )
 
 // Type convert a Go/C type into raw type.
 // C type = raw type
 // Go type: convert to raw type (because of closure)
+func isNativeCallConv(cc CallConv) bool {
+	return cc == CDecl
+}
+
 func (p Program) Type(typ types.Type, cc CallConv) Type {
-	if cc == Stdcall {
-		p.validateStdcallType(typ)
-	}
 	if cc == GoDecl {
 		typ, _ = p.gocvt.cvtType(typ)
 	}
@@ -83,9 +83,6 @@ func (p Program) Type(typ types.Type, cc CallConv) Type {
 
 // FuncDecl converts a Go/C function declaration into raw type.
 func (p Program) FuncDecl(sig *types.Signature, cc CallConv) Type {
-	if cc == Stdcall {
-		p.validateStdcallSignature(sig)
-	}
 	recv := sig.Recv()
 	if cc == GoDecl {
 		sig = p.gocvt.cvtFunc(sig, recv)

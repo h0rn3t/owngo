@@ -709,29 +709,6 @@ func TestGenMainModuleCArchiveRegistersCExportThread(t *testing.T) {
 	}
 }
 
-func TestGenMainModuleWindowsCShared386UsesStdcallInitOnce(t *testing.T) {
-	llvm.InitializeAllTargets()
-	t.Setenv(llgoStdioNobuf, "")
-	ctx := &context{
-		prog: llssa.NewProgram(nil),
-		buildConf: &Config{
-			BuildMode: BuildModeCShared,
-			Goos:      "windows",
-			Goarch:    "386",
-		},
-	}
-	pkg := &packages.Package{PkgPath: "example.com/foo", ExportFile: "foo.a"}
-	ir := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true}).LPkg.String()
-	for _, want := range []string{
-		"declare dllimport x86_stdcallcc i32 @InitOnceExecuteOnce(",
-		"call x86_stdcallcc i32 @InitOnceExecuteOnce(",
-	} {
-		if !strings.Contains(ir, want) {
-			t.Fatalf("Windows/386 c-shared module IR missing %q:\n%s", want, ir)
-		}
-	}
-}
-
 func TestGenMainModuleLibraryConstructorArgsByPlatform(t *testing.T) {
 	llvm.InitializeAllTargets()
 	t.Setenv(llgoStdioNobuf, "")
@@ -741,7 +718,6 @@ func TestGenMainModuleLibraryConstructorArgsByPlatform(t *testing.T) {
 	}{
 		{goos: "linux", wantArgs: true},
 		{goos: "darwin", wantArgs: true},
-		{goos: "windows", wantArgs: false},
 	} {
 		t.Run(test.goos, func(t *testing.T) {
 			ctx := &context{

@@ -1,4 +1,4 @@
-//go:build linux || darwin || windows
+//go:build linux || darwin
 
 // This test uses platform-specific protected-memory helpers.
 package gotest
@@ -33,7 +33,6 @@ func TestRecoverAfterFaultPreservesNamedResult(t *testing.T) {
 	// the same deterministic recovery check.
 	oldGCPercent := debug.SetGCPercent(-1)
 	defer debug.SetGCPercent(oldGCPercent)
-	ensureWindowsExceptionStackHeadroom()
 
 	old := debug.SetPanicOnFault(true)
 	defer debug.SetPanicOnFault(old)

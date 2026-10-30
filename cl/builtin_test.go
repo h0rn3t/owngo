@@ -459,9 +459,8 @@ func TestCollectMethodNilDerefChecksSkipsDynamicDeferGo(t *testing.T) {
 
 func TestToCallConv(t *testing.T) {
 	for name, want := range map[string]llssa.CallConv{
-		"":        llssa.GoDecl,
-		"C":       llssa.CDecl,
-		"stdcall": llssa.Stdcall,
+		"":  llssa.GoDecl,
+		"C": llssa.CDecl,
 	} {
 		if got := toCallConv(name); got != want {
 			t.Fatalf("toCallConv(%q) = %v, want %v", name, got, want)
