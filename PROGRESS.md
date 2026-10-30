@@ -316,3 +316,11 @@
 - Рядок фази 4 в таблиці `INTENT.md` вказує на ці задачі. Паритет із `gc` лишається гіпотезою в рядку 5.
 - Лишилось: P4.1, `FreeAccounted` для `static` поза `main`.
 
+## 2026-10-30 — P4.1
+
+- Компілятор не змінювався. Той самий прохід v1 уже ставить `FreeAccounted` у пакеті, який не є `main`, якщо тіло є в `ssa.Program` і `OwnGoFree` увімкнено. Другий класифікатор і другий `free` не додані.
+- `TestOwnGoStaticOutside` збирає два пакети, кличе `PublishProgram` і компілює обидва. `example.com/lib.Static` містить один `FreeAccounted`. `example.com/lib.Held` передає об'єкт у невідомий `func(*int)` і не містить ні `FreeAccounted`, ні `DecAccounted`. `example.com/lib.Closure` лишає два купові `Alloc` (слот і `new(int)`) на `DecAccounted`; окремий `FreeAccounted` має розмір кореня 0 і стосується значення замикання, не цих 8 байтів. `main.staticNew` і далі містить один `FreeAccounted`.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду: `LLGO_ROOT=$PWD go test -count=1 -v ./cl/ -run OwnGoStaticOutside` — `--- PASS: TestOwnGoStaticOutside (0.26s)`. `gofmt -l` на зміненому файлі порожньо. `go vet ./cl/` без зауважень.
+- Частка 1 063 134 701 байт лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P4.2, байти місця `static` поза `main`.
+
