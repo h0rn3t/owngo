@@ -271,3 +271,15 @@
 - Частка 1 666 739 900 байтів лишається фактом заміру. Поріг 50% не застосований.
 - Лишилось: P3.4, ASan на лічильнику.
 
+## 2026-10-30 — P3.4
+
+- `-asan` з P1.4 без змін: пайплайн LLVM із суфіксом `,asan`, атрибут `sanitize_address`, лінк `-fsanitize=address`. Фікстури збираються з `-O0`, щоб читання після звільнення не стерлось як невизначена поведінка.
+- `owngo/asan/decuaf` виділяє `AllocCounted`, один `DecAccounted` доводить лічильник до нуля і читає об'єкт. `owngo/asan/twouse` двічі читає одне базове місце `rc-local: closure` (`new(int)`, слот і значення) в одній горутині; census v1 дає дві мітки `rc-local` на рядку `new`. `owngo/asan/shared` пише `new(int)` у глобальну змінну (`rc-shared: global`) і читає його наприкінці.
+- Прийняття, з кореня репозиторію, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`:
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/decuaf` — код 1. У виводі `ERROR: AddressSanitizer: heap-use-after-free` і `SUMMARY: AddressSanitizer: heap-use-after-free ... in main.main+0x90`. Раннер загортає abort trap у `exit status 1`.
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/twouse` — код 0, stdout `asan-rclocal-ok`, тексту AddressSanitizer немає.
+  - `go run ./cmd/llgo run -tags owngo -O0 -asan ./owngo/asan/shared` — код 0, stdout `asan-shared-ok`, тексту AddressSanitizer немає.
+- `gofmt -l` на нових файлах порожньо. `go vet` для трьох пакетів без тега `owngo` без зауважень. `go test -count=1` на них — `[no test files]` (заглушки `!owngo`). `golangci-lint` (нові знахідки від HEAD) — 0 зауважень. `go fix -diff` для цих пакетів порожній. `govulncheck` не запускався: залежностей не змінювали.
+- Частка 1 666 739 900 байтів лишається фактом заміру. Поріг 50% не застосований.
+- Лишилось: P3.5, байти, що пройшли через лічильник.
+
