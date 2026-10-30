@@ -120,6 +120,11 @@ func packageSummaries(pass *analysis.Pass, funcs []*ssa.Function) map[*ssa.Funct
 			push(caller)
 		}
 	}
+	for fn := range freshResults(funcs) {
+		if s := cur[fn]; s != nil {
+			s.Fresh = true
+		}
+	}
 	for _, fn := range funcs {
 		if fn == nil || fn.Object() == nil || cur[fn] == nil {
 			continue
@@ -169,6 +174,13 @@ func PublishProgram(prog *ssa.Program) {
 		}
 	}
 	sums := packageSummaries(nil, funcs)
+	fresh := map[*ssa.Function]bool{}
+	for fn, sum := range sums {
+		if sum != nil && sum.Fresh {
+			fresh[fn] = true
+		}
+	}
+	publishFresh(prog, fresh)
 	next := map[string]*Summary{}
 	for _, fn := range funcs {
 		sum := sums[fn]

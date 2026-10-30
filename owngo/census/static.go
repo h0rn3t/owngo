@@ -43,6 +43,12 @@ func Place(funcs []*ssa.Function) (
 			continue
 		}
 		msg, pts, contents := messages(fn, ifaceStrict, nil, ctx)
+		// Свіжий результат: одиниця слова переходить до викликача.
+		if sum := ctx.sums[fn]; sum != nil && sum.Fresh {
+			for _, alloc := range freshAllocs(fn) {
+				counted[alloc] = struct{}{}
+			}
+		}
 		rings := cyclicSites(fn, msg, pts, storeInc)
 		for site := range rings {
 			counted[site] = struct{}{}

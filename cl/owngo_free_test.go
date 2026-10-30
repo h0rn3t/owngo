@@ -405,15 +405,19 @@ func returnRing() *node {
 // TestOwnGoUncountedEscape: місце без DecAccounted не отримує слово лічильника.
 // Інакше вказівник, що виходить із функції, вказує в середину блока malloc,
 // і FreeAccounted у викликача (як для make(map) поверх runtime.makemap)
-// звільняє не початок блока.
+// звільняє не початок блока. Свіжий результат P6.5 слово має за задумом:
+// його бере лише Dec викликача, а рантайм llgo свіжого результату не дає.
 func TestOwnGoUncountedEscape(t *testing.T) {
 	const src = `package foo
 
 type box struct{ v int }
 
+var sink *box
+
 func returned() *box {
 	b := new(box)
 	b.v = 1
+	sink = b
 	return b
 }
 
