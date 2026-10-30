@@ -295,6 +295,9 @@ func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx
 			noteCall(instr, &instr.Call, escapeCall, pts, escape, notes, false, v1)
 		case *ssa.Go:
 			noteCall(instr, &instr.Call, escapeGo, pts, escape, notes, true, v1)
+		case *ssa.Panic:
+			// recover отримує значення в будь-якому кадрі вище: як у зведенні, call.
+			raise(escape, notes, pts[instr.X], escapeCall, "panic")
 		}
 	}
 	return escape, notes
@@ -422,7 +425,7 @@ func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned boo
 		}
 		return "static"
 	}
-	// return, move і call лишаються в позначці: decSite за ними не ставить Dec.
+	// return, move, call і panic лишаються в позначці: decSite за ними не ставить Dec.
 	if k >= escapeGlobal {
 		return "rc-shared: " + reason
 	}

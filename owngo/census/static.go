@@ -115,7 +115,7 @@ func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, noDe
 	}
 	_, reason, _ := strings.Cut(label, ": ")
 	switch reason {
-	case "return", "move", "call":
+	case "return", "move", "call", "panic":
 		return false
 	default:
 		return true
