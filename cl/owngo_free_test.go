@@ -180,3 +180,68 @@ func grow(h *head) {
 		t.Errorf("foo.grow runtime.Free count = %d, want 0", got)
 	}
 }
+
+func TestOwnGoRCLocal(t *testing.T) {
+	const src = `package foo
+
+var g *int
+
+func closureUse() int {
+	p := new(int)
+	*p = 1
+	f := func() int { return *p }
+	return f() + *p
+}
+
+func shared() int {
+	p := new(int)
+	*p = 1
+	g = p
+	return *p
+}
+
+func unknown(f func(*int)) int {
+	p := new(int)
+	*p = 1
+	f(p)
+	return *p
+}
+
+func staticNew() int {
+	p := new(int)
+	*p = 1
+	return *p
+}
+
+func interior(sink func(*int)) int {
+	s := &struct{ f int }{f: 1}
+	sink(&s.f)
+	return s.f
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	base := mustNamedFunction(t, mod, "foo.closureUse").String()
+	if got := strings.Count(base, "runtime.DecAccounted"); got != 1 {
+		t.Errorf("foo.closureUse runtime.DecAccounted count = %d, want 1", got)
+	}
+	if !strings.Contains(base, "runtime.AllocCounted") {
+		t.Errorf("foo.closureUse IR = missing runtime.AllocCounted, want a call")
+	}
+	for _, name := range []string{"foo.shared", "foo.unknown", "foo.staticNew", "foo.interior"} {
+		body := mustNamedFunction(t, mod, name).String()
+		if got := strings.Count(body, "runtime.DecAccounted"); got != 0 {
+			t.Errorf("%s runtime.DecAccounted count = %d, want 0", name, got)
+		}
+	}
+	static := mustNamedFunction(t, mod, "foo.staticNew").String()
+	if !strings.Contains(static, "runtime.FreeAccounted") {
+		t.Errorf("foo.staticNew IR = missing runtime.FreeAccounted, want a call")
+	}
+	off := compileOwnGoFree(t, src, false)
+	if got := strings.Count(mustNamedFunction(t, off, "foo.closureUse").String(), "runtime.DecAccounted"); got != 0 {
+		t.Errorf("OwnGoFree false: foo.closureUse runtime.DecAccounted count = %d, want 0", got)
+	}
+}
