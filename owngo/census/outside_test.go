@@ -2,6 +2,9 @@ package census
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -343,5 +346,136 @@ Mappings
 	if gotObjects != external.Objects || gotBytes != external.Bytes {
 		t.Errorf("ExternalModules sum = %d objects, %d bytes, want Outside external %d, %d",
 			gotObjects, gotBytes, external.Objects, external.Bytes)
+	}
+}
+
+func TestExternalCategoriesEmpty(t *testing.T) {
+	got := ExternalCategories(nil, nil, nil, "", "")
+	if got == nil || len(got) != 0 {
+		t.Errorf("ExternalCategories(nil, nil) = %#v, want empty slice", got)
+	}
+	dirs := ExternalPackageDirs(nil, nil, "", "")
+	if dirs == nil || len(dirs) != 0 {
+		t.Errorf("ExternalPackageDirs(nil, nil) = %#v, want empty slice", dirs)
+	}
+}
+
+func TestExternalCategories(t *testing.T) {
+	const (
+		module = "/app"
+		goroot = "/goroot"
+	)
+	root := t.TempDir()
+	presentA := filepath.Join(root, "pkg", "mod", "github.com", "foo", "bar@v1.2.3", "a.go")
+	presentB := filepath.Join(root, "pkg", "mod", "github.com", "foo", "bar@v1.2.3", "b.go")
+	presentC := filepath.Join(root, "pkg", "mod", "gopkg.in", "yaml.v3@v3.0.1", "yaml.go")
+	uncached := filepath.Join(root, "opt", "other", "local", "mod.go")
+	missing := filepath.Join(root, "pkg", "mod", "github.com", "gone", "mod@v1.0.0", "z.go")
+	dirOnly := filepath.Join(root, "pkg", "mod", "github.com", "dir", "mod@v1.0.0", "sub")
+	testFile := filepath.Join(root, "pkg", "mod", "github.com", "foo", "bar@v1.2.3", "a_test.go")
+	for _, path := range []string{presentA, presentB, presentC, uncached, testFile} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("package p\n"), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	if err := os.MkdirAll(dirOnly, 0o750); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", dirOnly, err)
+	}
+
+	raw := fmt.Sprintf(`
+Samples:
+alloc_objects/count alloc_space/bytes
+         10        100: 1
+          7         70: 2
+         11         11: 3
+          4         40: 4
+          2         20: 5
+          5         50: 6
+          6         60: 7
+          8         80: 8
+          9          9: 9
+          0          0: 1
+          3         30: 10
+          1         15: 11
+         12         12: 12
+Locations
+     1: 0x1 M=1 foo.F %s:1:0 s=1
+     2: 0x2 M=1 foo.G %s:2:0 s=1
+     3: 0x3 M=1 yaml.F %s:3:0 s=1
+     4: 0x4 M=1 gone.F %s:4:0 s=1
+     5: 0x5 M=1 dir.F %s:5:0 s=1
+     6: 0x6 M=1 runtime.mallocgc %s/src/runtime/malloc.go:6:0 s=1
+             foo.F %s:1:0 s=1
+     7: 0x7 M=1 foo.TestF %s:7:0 s=1
+     8: 0x8 M=1 fmt.Sprintf %s/src/fmt/print.go:8:0 s=1
+     9: 0x9 M=1 runtime.mallocgc %s/src/runtime/malloc.go:6:0 s=1
+             app.hit %s/hit.go:4:0 s=1
+    10: 0xa M=1 gone.F %s:4:0 s=1
+             foo.F %s:1:0 s=1
+    11: 0xb M=1 local.F %s:6:0 s=1
+    12: 0xc M=1 runtime.mallocgc %s/src/runtime/malloc.go:6:0 s=1
+Mappings
+`, presentA, presentB, presentC, missing, dirOnly, goroot, presentA, testFile, goroot, goroot, module, missing, presentA, uncached, goroot)
+	samples, err := ParseAllocProfile(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseAllocProfile() error = %v, want nil", err)
+	}
+	moduleSites := []Site{{Category: "static", Pos: module + "/hit.go:4"}}
+	externalSites := []Site{
+		{Category: "static", Pos: presentA + ":1"},
+		{Category: "static", Pos: presentB + ":2"},
+		{Category: "rc-local", Pos: presentB + ":2"},
+		{Category: "cyclic", Pos: presentA + ":9"},
+		{Category: "static", Pos: uncached + ":6"},
+	}
+	got := ExternalCategories(moduleSites, externalSites, samples, module, goroot)
+	want := []Weight{
+		{Category: "static", Sites: 3, Objects: 20, Bytes: 200},
+		{Category: "rc-local", Sites: 1, Objects: 3, Bytes: 35},
+		{Category: "cyclic", Sites: 1},
+		{Category: Unmatched, Objects: 11, Bytes: 11},
+		{Category: OutsideNoSource, Objects: 9, Bytes: 90},
+	}
+	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
+		t.Errorf("ExternalCategories(profile) = %#v, want %#v", got, want)
+	}
+
+	var gotObjects, gotBytes int64
+	for _, weight := range got {
+		gotObjects += weight.Objects
+		gotBytes += weight.Bytes
+	}
+	var external Weight
+	var found bool
+	for _, weight := range Outside(moduleSites, samples, module, goroot) {
+		if weight.Category != OutsideExternal {
+			continue
+		}
+		found = true
+		external = weight
+	}
+	if !found {
+		t.Fatalf("Outside external missing, ExternalCategories sum = %d objects, %d bytes", gotObjects, gotBytes)
+	}
+	if gotObjects != external.Objects || gotBytes != external.Bytes {
+		t.Errorf("ExternalCategories sum = %d objects, %d bytes, want Outside external %d, %d",
+			gotObjects, gotBytes, external.Objects, external.Bytes)
+	}
+
+	dirs := ExternalPackageDirs(moduleSites, samples, module, goroot)
+	wantDirs := []string{filepath.Dir(presentA), filepath.Dir(presentC), filepath.Dir(uncached)}
+	for i, dir := range wantDirs {
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			t.Fatalf("EvalSymlinks(%q) error = %v", dir, err)
+		}
+		wantDirs[i] = resolved
+	}
+	slices.Sort(wantDirs)
+	if fmt.Sprintf("%#v", dirs) != fmt.Sprintf("%#v", wantDirs) {
+		t.Errorf("ExternalPackageDirs(profile) = %#v, want %#v", dirs, wantDirs)
 	}
 }

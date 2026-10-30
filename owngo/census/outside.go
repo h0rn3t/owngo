@@ -2,6 +2,7 @@ package census
 
 import (
 	"cmp"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,6 +23,8 @@ const (
 	OutsideModule = "module"
 	// OutsideUncached — вибірка рядка поза -dir, з шляху якої модуль не читається.
 	OutsideUncached = "поза кешем"
+	// OutsideNoSource — вибірка рядка поза -dir, чий файл кадру вже не на диску.
+	OutsideNoSource = "немає джерела"
 )
 
 // Outside розкладає вибірки, які Weigh лишає поза census.
@@ -106,6 +109,60 @@ func StdlibCategories(moduleSites, stdlibSites []Site, samples []AllocSample, mo
 		stdlib = append(stdlib, sample)
 	})
 	return Weigh(stdlibSites, stdlib)
+}
+
+// ExternalCategories з'єднує вибірки рядка поза -dir з місцями v1 цих модулів.
+// moduleSites — місця модуля, як у Outside: вибірка, що вже має місце, у рядок не входить.
+// externalSites — місця класифікатора на пакетах цих модулів. Збіг file:line як у Weigh:
+// перший кадр від листа, байти діляться між місцями одного рядка.
+// Джерело — шлях кадру, якщо цей файл ще на диску. Каталог і відсутній файл
+// ідуть у рядок немає джерела і входять у суму. Завантаження з мережі не виконується.
+// Вибірка без місця — рядок unmatched. Порожній вхід дає порожній зріз, не nil.
+// Сума об'єктів і байтів дорівнює рядку external у Outside.
+func ExternalCategories(moduleSites, externalSites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
+	var present []AllocSample
+	var missingObjects, missingBytes int64
+	walkOutside(moduleSites, samples, moduleDir, goroot, func(kind, file string, sample AllocSample) {
+		if kind != OutsideExternal {
+			return
+		}
+		if !regularFile(file) {
+			missingObjects += sample.Objects
+			missingBytes += sample.Bytes
+			return
+		}
+		present = append(present, sample)
+	})
+	out := Weigh(externalSites, present)
+	if missingObjects == 0 && missingBytes == 0 {
+		return out
+	}
+	return append(out, Weight{Category: OutsideNoSource, Objects: missingObjects, Bytes: missingBytes})
+}
+
+// ExternalPackageDirs перелічує каталоги пакетів рядка поза -dir, чий файл кадру
+// ще на диску. Каталог і відсутній файл у список не входять: їхні байти лишаються
+// рядком немає джерела. Кожен каталог — один раз, за зростанням шляху.
+// Порожній вхід дає порожній зріз, не nil. Завантаження з мережі не виконується.
+func ExternalPackageDirs(moduleSites []Site, samples []AllocSample, moduleDir, goroot string) []string {
+	seen := map[string]struct{}{}
+	walkOutside(moduleSites, samples, moduleDir, goroot, func(kind, file string, _ AllocSample) {
+		if kind != OutsideExternal || !regularFile(file) {
+			return
+		}
+		seen[filepath.Dir(file)] = struct{}{}
+	})
+	out := make([]string, 0, len(seen))
+	for dir := range seen {
+		out = append(out, dir)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func regularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 // ExternalModules розкладає вибірки, які Outside кладе в модулі поза -dir,
