@@ -240,3 +240,12 @@
 - Рядок фази 3 в таблиці `INTENT.md` вказує на ці задачі. Фаза 4 лишається гіпотезою.
 - Лишилось: P3.1, неатомарний лічильник під тегом `owngo`.
 
+## 2026-10-30 — P3.1
+
+- Під тегом `owngo`, поруч із `FreeAccounted`: `AllocCounted`, `Inc`, `DecAccounted`. `AllocCounted` виділяє `AllocU` на розмір користувача плюс слово, пише в слово 1 і повертає вказівник за словом. Нульовий розмір дає `zerobase`. `Inc` і `DecAccounted` читають це слово звичайним `++`/`--`. На нулі `DecAccounted` кличе `FreeRoot` від адреси слова і переносить розмір користувача в лічильники `FreeAccounted` з `CatRCLocal`. `FreeAccounted` на користувацький вказівник не кличеться. `DecAccounted` від `zerobase` і `nil` нічого не звільняє.
+- Фікстура `owngo/counted`: `Inc` тримає блок, другий `DecAccounted` звільняє його (`malloc_size` бази 0), `Freed` зростає на 32, не на розмір зі словом. `DecAccounted` від `AllocU(0)` не зрушує `zerobase` і лічильник не чіпає.
+- Прийняття, з кореня, `PATH` з LLVM 23 і LLD попереду, `LLGO_ROOT=$PWD`: `go run ./cmd/llgo run -tags owngo ./owngo/counted` — код 0. До реалізації лінкер повідомляв `undefined symbol` для `AllocCounted`, `Inc` і `DecAccounted`.
+- `gofmt -l` на змінених файлах порожньо. `golangci-lint` (нові знахідки від HEAD; для рантайму `--build-tags owngo,nogc`) — 0 зауважень. `go vet -tags owngo,nogc` у модулі `runtime` як і раніше повідомляє `unsafe.Pointer` у `caller.go`, `local_context_stub.go`, `stubs.go`; нових рядків немає. `go fix -diff` для `account_owngo.go` порожній; у `stubs.go` лишається чужий `unsafe.Add`, не чіпав. `govulncheck` не запускався: залежностей не змінювали.
+- `go test -timeout 40m ./...` без тега `owngo` падає на пакетах `owngo/BASELINE.md` і ще на `cl` (FileCheck `ifaceconv`/`ifaceprom`, meta-золоті інтерфейсів і reflect), `cmd/internal/compat`, `dev/runtimeaudit`, `internal/build` (`TestRuntimeOwnership`, `TestRuntimeAuditMemory64Layout`). Ті самі `compat`, `runtimeaudit`, `ifaceconv` і `TestRuntimeOwnership/darwin-arm64` падають після `git checkout` цього файлу. `account_owngo.go` без тега `owngo` у збірку не входить.
+- Лишилось: P3.2, вставка `Inc` / `Dec` лише для `rc-local`.
+

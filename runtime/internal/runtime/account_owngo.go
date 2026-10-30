@@ -45,7 +45,51 @@ func FreeAccounted(ptr unsafe.Pointer, size uintptr, cat int32) {
 	atomic.Add(&liveBytes[cat], -uint64(size))
 }
 
-// Freed повертає байти, які FreeAccounted переніс у звільнені.
+// AllocCounted виділяє malloc на size байтів користувача плюс слово
+// лічильника, пише в це слово 1 і повертає вказівник за словом.
+// Нульовий size дає спільний zerobase, як AllocU. Слово не атомарне
+// і в розмір NoteAlloc не входить.
+func AllocCounted(size uintptr) unsafe.Pointer {
+	if size == 0 {
+		return unsafe.Pointer(&zerobase)
+	}
+	word := unsafe.Sizeof(uintptr(0))
+	block := AllocU(size + word)
+	*(*uintptr)(block) = 1
+	return unsafe.Add(block, word)
+}
+
+// Inc збільшує слово перед ptr на одиницю. zerobase і nil лишаються.
+func Inc(ptr unsafe.Pointer) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+		return
+	}
+	word := (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
+	*word++
+}
+
+// DecAccounted зменшує слово перед ptr на одиницю. На нулі звільняє адресу
+// слова через FreeRoot і переносить size байтів користувача в лічильники
+// FreeAccounted з категорією CatRCLocal. FreeAccounted на ptr не кличеться:
+// це середина блока. zerobase нічого не звільняє. Слово не атомарне.
+func DecAccounted(ptr unsafe.Pointer, size uintptr) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+		return
+	}
+	word := (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
+	*word--
+	if *word != 0 {
+		return
+	}
+	FreeRoot(unsafe.Pointer(word))
+	if size == 0 {
+		return
+	}
+	atomic.Add(&freedBytes, uint64(size))
+	atomic.Add(&liveBytes[CatRCLocal], -uint64(size))
+}
+
+// Freed повертає байти, які FreeAccounted і DecAccounted перенесли у звільнені.
 func Freed() uint64 {
 	return atomic.Load(&freedBytes)
 }
