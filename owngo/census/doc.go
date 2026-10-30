@@ -9,4 +9,5 @@
 // (alloc_objects, alloc_space) за file:line.
 // Outside розкладає рядок поза census на стандартну бібліотеку,
 // модулі поза каталогом, тести, runtime і файли модуля без місця.
+// StdlibPackages ділить рядок stdlib за імпортом пакета першого кадру.
 package census

@@ -1,7 +1,9 @@
 package census
 
 import (
+	"cmp"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -26,6 +28,80 @@ const (
 // провалюється до наступного. Порожній вхід дає порожній зріз, не nil.
 // Сума об'єктів і байтів дорівнює рядку Unmatched у Weigh.
 func Outside(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
+	count := map[string][2]int64{}
+	walkOutside(sites, samples, moduleDir, goroot, func(kind, _ string, objects, bytes int64) {
+		cur := count[kind]
+		cur[0] += objects
+		cur[1] += bytes
+		count[kind] = cur
+	})
+	out := []Weight{}
+	for _, cat := range []string{OutsideStdlib, OutsideExternal, OutsideTest, OutsideRuntime, OutsideModule} {
+		cur := count[cat]
+		if cur[0] == 0 && cur[1] == 0 {
+			continue
+		}
+		out = append(out, Weight{Category: cat, Objects: cur[0], Bytes: cur[1]})
+	}
+	return out
+}
+
+// StdlibPackages розкладає вибірки, які Outside кладе в stdlib,
+// за імпортом пакета першого кадру під GOROOT/src.
+// Ім'я файлу в пакет не входить: encoding/json/encode.go — це encoding/json.
+// Кадр пакета runtime провалюється так само, як у Outside.
+// Пакети впорядковано за спаданням байтів, потім об'єктів, потім імені.
+// Немає таких вибірок — порожній зріз, не nil.
+// Сума об'єктів і байтів дорівнює рядку OutsideStdlib.
+func StdlibPackages(sites []Site, samples []AllocSample, moduleDir, goroot string) []Weight {
+	resolved := resolvePath(goroot)
+	count := map[string][2]int64{}
+	walkOutside(sites, samples, moduleDir, resolved, func(kind, file string, objects, bytes int64) {
+		if kind != OutsideStdlib {
+			return
+		}
+		pkg := stdlibImport(file, resolved)
+		if pkg == "" {
+			// Порожній імпорт не викидає байти з рядка stdlib.
+			pkg = file
+		}
+		cur := count[pkg]
+		cur[0] += objects
+		cur[1] += bytes
+		count[pkg] = cur
+	})
+	out := []Weight{}
+	for pkg, cur := range count {
+		if cur[0] == 0 && cur[1] == 0 {
+			continue
+		}
+		out = append(out, Weight{Category: pkg, Objects: cur[0], Bytes: cur[1]})
+	}
+	slices.SortFunc(out, func(a, b Weight) int {
+		if c := cmp.Compare(b.Bytes, a.Bytes); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(b.Objects, a.Objects); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Category, b.Category)
+	})
+	return out
+}
+
+func stdlibImport(file, goroot string) string {
+	rel, err := filepath.Rel(filepath.Join(goroot, "src"), file)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	dir := filepath.Dir(rel)
+	if dir == "." {
+		return ""
+	}
+	return filepath.ToSlash(dir)
+}
+
+func walkOutside(sites []Site, samples []AllocSample, moduleDir, goroot string, fn func(kind, file string, objects, bytes int64)) {
 	moduleDir = resolvePath(moduleDir)
 	goroot = resolvePath(goroot)
 
@@ -59,7 +135,6 @@ func Outside(sites []Site, samples []AllocSample, moduleDir, goroot string) []We
 		seen[path] = got
 		return got
 	}
-	count := map[string][2]int64{}
 	for _, sample := range samples {
 		if sample.Objects == 0 && sample.Bytes == 0 {
 			continue
@@ -84,25 +159,12 @@ func Outside(sites []Site, samples []AllocSample, moduleDir, goroot string) []We
 		for i, frame := range sample.Frames {
 			files[i] = resolve(frame.File)
 		}
-		kind := outsideKind(files, moduleDir, goroot)
-		cur := count[kind]
-		cur[0] += sample.Objects
-		cur[1] += sample.Bytes
-		count[kind] = cur
+		kind, file := outsideKind(files, moduleDir, goroot)
+		fn(kind, file, sample.Objects, sample.Bytes)
 	}
-
-	out := []Weight{}
-	for _, cat := range []string{OutsideStdlib, OutsideExternal, OutsideTest, OutsideRuntime, OutsideModule} {
-		cur := count[cat]
-		if cur[0] == 0 && cur[1] == 0 {
-			continue
-		}
-		out = append(out, Weight{Category: cat, Objects: cur[0], Bytes: cur[1]})
-	}
-	return out
 }
 
-func outsideKind(files []string, moduleDir, goroot string) string {
+func outsideKind(files []string, moduleDir, goroot string) (string, string) {
 	sawRuntime := false
 	for _, file := range files {
 		if runtimeFile(file, goroot) {
@@ -111,20 +173,20 @@ func outsideKind(files []string, moduleDir, goroot string) string {
 		}
 		base := filepath.Base(file)
 		if strings.HasSuffix(base, "_test.go") || base == "_testmain.go" {
-			return OutsideTest
+			return OutsideTest, file
 		}
 		if under(file, filepath.Join(goroot, "src")) {
-			return OutsideStdlib
+			return OutsideStdlib, file
 		}
 		if under(file, moduleDir) {
-			return OutsideModule
+			return OutsideModule, file
 		}
-		return OutsideExternal
+		return OutsideExternal, file
 	}
 	if sawRuntime {
-		return OutsideRuntime
+		return OutsideRuntime, ""
 	}
-	return OutsideExternal
+	return OutsideExternal, ""
 }
 
 func runtimeFile(file, goroot string) bool {
