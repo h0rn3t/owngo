@@ -3560,7 +3560,69 @@ func optimizeLLVMModule(ctx *context, pkgPath string, mod gllvm.Module) error {
 	if err := mod.RunPasses(llvmPassPipeline(ctx.buildConf.OptLevel, ctx.buildConf.ltoMode(), ctx.buildConf.ASan), ctx.prog.TargetMachine(), pbo); err != nil {
 		return fmt.Errorf("run LLVM passes failed for %v: %w", pkgPath, err)
 	}
+	preserveZeroInitAggregatesForLTO(ctx.buildConf, ctx.crossCompile.Toolchain, mod)
 	return nil
+}
+
+// preserveZeroInitAggregatesForLTO roots zero-initialized aggregate globals
+// in llvm.compiler.used on COFF and ELF targets under LTO.
+//
+// Background: LLVM 23 miscompiles zero-initialized pointer-vector globals on
+// COFF (and ELF) object emission, producing BSS sections with nonzero bytes
+// that lld rejects ("BSS section ... cannot have non-zero bytes"). llgo only
+// emits struct-typed globals, but SLP vectorizes 16-byte copies into
+// <2 x ptr> loads and stores, and LTO internalization lets GlobalOpt rewrite
+// affected globals to vector type. This broke every -lto=full Windows link
+// involving runtime error values and similar iface-typed globals. Keeping the
+// globals address-taken blocks GlobalOpt's type mutation while preserving
+// their BSS classification. Revisit when the upstream LLVM backend issue is
+// fixed.
+func preserveZeroInitAggregatesForLTO(conf *Config, toolchain crosscompile.NativeToolchain, mod gllvm.Module) {
+	if !conf.ltoMode().Enabled() {
+		return
+	}
+	switch toolchain.ObjectFormat {
+	case crosscompile.ObjectFormatCOFF, crosscompile.ObjectFormatELF:
+	default:
+		return
+	}
+	ctx := mod.Context()
+	ptrTy := gllvm.PointerType(ctx.Int8Type(), 0)
+	values := make([]gllvm.Value, 0, 4)
+	// Preserve any existing compiler.used entries (e.g. static itabs).
+	if used := mod.NamedGlobal("llvm.compiler.used"); !used.IsNil() {
+		if init := used.Initializer(); !init.IsNil() {
+			for i, n := 0, init.OperandsCount(); i < n; i++ {
+				values = append(values, init.Operand(i))
+			}
+		}
+		used.EraseFromParentAsGlobal()
+	}
+	for g := mod.FirstGlobal(); !g.IsNil(); g = gllvm.NextGlobal(g) {
+		switch g.Name() {
+		case "llvm.used", "llvm.compiler.used", "llvm.metadata":
+			continue
+		}
+		if g.IsDeclaration() || g.IsThreadLocal() || g.IsGlobalConstant() {
+			continue
+		}
+		switch g.GlobalValueType().TypeKind() {
+		case gllvm.StructTypeKind, gllvm.ArrayTypeKind:
+		default:
+			continue
+		}
+		if init := g.Initializer(); init.IsNil() || !init.IsNull() {
+			continue
+		}
+		values = append(values, gllvm.ConstBitCast(g, ptrTy))
+	}
+	if len(values) == 0 {
+		return
+	}
+	init := gllvm.ConstArray(ptrTy, values)
+	used := gllvm.AddGlobal(mod, init.Type(), "llvm.compiler.used")
+	used.SetInitializer(init)
+	used.SetLinkage(gllvm.AppendingLinkage)
 }
 
 // compilePackageModule applies LLVM transforms and emits package objects.

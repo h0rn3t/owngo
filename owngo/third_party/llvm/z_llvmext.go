@@ -216,9 +216,6 @@ func CreateExtractValue(b Builder, agg Value, i int) (v Value) {
 }
 
 func CreateLoad(b Builder, t Type, p Value) (v Value) {
-	if t.TypeKind() == VectorTypeKind && t.ElementType().TypeKind() == PointerTypeKind {
-		println("VECPTRLOAD", t.String())
-	}
 	v.C = C.LLVMBuildLoad2(b.C, t.C, p.C, &emptyCStr[0])
 	return
 }
