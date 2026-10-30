@@ -72,6 +72,9 @@ func packageSummaries(pass *analysis.Pass, funcs []*ssa.Function) map[*ssa.Funct
 		if s, ok := cur[fn]; ok {
 			return s
 		}
+		if pass == nil {
+			return unknownSummary(fn)
+		}
 		return importSummary(pass, fn)
 	}
 	queue := make([]*ssa.Function, 0, len(funcs))
@@ -112,7 +115,7 @@ func packageSummaries(pass *analysis.Pass, funcs []*ssa.Function) map[*ssa.Funct
 			continue
 		}
 		obj := fn.Object()
-		if !obj.Exported() {
+		if pass == nil || !obj.Exported() {
 			continue
 		}
 		publishSummary(obj, cur[fn])
@@ -178,8 +181,12 @@ func importSummary(pass *analysis.Pass, fn *ssa.Function) *Summary {
 		if pass != nil && pass.ImportObjectFact(fn.Object(), &got) {
 			return &got
 		}
-		if stored := storedSummary(fn.Object()); stored != nil {
-			return stored
+		// pass == nil — виклик компілятора. Чуже зведення з попереднього
+		// проходу не робить виклик відомим: невідоме лишається невідомим.
+		if pass != nil {
+			if stored := storedSummary(fn.Object()); stored != nil {
+				return stored
+			}
 		}
 	}
 	return unknownSummary(fn)

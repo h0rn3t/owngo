@@ -244,6 +244,8 @@ type context struct {
 	staticMapSliceValues map[*ssa.MapUpdate]llssa.Expr
 	staticByteArrays     map[string][]byte
 	locality             localityLowering
+	ownGoUses            map[ssa.Instruction][]ssa.Instruction
+	ownGoFreeAfter       map[ssa.Instruction][]ssa.Value
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -844,6 +846,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			}
 			p.prepareExportedLocalContext(f)
 			p.bvals = make(map[ssa.Value]llssa.Expr)
+			p.ownGoFreeAfter = ownGoFreeAfter(f, p.ownGoUses)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
 			p.prepareCooperativeSafepoints(f, isCgo)
 			p.prepareGCRoots(f, hasCtx)
@@ -2345,6 +2348,15 @@ func (p *context) getDebugLocScope(v *ssa.Function, pos token.Pos) *types.Scope 
 }
 
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
+	defer func() {
+		// Jump, If, Return і Panic самі ставлять free перед термінатором LLVM.
+		// Решта інструкцій, зокрема значення SSA, виходять через return раніше.
+		switch instr.(type) {
+		case *ssa.Jump, *ssa.If, *ssa.Return, *ssa.Panic:
+			return
+		}
+		p.emitOwnGoFree(b, instr)
+	}()
 	p.panicSitePos = token.NoPos
 	if _, ok := p.staticInitInstrs[instr]; ok {
 		return
@@ -2414,6 +2426,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 	case *ssa.Jump:
 		jmpb := p.jumpTo(v)
+		p.emitOwnGoFree(b, v)
 		b.Jump(jmpb)
 	case *ssa.Return:
 		runDefers := p.returnNeedsImplicitRunDefers(v)
@@ -2447,6 +2460,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 			p.popCallerLocationFrame(b)
 		}
 		p.leaveExportedLocalContext(b)
+		p.emitOwnGoFree(b, v)
 		b.Return(results...)
 	case *ssa.If:
 		fn := p.fn
@@ -2454,6 +2468,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		succs := v.Block().Succs
 		thenb := fn.Block(succs[0].Index)
 		elseb := fn.Block(succs[1].Index)
+		p.emitOwnGoFree(b, v)
 		b.If(cond, thenb, elseb)
 	case *ssa.MapUpdate:
 		m := p.compileValue(b, v.Map)
@@ -2488,6 +2503,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		// frame to this pc (issue5856 wants the panic line, not the
 		// nearest call's).
 		p.emitPCLineLabel(b, v.Pos())
+		p.emitOwnGoFree(b, v)
 		b.Panic(arg)
 	case *ssa.Send:
 		ch := p.compileValue(b, v.Chan)
@@ -2982,6 +2998,7 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 			panic(err)
 		}
 	}
+	ctx.prepareOwnGoFree(pkg)
 	ctx.initFiles(pkgPath, files, cPkg)
 	ctx.prog.SetPatch(ctx.patchType)
 	ctx.prog.SetCompileMethods(ctx.checkCompileMethods)

@@ -137,3 +137,11 @@
 - `go test -timeout 40m ./...` без тега `owngo`: падіння лише з `owngo/BASELINE.md` (`cmd/internal/browser`, `internal/build` — архів і wasm SjLj, `internal/targets` — Memory64).
 - Прийняття: `gofmt -l` на змінених файлах порожньо. `go test -count=1 -run TestApplyOwngoTag ./internal/build/` і `go test -race -count=1 -run TestApplyOwngoTag ./internal/build/` зелені. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень для `./internal/build/`, `./owngo/runtimefree/` і `runtime/internal/runtime` з тегами `owngo,nogc`.
 - Лишилось: P1.3, вставка `free` лише для `static`.
+
+## 2026-10-30 — P1.3
+
+- Прохід у `cl` за `Options.OwnGoFree` бере категорії з `census.StaticUses` (ті самі правила v1, без другого класифікатора). У набір входять функції пакета, їхні анонімні функції і вже наявні методи через `FuncValue`; нові методи прохід не створює. `runtime.Free` стоїть після останнього читання в блоці, з якого об'єкт уже не виходить живим. `stack` лишається на стеку. `rc-local`, інша категорія і невідомий виклик у stdlib чи чужий модуль `free` не отримують.
+- Гілка і цикл, де читання ще попереду, `free` не ставлять: об'єкт доживає до виходу. Місце, яке тримає `defer`, теж не звільняється. У `map` і `chan` звільняється корінь, внутрішні блоки рантайму лишаються.
+- `packageSummaries(nil, …)` не публікує факти і не читає зведення попереднього проходу процесу: виклик поза набором лишається невідомим. Тег `owngo` вмикає `OwnGoFree`; без прапорця IR не змінюється.
+- Прийняття: `LLGO_ROOT=$PWD go test -count=1 -v ./cl/ -run OwnGoStaticFree` — `--- PASS: TestOwnGoStaticFree (0.86s)`. `gofmt -l` на змінених файлах порожньо. `go vet ./owngo/census/` і `go vet ./cl/` без зауважень. `go test -race -count=1 ./owngo/census/` зелений. `golangci-lint` (нові знахідки від HEAD, базовий конфіг) — 0 зауважень для `./cl/`, `./owngo/census/` і `./internal/build/`. `go vet ./internal/build/` як і раніше падає на копію lock у `windows_artifacts_test.go` (поза цим diff). `go fix -diff` пропонує чужі модернізації; не чіпав.
+- Лишилось: P1.4, ASan на вставленому `free`.

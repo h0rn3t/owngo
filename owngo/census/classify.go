@@ -72,7 +72,7 @@ func (s siteSet) absorb(other siteSet) bool {
 // messages класифікує місця однієї функції.
 // Запис у об'єкт наслідує втечу цього об'єкта; запис у об'єкт, який не втікає, втечею не є.
 // Розбір без полів: будь-яке поле ділить одну множину вмісту.
-func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx) map[ssa.Instruction]string {
+func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx) (map[ssa.Instruction]string, map[ssa.Value]siteSet) {
 	var instrs []ssa.Instruction
 	for _, block := range fn.Blocks {
 		instrs = append(instrs, block.Instrs...)
@@ -98,7 +98,7 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 		}
 		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe)
 	}
-	return out
+	return out, pts
 }
 
 func pointTo(instrs []ssa.Instruction) (map[ssa.Value]siteSet, map[ssa.Instruction]siteSet) {
