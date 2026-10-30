@@ -89,6 +89,126 @@ func DecAccounted(ptr unsafe.Pointer, size uintptr) {
 	atomic.Add(&liveBytes[CatRCLocal], -uint64(size))
 }
 
+// CyclicDesc описує тип вузла для DecCyclic: байти користувача і поля-вказівники.
+// Дескриптор дає компілятор, рантайм граф типів не будує.
+type CyclicDesc struct {
+	Size  uintptr
+	Edges []CyclicEdge
+}
+
+// CyclicEdge — поле-вказівник вузла: зміщення від вказівника користувача
+// і дескриптор цілі. Ненульова ціль має бути вказівником AllocCounted.
+type CyclicEdge struct {
+	Off  uintptr
+	Elem *CyclicDesc
+}
+
+// DecCyclic зменшує слово перед ptr і до повернення виконує trial deletion
+// з ptr як коренем спроби. Спроба зменшує слова дітей так, ніби ребра
+// вузла знято, і йде лише в дитину, чиє слово стало нулем. Якщо слово
+// кореня після спроби нульове, відвідані вузли звільняються через FreeRoot
+// на адресу слова, а їхні байти користувача переносяться в підсумок
+// FreeAccounted з CatCyclic. Інакше зменшення відновлюються. zerobase і nil
+// нічого не звільняють. Слово не атомарне. Обхід пам'яті не виділяє,
+// але рекурсивний: глибина дорівнює довжині ланцюга, що звільняється.
+func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+		return
+	}
+	root := countWord(ptr)
+	*root--
+	trialDec(ptr, desc, ptr)
+	if *root != 0 {
+		trialInc(ptr, desc, ptr)
+		return
+	}
+	// Список зібраних вузлів іде через їхні слова й закінчується коренем.
+	*root = uintptr(ptr)
+	size := collectTrial(ptr, desc, ptr)
+	for p := unsafe.Pointer(*root); p != ptr; {
+		next := unsafe.Pointer(*countWord(p))
+		FreeRoot(unsafe.Pointer(countWord(p)))
+		p = next
+	}
+	FreeRoot(unsafe.Pointer(root))
+	if size == 0 {
+		return
+	}
+	atomic.Add(&freedBytes, uint64(size))
+	atomic.Add(&liveBytes[CatCyclic], -uint64(size))
+}
+
+func countWord(ptr unsafe.Pointer) *uintptr {
+	return (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
+}
+
+// child повертає ціль ребра e вузла ptr або nil, якщо ціль не рахується.
+func child(ptr unsafe.Pointer, e CyclicEdge) unsafe.Pointer {
+	c := *(*unsafe.Pointer)(unsafe.Add(ptr, e.Off))
+	if c == unsafe.Pointer(&zerobase) {
+		return nil
+	}
+	return c
+}
+
+// trialDec знімає ребра ptr і заходить у дитину, чиє слово стало нулем.
+// Корінь уже відвіданий, тож у нього не заходить.
+func trialDec(ptr unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer) {
+	if desc == nil {
+		return
+	}
+	for _, e := range desc.Edges {
+		c := child(ptr, e)
+		if c == nil {
+			continue
+		}
+		w := countWord(c)
+		*w--
+		if *w == 0 && c != root {
+			trialDec(c, e.Elem, root)
+		}
+	}
+}
+
+// trialInc дзеркалить trialDec: дитина з нульовим словом була відвідана,
+// тож у неї заходить перше відновлене ребро.
+func trialInc(ptr unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer) {
+	if desc == nil {
+		return
+	}
+	for _, e := range desc.Edges {
+		c := child(ptr, e)
+		if c == nil {
+			continue
+		}
+		w := countWord(c)
+		*w++
+		if *w == 1 && c != root {
+			trialInc(c, e.Elem, root)
+		}
+	}
+}
+
+// collectTrial додає вузли з нульовим словом до списку в слові кореня
+// і повертає суму їхніх байтів користувача разом із ptr.
+func collectTrial(ptr unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer) uintptr {
+	if desc == nil {
+		return 0
+	}
+	size := desc.Size
+	for _, e := range desc.Edges {
+		c := child(ptr, e)
+		if c == nil || c == root || *countWord(c) != 0 {
+			continue
+		}
+		rootWord := countWord(root)
+		*countWord(c) = *rootWord
+		*rootWord = uintptr(c)
+		size += collectTrial(c, e.Elem, root)
+	}
+	return size
+}
+
 // Freed повертає байти, які FreeAccounted і DecAccounted перенесли у звільнені.
 func Freed() uint64 {
 	return atomic.Load(&freedBytes)
