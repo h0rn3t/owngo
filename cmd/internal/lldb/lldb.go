@@ -198,39 +198,7 @@ func lldbImportCommand(path string) string {
 	return `command script import "` + path + `"`
 }
 
-// lldbEnvironment configures only the debugger process. LLGo may also start a
-// host Python (for example, a remote-debug transport), whose interpreter ABI
-// must not inherit the different Python home required by native Windows LLDB.
+// lldbEnvironment configures only the debugger process.
 func lldbEnvironment(environ []string, goos string) []string {
-	if goos != "windows" {
-		return environ
-	}
-	value := func(name string) string {
-		for i := len(environ) - 1; i >= 0; i-- {
-			key, val, ok := strings.Cut(environ[i], "=")
-			if ok && strings.EqualFold(key, name) {
-				return val
-			}
-		}
-		return ""
-	}
-	home := value("LLGO_WINDOWS_LLDB_PYTHON_HOME")
-	if home == "" {
-		return environ
-	}
-	result := make([]string, 0, len(environ)+5)
-	for _, item := range environ {
-		key, _, _ := strings.Cut(item, "=")
-		switch strings.ToUpper(key) {
-		case "PATH", "PYTHONHOME", "PYTHONPATH", "PYTHONUTF8", "PYTHONIOENCODING":
-			continue
-		}
-		result = append(result, item)
-	}
-	result = append(result, "PYTHONHOME="+home, "PATH="+home+";"+value("PATH"),
-		"PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
-	if pythonPath := value("LLGO_WINDOWS_LLDB_PYTHONPATH"); pythonPath != "" {
-		result = append(result, "PYTHONPATH="+pythonPath)
-	}
-	return result
+	return environ
 }

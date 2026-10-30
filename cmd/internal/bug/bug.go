@@ -83,8 +83,6 @@ func openBrowser(link string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		cmd = exec.Command("open", link)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", link)
 	default:
 		cmd = exec.Command("xdg-open", link)
 	}

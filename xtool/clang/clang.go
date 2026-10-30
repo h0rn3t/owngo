@@ -21,7 +21,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 )
 
@@ -110,8 +109,6 @@ func (p *Cmd) CheckLinkArgs(cmdArgs []string, wasm bool) error {
 	extension := ""
 	if wasm {
 		extension = ".wasm"
-	} else if runtime.GOOS == "windows" {
-		extension = ".exe"
 	}
 
 	tmpFile, err := os.CreateTemp("", "llgo_check*"+extension)

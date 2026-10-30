@@ -97,17 +97,7 @@ func (p Package) moduleZeroSizedAlloc(elem Type) Expr {
 		byteTy := p.Prog.Byte()
 		zerobase = llvm.AddGlobal(p.mod, byteTy.ll, name)
 		zerobase.SetInitializer(llvm.ConstNull(byteTy.ll))
-		if p.Prog.target.effectiveGOOS() == "windows" {
-			// COFF aliases remain attached to their defining section. If the
-			// shared sentinel is COMDAT-folded, lld-link can discard the section
-			// behind an externally visible zero-sized global alias while another
-			// object still relocates against that alias. A module-local sentinel
-			// preserves the permitted Go semantics for zero-sized addresses and
-			// keeps every alias in a retained section.
-			zerobase.SetLinkage(llvm.PrivateLinkage)
-		} else {
-			p.setODRLinkage(zerobase, llvm.LinkOnceODRLinkage)
-		}
+		p.setODRLinkage(zerobase, llvm.LinkOnceODRLinkage)
 		zerobase.SetUnnamedAddr(true)
 	}
 	if alignment > uint64(p.Prog.GoWordSize()) {
@@ -153,17 +143,10 @@ func (p Package) mapZeroAddr(size uint64, alignment int) Expr {
 }
 
 // setODRLinkage gives multiply emitted definitions the section-group metadata
-// required by COFF. On ELF and Mach-O, LLVM's weak/linkonce linkage is enough;
-// on COFF, omitting COMDAT leaves every object with a separately named weak
-// fallback and lld-link rejects the otherwise identical definitions.
+// required by ELF/Mach-O linkers. On ELF and Mach-O, LLVM's weak/linkonce
+// linkage is enough.
 func (p Package) setODRLinkage(value llvm.Value, linkage llvm.Linkage) {
 	value.SetLinkage(linkage)
-	if p.Prog.target.effectiveGOOS() != "windows" {
-		return
-	}
-	comdat := p.mod.Comdat(value.Name())
-	comdat.SetSelectionKind(llvm.AnyComdatSelectionKind)
-	value.SetComdat(comdat)
 }
 
 func (p Package) ownsGlobal(name string) bool {
@@ -482,12 +465,6 @@ func (p Package) newFunc(
 	}
 	if envType != nil {
 		p.Prog.markClosureEnvFunction(fn, 0)
-	}
-	if target := p.Prog.Target(); target.GOOS == "windows" && (target.GOARCH == "amd64" || target.GOARCH == "arm64") {
-		// Hardware faults and other-thread snapshots can interrupt any
-		// instruction, even in a function LLVM proves nounwind. Win64 frame
-		// registers are not linked records; RtlVirtualUnwind needs .pdata.
-		fn.AddFunctionAttr(p.Prog.ctx.CreateEnumAttribute(llvm.AttributeKindID("uwtable"), 2))
 	}
 	if cc == GoDecl {
 		fn.AddFunctionAttr(p.nullPointerIsValidAttr)

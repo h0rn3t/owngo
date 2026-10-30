@@ -33,16 +33,13 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    name: test (${{ matrix.os }}${{ matrix.windows_abi && format(', {0}', matrix.windows_abi) || '' }}, LLVM ${{ matrix.llvm }}, Go current)
-    # macOS coverage alone can take 52 minutes; Windows has taken 56 minutes.
+    name: test (${{ matrix.os }}, LLVM ${{ matrix.llvm }}, Go current)
+    # macOS coverage alone can take 52 minutes.
     # Allow setup, emulator tests, and coverage upload to finish as well.
     # Individual Go test packages retain their existing timeout limits.
     # Native PCLN integration can relink each fixture; retain room for the
     # serial coverage suites and their upload on a cold Linux cache.
-    # Windows MSVC has reached 89 minutes after successful tests and coverage
-    # upload, then hit the 90-minute limit while saving the LLVM archive cache.
-    # Give that lane room for cold dependency setup and post-job cache saves.
-    timeout-minutes: ${{ matrix.windows_abi == 'msvc' && 120 || 90 }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -53,23 +50,13 @@ jobs:
             llvm: 23
           - os: ubuntu-latest
             llvm: 23
-          - os: windows-2022
-            llvm: 23
-            windows_abi: msvc
-          - os: windows-2022
-            llvm: 23
-            windows_abi: mingw
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - name: Free disk space on Windows
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/free-windows-disk
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
           llvm-version: ${{matrix.llvm}}
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
 
       - name: Install embedded dependencies
         uses: ./.github/actions/setup-embed-deps
@@ -106,8 +93,6 @@ jobs:
 
       - name: Install further optional dependencies for demos
         uses: ./.github/actions/setup-demo-deps
-        with:
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
 
       - name: Set LLGO_ROOT
         shell: bash
@@ -119,60 +104,13 @@ jobs:
           set -euo pipefail
           go build -v ./...
 
-      - name: Validate Windows host-only integration
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Keep the concurrency stress from the former dedicated workflow;
-          # one ordinary package run does not prove mutual exclusion.
-          go test -count=20 -timeout=10m -run 'Lock' ./internal/crosscompile
-
-          # These tests recover runtime faults before the protected-memory
-          # checks that exposed corruption on some hosted amd64 runners. Stress
-          # the shared Windows exception-stack preparation independently of the
-          # much larger coverage command below.
-          go test -count=100 -timeout=10m \
-            -ldflags='-linkmode=external -extldflags=-lsynchronization' \
-            -coverprofile="$RUNNER_TEMP/windows-exception-stress.txt" -covermode=atomic \
-            -run '^(TestMapUpdateRHSNilDerefOrder|TestMapUpdateAppendRHSOrder|TestMultipleAssignmentMapUpdateBeforeNilStore|TestMultipleAssignmentOrderBeforeLaterPanic|TestBinOpIntegerDivideByZeroPanics|TestBinOpIntegerRemainderByZeroPanics)$' \
-            ./test/go
-
-          # The runtime is a nested module and is therefore outside ./....
-          # These host-side FFI tests still need native Windows coverage.
-          (
-            cd runtime
-            go test -count=1 -timeout=10m \
-              ./internal/ffi ./internal/clite/ffi ./internal/lib/reflect
-            for arch in 386 arm64; do
-              CGO_ENABLED=0 GOOS=windows GOARCH="$arch" go test -c \
-                -o "$RUNNER_TEMP/llgo-ffi-$arch.test.exe" ./internal/ffi
-            done
-          )
-
-          ffi_include="$(pkg-config --variable=includedir libffi)"
-          clang -I"$ffi_include" -c \
-            runtime/internal/clite/ffi/_wrap/libffi.c \
-            -o "$RUNNER_TEMP/llgo-libffi-amd64.obj"
-          llvm-readobj --file-headers "$RUNNER_TEMP/llgo-libffi-amd64.obj"
-
-      - name: Prepare the Windows host Go test runtime
-        if: runner.os == 'Windows'
-        id: windows_go_runtime
-        shell: python {0}
-        run: |
-          import runpy
-          runpy.run_path('dev/prepare_windows_go_test_runtime.py', run_name='__main__')
-
-      # Every host uploads coverage: OS-specific ELF, Mach-O, and COFF paths
+      # Every host uploads coverage: OS-specific ELF and Mach-O paths
       # plus per-OS runtime shims are otherwise invisible to codecov/patch.
       - name: Test with coverage
         id: test_coverage
         env:
-          LLGO_GO_TEST_OVERLAY: ${{ steps.windows_go_runtime.outputs.overlay }}
           # Keep all cross-target ABI goldens on Qiniu. The ordinary five
-          # target architectures still run on every host and Windows ABI.
+          # target architectures still run on every host.
           LLGO_TEST_EXTENDED_ABI: ${{ runner.os == 'Linux' && '1' || '0' }}
         # Compiler fixtures build and run many programs under coverage; leave
         # enough headroom for the slower native toolchains.
@@ -183,32 +121,9 @@ jobs:
           # These jobs do not use -race. Go's default set-mode coverage records
           # the same covered statements without atomic counters in hot paths.
           go_test=(go test -json)
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            # Go's internal linker cannot consume every GNU COFF import
-            # archive used by the race runtime and LLVM. Use the configured
-            # Clang driver for the host test binaries instead of excluding
-            # those packages from the shared suite.
-            go_test+=("-ldflags=-linkmode=external -extldflags=-lsynchronization")
-            if [[ "${{ matrix.windows_abi }}" == msvc ]]; then
-              export LLGO_REQUIRE_MSVC=1
-            fi
-            export LLGO_STDIO_NOBUF=1
-            # Keep the main batch's existing narrow fatal-signature quarantine.
-            # The separate build, cl and test/go invocations use a measured runtime
-            # overlay to reserve enough stack for hardware exception recovery.
-            main_go_test=(bash dev/go_test_windows.sh python .github/scripts/run_go_tests.py main "${go_test[@]}")
-          else
-            main_go_test=(python .github/scripts/run_go_tests.py main "${go_test[@]}")
-          fi
+          main_go_test=(python .github/scripts/run_go_tests.py main "${go_test[@]}")
           if [[ "$RUNNER_OS" == Linux ]]; then
             main_go_test+=(-p=2)
-          fi
-
-          # cl's error-path tests also recover nil dereferences. Keep the
-          # measured Windows exception-stack reserve on build, cl and test/go;
-          # main_go_test already captured the original, quarantined command.
-          if [[ -n "$LLGO_GO_TEST_OVERLAY" ]]; then
-            go_test+=("-overlay=$LLGO_GO_TEST_OVERLAY")
           fi
 
           run_main_suite() {
@@ -237,10 +152,7 @@ jobs:
             # Split the longest package within this job. Each process has its
             # own source tree/cache and GOMAXPROCS=2. Discover every test,
             # verify exactly-once execution, and union statement coverage.
-            build_tests=(python .github/scripts/run_build_tests.py --overlay "$LLGO_GO_TEST_OVERLAY")
-            if [[ "$RUNNER_OS" == Windows ]]; then
-              build_tests+=("--ldflags=-linkmode=external -extldflags=-lsynchronization")
-            fi
+            build_tests=(python .github/scripts/run_build_tests.py)
             python .github/scripts/run_go_tests.py build "${build_tests[@]}"
           }
 
@@ -262,7 +174,6 @@ jobs:
           # Separate summary files avoid interleaved Markdown; all JSON logs and
           # coverage profiles already have distinct names. Drain both processes
           # and propagate either failure before the later emulator/coverage steps.
-          # Relative paths also work for native Windows Python under Git Bash.
           mkdir -p go-test-timings
           summaries=$(mktemp -d go-test-timings/summaries.XXXXXX)
           trap 'rm -rf "$summaries"' EXIT
@@ -313,29 +224,14 @@ jobs:
         if: ${{ !cancelled() && hashFiles('go-test-timings/*.jsonl') != '' }}
         uses: actions/upload-artifact@v7
         with:
-          name: go-test-timings-${{ matrix.os }}-${{ matrix.windows_abi || 'native' }}
+          name: go-test-timings-${{ matrix.os }}
           path: go-test-timings/
           retention-days: 7
-
-      - name: Install Codecov CLI with Windows host Python
-        if: runner.os == 'Windows' && steps.test_coverage.outputs.windows_runtime_corruption != 'true'
-        id: windows_codecov
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $pythonRoot = $env:LLGO_WINDOWS_PYTHON_HOME
-          & (Join-Path $pythonRoot 'python.exe') -m pip install --only-binary=:all: codecov-cli==11.3.1
-          if ($LASTEXITCODE -ne 0) { throw "Installing Codecov CLI failed: $LASTEXITCODE" }
-          $binary = Join-Path $pythonRoot 'Scripts/codecovcli.exe'
-          & $binary --version
-          if ($LASTEXITCODE -ne 0) { throw "Codecov CLI version probe failed: $LASTEXITCODE" }
-          "binary=$binary" >> $env:GITHUB_OUTPUT
 
       - name: Upload coverage reports to Codecov
         if: steps.test_coverage.outputs.windows_runtime_corruption != 'true'
         uses: codecov/codecov-action@v7
         with:
-          binary: ${{ steps.windows_codecov.outputs.binary }}
           use_pypi: true
           version: "11.3.1"
           token: ${{secrets.CODECOV_TOKEN}}

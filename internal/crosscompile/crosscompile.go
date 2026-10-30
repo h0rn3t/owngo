@@ -79,8 +79,7 @@ type WasmRuntime struct {
 }
 
 // NativeToolchain describes the externally visible ABI and the tools used to
-// produce a native object. Keep these choices explicit: in particular, a
-// Windows host does not imply either the MSVC or MinGW ABI.
+// produce a native object. Keep these choices explicit.
 type NativeToolchain struct {
 	ABI            PlatformABI
 	ObjectFormat   ObjectFormat
@@ -270,13 +269,6 @@ func nativeToolchain(goos string) NativeToolchain {
 			Driver:       DriverFlavorClangGNU,
 			Linker:       LinkerFlavorELFLLD,
 		}
-	case "windows":
-		return NativeToolchain{
-			ABI:          PlatformABIMsvc,
-			ObjectFormat: ObjectFormatCOFF,
-			Driver:       DriverFlavorClangGNU,
-			Linker:       LinkerFlavorCOFFLLD,
-		}
 	default:
 		return NativeToolchain{}
 	}
@@ -293,16 +285,7 @@ func driverDebugInfoPolicy() DebugInfoPolicy {
 }
 
 func nativeDebugInfoPolicy(toolchain NativeToolchain) DebugInfoPolicy {
-	policy := driverDebugInfoPolicy()
-	switch toolchain.Linker {
-	case LinkerFlavorMachO, LinkerFlavorELFLLD, LinkerFlavorMinGWLLD:
-	case LinkerFlavorCOFFLLD:
-		policy.OmitLinkFlags = []string{"-Wl,/debug:none"}
-		policy.PreserveLinkFlags = []string{"-Wl,/debug:dwarf"}
-	default:
-		policy.OmitLinkFlags = nil
-	}
-	return policy
+	return driverDebugInfoPolicy()
 }
 
 func (p DebugInfoPolicy) CanRetain() bool {
@@ -336,10 +319,8 @@ var (
 	espClangSHA256  = map[string]string{
 		"aarch64-apple-darwin": "31cb1b87c84531bd777a4d7493a5a35070e6dd860e4c600b63937f5b449c3064",
 		"aarch64-linux-gnu":    "4a88902abe7977c0cbdecb239ac1a4d24185557e451a3e1f59aebbd56371124d",
-		"aarch64-w64-mingw32":  "02521d03911dadbd84ecfb27903e59dae1d9f12c45245982caea7dad6e6d4188",
 		"x86_64-apple-darwin":  "c31d127230d87bc468e6ea5e709db20d0729ecf6407222ef33f2378e2f847416",
 		"x86_64-linux-gnu":     "735f9d343863e5693179908acd946a0e85468463246f11210f2aa690b47784ab",
-		"x86_64-w64-mingw32":   "49ba5159967f1f3cdc11b51d902595baaf0f94bf6c73fb4b880940f30a2d6f4f",
 	}
 )
 
@@ -428,7 +409,7 @@ func getESPClangRoot(forceEspClang bool) (clangRoot string, err error) {
 }
 
 // Include the tool host in the cache key: x64 and ARM64 LLGo installations
-// can share a Windows user cache, but cannot share a native ESP payload.
+// can share a user cache, but cannot share a native ESP payload.
 func espClangCacheDir(platform string) string {
 	return filepath.Join(cacheDir(), "esp-clang-"+espClangVersion+"-"+platform)
 }
@@ -449,14 +430,6 @@ func getESPClangPlatform(goos, goarch string) string {
 			return "x86_64-linux-gnu"
 		case "arm64":
 			return "aarch64-linux-gnu"
-		}
-	case "windows":
-		switch goarch {
-		case "386", "amd64":
-			// 32-bit LLGo hosts run the x64 tools as separate processes.
-			return "x86_64-w64-mingw32"
-		case "arm64":
-			return "aarch64-w64-mingw32"
 		}
 	}
 	return ""
@@ -508,73 +481,26 @@ func ltoLinkerOptFlag(level optlevel.Level) string {
 }
 
 func nativeLLDFlags(toolchain NativeToolchain, level optlevel.Level, ltoMode lto.Mode) []string {
-	flags := []string{"-fuse-ld=lld"}
-	if toolchain.Linker == LinkerFlavorCOFFLLD {
-		flags = append(flags,
-			"-Wl,/errorlimit:0",
-			// Go requires distinct functions to have distinct PCs. lld-link
-			// enables identical COMDAT folding through /opt:icf, so keep it
-			// disabled even when dead-code elimination is enabled.
-			"-Wl,/opt:noicf",
-		)
-	} else {
-		flags = append(flags,
-			"-Wl,--error-limit=0",
-			// lld's safe mode still folds llgo-emitted same-body functions.
-			"-Wl,--icf=none",
-		)
+	flags := []string{"-fuse-ld=lld",
+		"-Wl,--error-limit=0",
+		// lld's safe mode still folds llgo-emitted same-body functions.
+		"-Wl,--icf=none",
 	}
 	if !ltoMode.Enabled() {
 		return flags
 	}
 
 	flags = append(flags, ltoMode.ClangFlag())
-	if toolchain.Linker == LinkerFlavorCOFFLLD {
-		flags = append(flags, "-Wl,/opt:lldlto="+coffLTOLevel(level))
-	} else if optFlag := ltoLinkerOptFlag(level); optFlag != "" {
+	if optFlag := ltoLinkerOptFlag(level); optFlag != "" {
 		flags = append(flags, "-Wl,"+optFlag)
 	}
 	return flags
-}
-
-func coffLTOLevel(level optlevel.Level) string {
-	switch level {
-	case optlevel.O0:
-		return "0"
-	case optlevel.O1:
-		return "1"
-	case optlevel.O3:
-		return "3"
-	default:
-		// lld-link accepts only 0 through 3. -Os and -Oz remain encoded in
-		// the input IR through optsize/minsize attributes; use its normal
-		// optimization pipeline for the link-wide setting.
-		return "2"
-	}
 }
 
 func nativeSectionFlags(toolchain NativeToolchain) (ccflags, ldflags []string) {
 	switch toolchain.ObjectFormat {
 	case ObjectFormatMachO:
 		return nil, []string{"-Xlinker", "-dead_strip"}
-	case ObjectFormatCOFF:
-		if toolchain.ABI == PlatformABIGNU {
-			return []string{"-fdata-sections", "-ffunction-sections"}, []string{
-				"-fdata-sections",
-				"-ffunction-sections",
-				"-Wl,--gc-sections",
-			}
-		}
-		return []string{"-fdata-sections", "-ffunction-sections"}, []string{
-			"-fdata-sections",
-			"-ffunction-sections",
-			"--rtlib=compiler-rt",
-			"-Wl,/opt:ref",
-			// UCRT defines printf-family entry points inline in its headers.
-			// LLGo C linknames use the traditional external symbols supplied by
-			// this Microsoft compatibility import library.
-			"-llegacy_stdio_definitions",
-		}
 	default:
 		return []string{"-fdata-sections", "-ffunction-sections"}, []string{
 			"-fdata-sections",
@@ -595,10 +521,10 @@ func use(goos, goarch string, forceEspClang bool, level optlevel.Level, ltoMode 
 }
 
 func useWithGOARM(goos, goarch, goarm string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool) (export Export, err error) {
-	return useWithGOARMAndToolchain(goos, goarch, goarm, forceEspClang, level, ltoMode, goGlobalDCE, NativeToolchainInput{}, WasmProfileNone, WasmProviderNone)
+	return useWithGOARMAndToolchain(goos, goarch, goarm, forceEspClang, level, ltoMode, goGlobalDCE, WasmProfileNone, WasmProviderNone)
 }
 
-func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool, nativeInput NativeToolchainInput, wasmProfile WasmProfile, wasmProvider WasmProvider) (export Export, err error) {
+func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool, wasmProfile WasmProfile, wasmProvider WasmProvider) (export Export, err error) {
 	if !validWasmSelection(wasmProfile, wasmProvider) {
 		return export, fmt.Errorf("unsupported WebAssembly profile/provider %q/%q", wasmProfile, wasmProvider)
 	}
@@ -613,14 +539,11 @@ func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, le
 	}
 	llgoRoot := env.LLGoROOT()
 	nativePlatformToolchain := usesNativePlatformToolchain(
-		runtime.GOOS, runtime.GOARCH, goos, goarch, nativeInput.ResolveWindows,
+		runtime.GOOS, runtime.GOARCH, goos, goarch,
 	)
 
-	// Linked Windows output resolves its compiler and dependencies as one
-	// coherent profile below, including when the LLGo host is macOS or Linux.
-	// Do not inspect an unrelated embedded Clang before that profile resolves.
 	var clangRoot string
-	if goarch != "wasm" && !(nativePlatformToolchain && goos == "windows") {
+	if goarch != "wasm" {
 		clangRoot, err = getESPClangRoot(forceEspClang)
 		if err != nil {
 			return
@@ -636,20 +559,7 @@ func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, le
 	}
 
 	if nativePlatformToolchain {
-		if goos == "windows" {
-			export, err = resolveWindowsToolchain(goarch, nativeInput, probeNativeTool)
-			if err != nil {
-				return
-			}
-			targetTriple = export.Toolchain.TargetTriple
-			// Native Windows tool selection is authoritative. An embedded
-			// toolchain cached below LLGO_ROOT must not leak include or library
-			// paths into this profile.
-			clangRoot = ""
-			export.ClangRoot = ""
-		} else {
-			export.Toolchain = nativeToolchain(goos)
-		}
+		export.Toolchain = nativeToolchain(goos)
 		export.DebugInfo = nativeDebugInfoPolicy(export.Toolchain)
 		// not cross compile
 		// Set up basic flags for non-cross-compile
@@ -671,8 +581,6 @@ func useWithGOARMAndToolchain(goos, goarch, goarm string, forceEspClang bool, le
 				export.LDFLAGS = append(export.LDFLAGS, "-Wl,-rpath,"+clangLib)
 			case "linux":
 				export.LDFLAGS = append(export.LDFLAGS, "-Wl,-rpath,"+clangLib)
-			case "windows":
-				// Windows doesn't support rpath, DLLs should be in PATH or same directory
 			default:
 				// For other Unix-like systems, try the generic rpath
 				export.LDFLAGS = append(export.LDFLAGS, "-Wl,-rpath,"+clangLib)
@@ -948,10 +856,7 @@ func appendUniqueStrings(dst []string, values ...string) []string {
 	return dst
 }
 
-func usesNativePlatformToolchain(hostGOOS, hostGOARCH, targetGOOS, targetGOARCH string, resolveWindows bool) bool {
-	if targetGOOS == "windows" && resolveWindows {
-		return true
-	}
+func usesNativePlatformToolchain(hostGOOS, hostGOARCH, targetGOOS, targetGOARCH string) bool {
 	return hostGOOS == targetGOOS && hostGOARCH == targetGOARCH
 }
 
@@ -1245,15 +1150,17 @@ func Use(goos, goarch, targetName string, forceEspClang bool, level optlevel.Lev
 // setting affects native GOARCH=arm clang and linker triples; named targets
 // retain their target configuration's LLVM triple.
 func UseWithGOARM(goos, goarch, goarm, targetName string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool) (export Export, err error) {
-	return UseWithGOARMAndToolchain(goos, goarch, goarm, targetName, forceEspClang, level, ltoMode, goGlobalDCE, NativeToolchainInput{})
+	return UseWithGOARMAndToolchain(goos, goarch, goarm, targetName, forceEspClang, level, ltoMode, goGlobalDCE)
 }
 
-// UseWithGOARMAndToolchain is UseWithGOARM with explicit Go-compatible native
-// compiler commands. Named -target configurations intentionally ignore these
-// host commands and preserve their existing toolchain selection.
-func UseWithGOARMAndToolchain(goos, goarch, goarm, targetName string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool, nativeInput NativeToolchainInput) (export Export, err error) {
+// UseWithGOARMAndToolchain is UseWithGOARM for callers that previously
+// supplied explicit Go-compatible native compiler commands. Native builds now
+// resolve the host toolchain directly, so the extra input is gone. Named
+// -target configurations intentionally ignore host commands and preserve
+// their existing toolchain selection.
+func UseWithGOARMAndToolchain(goos, goarch, goarm, targetName string, forceEspClang bool, level optlevel.Level, ltoMode lto.Mode, goGlobalDCE bool) (export Export, err error) {
 	if targetName == "" {
-		return useWithGOARMAndToolchain(goos, goarch, goarm, forceEspClang, level, ltoMode, goGlobalDCE, nativeInput, WasmProfileNone, WasmProviderNone)
+		return useWithGOARMAndToolchain(goos, goarch, goarm, forceEspClang, level, ltoMode, goGlobalDCE, WasmProfileNone, WasmProviderNone)
 	}
 
 	// Resolve every named target before selecting its toolchain. Inherited wasm
@@ -1272,7 +1179,7 @@ func UseWithGOARMAndToolchain(goos, goarch, goarm, targetName string, forceEspCl
 	if !validWasmSelection(wasmProfile, wasmProvider) {
 		return export, fmt.Errorf("target %q has unsupported WebAssembly profile/provider %q/%q", targetName, config.WasmProfile, config.WasmProvider)
 	}
-	export, err = useWithGOARMAndToolchain(config.GOOS, config.GOARCH, "", false, level, ltoMode, goGlobalDCE, nativeInput, wasmProfile, wasmProvider)
+	export, err = useWithGOARMAndToolchain(config.GOOS, config.GOARCH, "", false, level, ltoMode, goGlobalDCE, wasmProfile, wasmProvider)
 	if err != nil {
 		return export, err
 	}

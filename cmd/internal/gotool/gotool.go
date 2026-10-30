@@ -61,8 +61,5 @@ func ChildEnv(environ []string) []string {
 }
 
 func executableName(goos string) string {
-	if goos == "windows" {
-		return "go.exe"
-	}
 	return "go"
 }

@@ -749,11 +749,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			goName = funcName(pkgTypes, f, false)
 		}
 		pos := p.funcInfoPosition(f)
-		if p.prog.Target().GOOS == "windows" && isRecoverTransparentWrapper(f) {
-			pkg.EmitFuncInfoFlags(fn.Name(), funcInfoDisplayName(goName), pos.Filename, pos.Line, pos.Column, llssa.FuncInfoFlagWrapper)
-		} else {
-			pkg.EmitFuncInfo(fn.Name(), funcInfoDisplayName(goName), pos.Filename, pos.Line, pos.Column)
-		}
+		pkg.EmitFuncInfo(fn.Name(), funcInfoDisplayName(goName), pos.Filename, pos.Line, pos.Column)
 	}
 	if simdDecl {
 		b := fn.MakeBody(1)
@@ -978,15 +974,9 @@ func (p *context) funcInfoPosition(f *ssa.Function) token.Position {
 	return position
 }
 
-// runtimeSourceFilename uses the slash-separated spelling emitted by the Go
-// toolchain for Windows runtime metadata. In particular, log.Lshortfile strips
-// the last slash itself, so storing a native backslash path would expose the
-// full source path. Keep the conversion target-aware because a backslash is a
-// valid filename character on Unix.
+// runtimeSourceFilename returns the filename spelling emitted by the Go
+// toolchain for runtime metadata.
 func runtimeSourceFilename(target *llssa.Target, filename string) string {
-	if target != nil && target.GOOS == "windows" {
-		return strings.ReplaceAll(filename, `\`, "/")
-	}
 	return filename
 }
 

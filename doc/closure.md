@@ -64,10 +64,6 @@ The physical env parameter is:
 - `swiftself` on ARM and platforms where AArch64 X18 is reserved;
 - an ordinary leading parameter on the explicit fallback.
 
-Windows follows the architecture-selected ABI: x86 uses `nest`, while
-AArch64 uses `swiftself`/X20. Its x86 libffi Go ABI matches LLVM `nest`;
-Windows AArch64 uses the public-FFI TLS trampoline to install X20.
-
 WebAssembly remains explicit because it has no compatible hidden-register
 transport. Adding one in the future is a deliberate target ABI upgrade.
 
@@ -92,7 +88,7 @@ returns or lowers its C ABI.
 - x86 libffi builds without `FFI_GO_CLOSURES`, including Apple SDK libffi, use
   stock `ffi_call` plus the TLS final-hop trampoline, which installs LLVM's
   `nest` register before entering the real target.
-- Apple/Android/Windows AArch64 use stock `ffi_call` plus the TLS final-hop trampoline:
+- Apple/Android AArch64 use stock `ffi_call` plus the TLS final-hop trampoline:
   libffi's Go ABI uses X18 while LLGo's entry ABI uses `swiftself`/X20, so the
   public `ffi_call` path needs TLS to carry `{fn, env}` to its final target.
 

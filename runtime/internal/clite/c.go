@@ -38,7 +38,6 @@ type (
 	Uint = uint32
 
 	// Long and Ulong are defined in platform-specific files
-	// Windows (both 32-bit and 64-bit): int32/uint32
 	// Unix/Linux/macOS 32-bit: int32/uint32
 	// Unix/Linux/macOS 64-bit: int64/uint64
 

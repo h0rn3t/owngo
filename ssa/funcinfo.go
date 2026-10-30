@@ -136,7 +136,7 @@ func (p Program) NeedsFramePointer() bool {
 		return false
 	}
 	switch target.GOOS {
-	case "linux", "darwin", "windows", "":
+	case "linux", "darwin", "":
 		return true
 	}
 	return false

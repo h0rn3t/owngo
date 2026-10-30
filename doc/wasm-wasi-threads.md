@@ -29,15 +29,13 @@ existing parked-main Goexit path; arbitrary C `pthread_exit` on that initial
 thread or from a TLS destructor is not supported.
 
 On Unix, the runner grants the absolute package working directory and `/tmp`.
-On Windows, those guest paths are `/work` and `/tmp`, mapped to the package
-and host temporary directories. Guest flags follow a `--` separator. Only
+Guest flags follow a `--` separator. Only
 `PWD`, `PATH` and the optional `LLGO_STRESS_PROFILE` are forwarded into the guest.
 The GOROOT comparison runs both W32 artifacts with Wasmer. Only the separate
 `dev/wasmstdlib` official-Go reference profile uses Wasmtime; that does not imply
 support for executing LLGo's threaded W32 artifact there.
 
-The installer supports the fork's macOS arm64, Linux amd64/aarch64/riscv64,
-and Windows amd64 archives. The release has no prebuilt macOS Intel archive;
+The installer supports the fork's macOS arm64 and Linux amd64/aarch64/riscv64 archives. The release has no prebuilt macOS Intel archive;
 on that host, build the CLI from source and put it on `PATH`.
 
 The former `LLGO_WASI_THREADS=1` opt-in is unnecessary and remains accepted.

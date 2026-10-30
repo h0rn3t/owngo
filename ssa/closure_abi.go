@@ -53,13 +53,10 @@ func closureEnvABIForTarget(triple string) closureEnvABI {
 }
 
 func aarch64UsesSwiftSelf(triple string) bool {
-	// Apple, Android, and Windows reserve X18, so LLGo uses LLVM's
+	// Apple and Android reserve X18, so LLGo uses LLVM's
 	// swiftself/X20 transport there.
 	return intllvm.IsDarwinTarget(triple) ||
-		strings.Contains(triple, "android") ||
-		strings.Contains(triple, "windows") ||
-		strings.Contains(triple, "win32") ||
-		strings.Contains(triple, "mingw")
+		strings.Contains(triple, "android")
 }
 
 func (p *Target) closureEnvABI() closureEnvABI {

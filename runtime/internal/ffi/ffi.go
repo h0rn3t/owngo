@@ -36,8 +36,8 @@ func NewSignature(ret *Type, args ...*Type) (*Signature, error) {
 }
 
 // NewSignatureWithABI prepares a native call signature using abi. Most calls
-// should use NewSignature; the explicit form is needed for platforms such as
-// windows/386 that expose more than one C calling convention.
+// should use NewSignature; the explicit form is only needed where a platform
+// exposes more than one C calling convention.
 func NewSignatureWithABI(abi ABI, ret *Type, args ...*Type) (*Signature, error) {
 	cif, atype := newSignatureStorage(ret, args)
 	status := ffi.PrepCif(cif, abi, c.Uint(len(args)), ret, atype)

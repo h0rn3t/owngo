@@ -7,7 +7,6 @@ on:
     branches: ["**"]
     paths:
       - install.sh
-      - install.ps1
       - test/installer/**
       - .github/**
 

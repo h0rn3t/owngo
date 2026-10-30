@@ -668,13 +668,6 @@ func shouldEmitRuntimeMachOSites(ctx *context) bool {
 		ctx.buildConf.Target == ""
 }
 
-func shouldEmitRuntimeCOFFSites(ctx *context) bool {
-	return ctx != nil &&
-		ctx.buildConf != nil &&
-		ctx.buildConf.Goos == "windows" &&
-		ctx.buildConf.Target == ""
-}
-
 type siteObjectFormat uint8
 
 const (
@@ -691,8 +684,6 @@ func runtimeSiteObjectFormat(ctx *context) siteObjectFormat {
 		return siteObjectELF
 	case shouldEmitRuntimeMachOSites(ctx):
 		return siteObjectMachO
-	case shouldEmitRuntimeCOFFSites(ctx):
-		return siteObjectCOFF
 	case shouldEmitRuntimeWasmSites(ctx):
 		return siteObjectWasm
 	default:

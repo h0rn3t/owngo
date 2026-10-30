@@ -128,7 +128,7 @@ prebuilt-table rewrite.
 Darwin builds with embedded pclntab and DWARF suppress function-entry address
 sites, whose inline assembly disturbs LLDB's initial lexical scope. PC-line
 anchors retain precise runtime source locations and carry no debug location.
-Linux and Windows retain entry sites because they cannot reconstruct every
+Linux retains entry sites because it cannot reconstruct every
 function address through a dynamic symbol lookup. External mode retains both
 categories to construct the sidecar.
 

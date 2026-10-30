@@ -5,11 +5,12 @@ const (
 	Crash uint64 = 1 << iota
 	All
 	Shift = iota
-	// WER is private to LLGo; it preserves Windows Error Reporting on crash.
+	// WER is private to LLGo; it preserves the crash-reporting mode selected
+	// at startup.
 	WER uint64 = 1 << 32
 )
 
-func Parse(level string, windows bool) uint64 {
+func Parse(level string, _ bool) uint64 {
 	switch level {
 	case "none":
 		return 0
@@ -21,10 +22,6 @@ func Parse(level string, windows bool) uint64 {
 		return 2<<Shift | All
 	case "crash":
 		return 2<<Shift | All | Crash
-	case "wer":
-		if windows {
-			return 2<<Shift | All | Crash | WER
-		}
 	}
 	// Go retains the historical numeric forms and suppresses traces for
 	// invalid values. Match Atoi's sign and native-int overflow checks too.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 )
@@ -51,9 +50,6 @@ func resolveSourceGoConfig(commands commandEnv, experiment string, buildFlags ..
 	// workspace, and GOFLAGS settings. The launcher on PATH may be a different
 	// Go version, especially when module mode disables toolchain switching.
 	goExe := "go"
-	if runtime.GOOS == "windows" {
-		goExe += ".exe"
-	}
 	args := append([]string{"list", "-f", "{{join context.ToolTags \",\"}}"}, buildFlags...)
 	args = append(args, "unsafe")
 	cmd = commands.configure(exec.Command(filepath.Join(cfg.GOROOT, "bin", goExe), args...))

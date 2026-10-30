@@ -5,7 +5,6 @@ package debuginfo
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/xgo-dev/llgo/internal/debugabi"
 	"github.com/xgo-dev/llvm"
@@ -113,14 +112,7 @@ func (b *Builder) addDebuggerMarker() {
 func (b *Builder) retainDebuggerGlobal(value llvm.Value, symbol string) {
 	value.SetGlobalConstant(true)
 	value.SetLinkage(llvm.LinkOnceODRLinkage)
-	if strings.Contains(strings.ToLower(b.module.Target()), "windows") {
-		comdat := b.module.Comdat(symbol)
-		comdat.SetSelectionKind(llvm.AnyComdatSelectionKind)
-		value.SetComdat(comdat)
-		value.SetDLLStorageClass(llvm.DLLExportStorageClass)
-	} else {
-		value.SetVisibility(llvm.HiddenVisibility)
-	}
+	value.SetVisibility(llvm.HiddenVisibility)
 }
 
 func (b *Builder) addModuleFlag(behavior int, name string, value int) {

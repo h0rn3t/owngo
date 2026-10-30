@@ -20,7 +20,6 @@ Go uses multiple syscall mechanisms depending on platform:
 
 - **Darwin/OpenBSD/iOS**: libc trampolines (`abi.FuncPCABI0(libc_xxx_trampoline)`).
 - **Linux/FreeBSD/NetBSD/DragonFly/Android**: raw syscall numbers (`Syscall(SYS_XXX, ...)`).
-- **Windows**: DLL proc calls (`LazyDLL`/`LazyProc` + `SyscallN`).
 - **Solaris/illumos**: sysvicall6 with libc pointer indirection.
 - **AIX**: syscall6 with libc pointer indirection.
 - **WASI**: `//go:wasmimport`.
@@ -135,32 +134,6 @@ _, _, e1 := syscall6(uintptr(unsafe.Pointer(&libc_Dup2)), 2, uintptr(old), uintp
 `syscall6` should be a Go wrapper that forwards the first `nargs` arguments to
 `llgo.syscall` and fetches errno via `_Errno()`.
 
-#### Category E: `llgo.SyscallWindows` (Windows)
-
-**Purpose:** Support Windows DLL procedure calls.
-
-```go
-//go:linkname Syscall llgo.SyscallWindows
-func Syscall(trap, nargs, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno)
-
-//go:linkname Syscall6 llgo.Syscall6Windows
-func Syscall6(trap, nargs, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno)
-
-//go:linkname Syscall9 llgo.Syscall9Windows
-func Syscall9(trap, nargs, a1, a2, a3, a4, a5, a6, a7, a8, a9 uintptr) (r1, r2 uintptr, err Errno)
-
-// ... Syscall12, Syscall15, Syscall18
-
-//go:linkname SyscallN llgo.SyscallNWindows
-func SyscallN(trap uintptr, args ...uintptr) (r1, r2 uintptr, err Errno)
-```
-
-Additional runtime support needed:
-
-- `LazyDLL.Load()` → calls `LoadLibraryW`
-- `LazyProc.Find()` → calls `GetProcAddress`
-- Error handling via `GetLastError()`
-
 #### Category F: `llgo.SyscallPlan9` (Plan 9)
 
 **Purpose:** Support Plan 9 syscalls with `ErrorString` return type.
@@ -232,7 +205,6 @@ Behavior:
 | `zsyscall_dragonfly_*.go` | DragonFly | ✅ 100%    | Same as Linux                      |
 | `zsyscall_solaris_*.go`   | Solaris   | ✅ 100%    | `llgo.sysvicall6`                  |
 | `zsyscall_aix_*.go`       | AIX       | ✅ 100%    | `llgo.syscall` (Go wrapper)        |
-| `zsyscall_windows.go`     | Windows   | ✅ 100%    | `llgo.SyscallWindows` + runtime    |
 | `fs_wasip1.go`            | WASI      | ✅ 100%    | `//go:wasmimport`                  |
 | `syscall_js.go`           | JS/WASM   | N/A        | Uses `syscall/js` package          |
 | `zsyscall_plan9_*.go`     | Plan 9    | ✅ 100%    | `llgo.SyscallPlan9`                |
@@ -252,7 +224,6 @@ Behavior:
 | NetBSD             | `__errno()`          | Returns `*int`              |
 | Solaris/Illumos    | `___errno()`         | Returns `*int`              |
 | AIX                | `_Errno()`           | Returns `*int`              |
-| Windows            | `GetLastError()`     | Returns error code directly |
 | Plan 9             | `errstr()`           | Returns error string        |
 
 ---
@@ -289,7 +260,6 @@ func write(fd int32, p unsafe.Pointer, n int32) int32
 | `llgo.Syscall`        | Linux, FreeBSD, NetBSD, DragonFly | Syscall number            | `__errno_location()` / `__error()` / `__errno()` |
 | `llgo.sysvicall6`     | Solaris, Illumos                  | `*libcFunc`               | `___errno()`                                     |
 | `llgo.syscall`        | AIX                               | `*libcFunc` (via wrapper) | `_Errno()`                                       |
-| `llgo.SyscallWindows` | Windows                           | Proc address              | `GetLastError()`                                 |
 | `llgo.SyscallPlan9`   | Plan 9                            | Syscall number            | `errstr()` → ErrorString                         |
 | `llgo.skip`           | All                               | N/A                       | No-op call site + skip declaration               |
 
@@ -317,13 +287,7 @@ func write(fd int32, p unsafe.Pointer, n int32) int32
 2. Solaris - implement `llgo.sysvicall6`
 3. AIX - implement Go wrapper around `llgo.syscall`
 
-### Phase 4: Windows
-
-1. Implement `LazyDLL`/`LazyProc` in LLGo runtime
-2. Implement `Syscall`/`Syscall6`/.../`SyscallN`
-3. Test with `zsyscall_windows.go`
-
-### Phase 5: Special Platforms
+### Phase 4: Special Platforms
 
 1. WASI - Support `//go:wasmimport` directive
 2. Plan 9 - Implement `llgo.SyscallPlan9` with ErrorString return
@@ -350,7 +314,6 @@ func write(fd int32, p unsafe.Pointer, n int32) int32
 | FreeBSD / NetBSD / DragonFly | raw syscall numbers | `syscall/zsyscall_*bsd_*.go`    | Same as Linux strategy                 |
 | Solaris / illumos            | sysvicall → libc    | `syscall/zsyscall_solaris_*.go` | `llgo.sysvicall6`                      |
 | AIX                          | syscall6 via libc   | `syscall/zsyscall_aix_*.go`     | `llgo.syscall` (wrapper)               |
-| Windows                      | DLL proc calls      | `syscall/zsyscall_windows.go`   | `llgo.SyscallWindows` + LazyDLL        |
 | WASI                         | wasm imports        | `syscall/fs_wasip1.go`          | `//go:wasmimport`                      |
 | JS (GOOS=js/wasm)            | no syscall          | `syscall/js`                    | No syscall reuse                       |
 | Plan 9                       | syscall + errstr    | `syscall/zsyscall_plan9_*.go`   | `llgo.SyscallPlan9` with ErrorString   |
@@ -422,23 +385,6 @@ func libc_lchown_trampoline()
 %result = call i32 @lchown(ptr %cstr, i32 %uid, i32 %gid)
 %is_err = icmp eq i32 %result, -1
 br i1 %is_err, label %get_errno, label %done
-```
-
-### D3. Windows LazyDLL / Proc Pattern
-
-```go
-var modkernel32 = NewLazyDLL("kernel32.dll")
-var procReadFile = modkernel32.NewProc("ReadFile")
-
-func ReadFile(handle Handle, buf []byte, done *uint32, ov *Overlapped) (err error) {
-    r1, _, e1 := Syscall6(procReadFile.Addr(), 5,
-        uintptr(handle), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)),
-        uintptr(unsafe.Pointer(done)), uintptr(unsafe.Pointer(ov)), 0)
-    if r1 == 0 {
-        err = errnoErr(e1)
-    }
-    return
-}
 ```
 
 ### D4. WASI Import Pattern

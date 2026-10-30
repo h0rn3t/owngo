@@ -34,7 +34,7 @@ go run ./cmd/llgo version
 go build ./cmd/llgo
 ```
 
-The build creates `llgo` (`llgo.exe` on Windows). The environment stays loaded
+The build creates `llgo`. The environment stays loaded
 when you change directories; type `exit` to leave the shell.
 
 Both environments are checked in CI on these platforms:
@@ -43,12 +43,10 @@ Both environments are checked in CI on these platforms:
 | --- | --- |
 | Linux | x86-64, ARM64 |
 | macOS | Intel, ARM64 |
-| Windows | x86-64, native PowerShell/CMD |
 
-macOS requires the Xcode Command Line Tools (`xcode-select --install`). Windows
-requires the Visual Studio C++ Build Tools with the Windows SDK and the
-x86-64 C++ toolchain. Python, LLDB, cJSON, and cross-compilers are optional and
-are not included in either environment.
+macOS requires the Xcode Command Line Tools (`xcode-select --install`).
+Python, LLDB, cJSON, and cross-compilers are optional and are not included in
+either environment.
 
 Run the shared checks from the repository root in either development shell:
 
@@ -56,8 +54,8 @@ Run the shared checks from the repository root in either development shell:
 bash dev/check_devenv.sh
 ```
 
-On Windows PowerShell, run `.\dev\check_devenv.ps1`. These scripts build LLGo,
-run a compiled Go program, and check GC, libffi, OpenSSL, SQLite, libuv, and zlib.
+These scripts build LLGo, run a compiled Go program, and check GC, libffi,
+OpenSSL, SQLite, libuv, and zlib.
 
 For a single command without entering a shell, use these commands from the
 repository root. mise runs inside `dev/`; Pixi uses the current directory:
@@ -70,10 +68,8 @@ pixi run --manifest-path dev/pixi.toml --locked go run ./cmd/llgo version
 Both configurations enable the LLVM Go bindings' `byollvm` tag and obtain
 headers and linker flags from `llvm-config`. Include `byollvm` if you supply
 `-tags` explicitly. The shared Linux wrappers in `conda-tools/` activate the
-compiler's prefix and sysroot; the shared flag helpers quote LLVM paths and
-preserve Visual Studio's SDK/CRT library discovery on Windows.
+compiler's prefix and sysroot; the shared flag helpers quote LLVM paths.
 The Unix pkg-config wrapper handles Conda prefixes containing spaces.
-Windows uses the compatible `pkgconf` implementation for paths containing spaces.
 
 mise installs packages in its user data directory; keep `MISE_DATA_DIR` local
 to each host if you override it. Pixi stores its environment in `dev/.pixi/`,
@@ -82,7 +78,7 @@ which is ignored by Git. Do not share that directory between different hosts.
 To update mise dependencies, edit `dev/mise.toml` (or `.go-version` for Go):
 
 ```sh
-mise -C dev lock --platform linux-x64,linux-arm64,macos-x64,macos-arm64,windows-x64
+mise -C dev lock --platform linux-x64,linux-arm64,macos-x64,macos-arm64
 mise -C dev install --locked
 ```
 

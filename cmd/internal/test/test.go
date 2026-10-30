@@ -177,8 +177,8 @@ func validateProfileTarget(conf *build.Config, args []string) error {
 		if value == "" || name != "cpuprofile" && name != "memprofile" {
 			continue
 		}
-		nativeOS := conf.Goos == "linux" || conf.Goos == "darwin" || conf.Goos == "windows"
-		cpuArch := conf.Goarch == "amd64" || conf.Goarch == "arm64" || conf.Goos == "windows" && conf.Goarch == "386"
+		nativeOS := conf.Goos == "linux" || conf.Goos == "darwin"
+		cpuArch := conf.Goarch == "amd64" || conf.Goarch == "arm64"
 		freestanding := false
 		for _, tag := range strings.Fields(strings.ReplaceAll(conf.Tags, ",", " ")) {
 			freestanding = freestanding || tag == "baremetal" || tag == "wasm"

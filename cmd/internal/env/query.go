@@ -354,9 +354,6 @@ func (p *llvmInfo) tool(name string) string {
 
 func toolCandidates(goos, dir, name string) []string {
 	path := filepath.Join(dir, name)
-	if goos == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
-		return []string{path, path + ".exe"}
-	}
 	return []string{path}
 }
 
@@ -396,26 +393,7 @@ func joinIfSet(base string, elem ...string) string {
 
 func envAssignment(goos, name, value string) string {
 	value = sanitizeValue(value)
-	if goos == "windows" {
-		var escaped strings.Builder
-		for _, char := range value {
-			if char == '\r' || char == '\n' || (!unicode.IsGraphic(char) && !unicode.IsSpace(char)) {
-				escaped.WriteRune(unicode.ReplacementChar)
-				continue
-			}
-			switch char {
-			case '%':
-				escaped.WriteString("%%")
-			case '<', '>', '|', '&', '^':
-				escaped.WriteByte('^')
-				escaped.WriteRune(char)
-			default:
-				escaped.WriteRune(char)
-			}
-		}
-		return "set " + name + "=" + escaped.String()
-	}
-	return name + "='" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+	return name + "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func sanitizeValue(value string) string {

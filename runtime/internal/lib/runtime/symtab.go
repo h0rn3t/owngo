@@ -561,9 +561,6 @@ func applyFuncInfo(sym *pcSymbol, rawFunction string) {
 		}
 	}
 	line := int(rec.line)
-	if GOOS == "windows" {
-		line = int(rec.line & runtimeFuncInfoLineMask)
-	}
 	if rec.line != 0 {
 		sym.startLine = int(rec.line)
 		if sym.line == 0 {
@@ -960,7 +957,7 @@ func appendRuntimeFuncInfoEntryFrames(frames []runtimeFuncPCFrame, entries []uin
 			pc = runtimeFuncPCSiteEntry(pc)
 			if nativeEntries == nil {
 				// This temporary map is only used when building the cached
-				// Windows table, never in Wasm's fixed-stack materialization loop.
+				// table, never in Wasm's fixed-stack materialization loop.
 				nativeEntries = make(map[uintptr]bool)
 			}
 			if nativeEntries[pc] {
@@ -1550,10 +1547,6 @@ func pcSymbolForFuncInfoIndex(pc, entry uintptr, funcIndex uint32) (pcSymbol, bo
 	fn := funcInfoAt(uintptr(funcIndex) - 1)
 	line := int(fn.line)
 	startLine := line
-	if GOOS == "windows" {
-		line = int(fn.line & runtimeFuncInfoLineMask)
-		startLine = int(fn.line)
-	}
 	return pcSymbol{
 		pc:        pc,
 		entry:     entry,
@@ -1691,9 +1684,6 @@ func initRuntimePCLineFramesOnce() {
 			}
 			fc.file = funcInfoJoinFile(fn.fileRoot, fn.fileName)
 			fc.line = int(fn.line)
-			if GOOS == "windows" {
-				fc.line = int(fn.line & runtimeFuncInfoLineMask)
-			}
 			fc.resolved = true
 		}
 		entry := fc.entry
@@ -1718,9 +1708,6 @@ func initRuntimePCLineFramesOnce() {
 			line = fc.line
 		}
 		startLine := fc.line
-		if GOOS == "windows" {
-			startLine = int(fn.line)
-		}
 		*(*runtimePCLineFrame)(unsafe.Add(frameBase, uintptr(nframes)*frameSize)) = runtimePCLineFrame{
 			pc:        pc,
 			sequence:  i,
@@ -1733,13 +1720,6 @@ func initRuntimePCLineFramesOnce() {
 		nframes++
 	}
 	frames = frames[:nframes]
-	if GOOS == "windows" {
-		// COFF can fold adjacent zero-byte source anchors onto one final PC.
-		// Associative carrier sections retain their emission order, so collapse
-		// those aliases before the unstable PC sort and let the nearest source
-		// location win. ELF and Mach-O retain their established table path.
-		frames = uniqueRuntimePCLineFrames(frames)
-	}
 	sortRuntimePCLineFrames(frames)
 	frames = uniqueRuntimePCLineFrames(frames)
 	runtimePCLineFrames = frames
@@ -2226,12 +2206,6 @@ func (ci *Frames) Next() (frame Frame, more bool) {
 		}
 		sym := frameSymbol(lookupPC)
 		sym.pc = pc
-		if GOOS == "windows" {
-			// Win64 keeps the wrapper marker in the high bit of the private
-			// start-line field while walking. Public Frames expose only the Go
-			// source line, matching the standard runtime API.
-			sym.startLine = int(uint32(sym.startLine) & runtimeFuncInfoLineMask)
-		}
 		if !sym.ok {
 			ci.frames = append(ci.frames, Frame{
 				PC:        pc,

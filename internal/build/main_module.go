@@ -133,14 +133,6 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	if cfg.rtInit || wasmRuntimeScheduler {
 		rtInit = declareNoArgFunc(mainPkg, rtPkgPath+".init")
 	}
-	var processExit, stdioFlush llssa.Function
-	if ctx.buildConf.Goos == "windows" {
-		processExit = declareRuntimeExit(mainPkg, "runtime.exit")
-		stdioFlush = mainPkg.NewFunc("fflush", newSignature(
-			[]types.Type{types.Typ[types.UnsafePointer]},
-			[]types.Type{types.Typ[types.Int32]},
-		), llssa.CDecl)
-	}
 
 	var abiInit llssa.Function
 	if cfg.abiInit != 0 {
@@ -174,10 +166,9 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 			initArraySection = ".init_array"
 		}
 		inits := []llssa.Function{godebugInit, rtInit, abiInit, runtimeStub}
-		// Windows already enables this during runtime initialization because
-		// callbacks in ordinary executables also enter from foreign threads.
-		// Other platforms enable it at startup when linked C exports exist.
-		if len(cfg.cExports) != 0 && ctx.buildConf.Goos != "windows" {
+		// Other platforms enable foreign-thread registration at startup when
+		// linked C exports exist.
+		if len(cfg.cExports) != 0 {
 			inits = append(inits, declareNoArgFunc(
 				mainPkg, llssa.PkgRuntime+".EnableForeignThreadRegistration",
 			))
@@ -188,24 +179,17 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 			inits = append(inits, packageInits...)
 			inits = append(inits, mainInit)
 		}
-		var ensureInit llssa.Function
-		if ctx.buildConf.BuildMode == BuildModeCShared && ctx.buildConf.Goos == "windows" {
-			ensureInit = defineWindowsSharedRuntimeInit(mainPkg, ctx.buildConf.Goarch, inits...)
-		} else {
-			defineLibraryRuntimeInit(
-				mainPkg, initArraySection, argcVar, argvVar, argvValueType,
-				libraryConstructorReceivesProcessArgs(ctx.buildConf.Goos), inits...,
-			)
-		}
-		defineCExportWrappers(mainPkg, cfg.cExports, ensureInit)
+		defineLibraryRuntimeInit(
+			mainPkg, initArraySection, argcVar, argvVar, argvValueType,
+			libraryConstructorReceivesProcessArgs(ctx.buildConf.Goos), inits...,
+		)
+		defineCExportWrappers(mainPkg, cfg.cExports, nil)
 		return mainAPkg
 	}
 
 	var callbackInit llssa.Function
 	if len(cfg.cExports) != 0 {
-		if ctx.buildConf.Goos != "windows" {
-			callbackInit = declareNoArgFunc(mainPkg, llssa.PkgRuntime+".EnableForeignThreadRegistration")
-		}
+		callbackInit = declareNoArgFunc(mainPkg, llssa.PkgRuntime+".EnableForeignThreadRegistration")
 		defineCExportWrappers(mainPkg, cfg.cExports, nil)
 	}
 	var wasmRunMain llssa.Function
@@ -216,8 +200,7 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	var coverageExit llssa.Function
 	if ctx.buildConf.Coverage != nil {
 		// os.Exit runs this hook through os.runtime_beforeExit. Ordinary
-		// main returns bypass os.Exit, so the generated entry must flush too,
-		// before Windows terminates the process or we leave the local context.
+		// main returns bypass os.Exit, so the generated entry must flush too.
 		coverageExit = mainPkg.NewFunc("runtime.runCoverageExitHook",
 			newSignature([]types.Type{types.Typ[types.Int]}, nil), llssa.GoDecl)
 	}
@@ -229,8 +212,6 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		wasmRunMain:  wasmRunMain,
 		rtInit:       rtInit,
 		callbackInit: callbackInit,
-		processExit:  processExit,
-		stdioFlush:   stdioFlush,
 		coverageExit: coverageExit,
 		abiInit:      abiInit,
 		packageInits: packageInits,
@@ -303,71 +284,6 @@ func defineLibraryRuntimeInit(
 	ctors := llvm.AddGlobal(mod, init.Type(), "llvm.global_ctors")
 	ctors.SetInitializer(init)
 	ctors.SetLinkage(llvm.AppendingLinkage)
-}
-
-// defineWindowsSharedRuntimeInit defers hosted runtime and package
-// initialization until a C export is called. Running it from a PE global
-// constructor would hold the Windows loader lock while Go loads DLLs or starts
-// threads. The generated public wrappers live in this uncached link module and
-// call the returned InitOnce-backed guard before entering Go.
-func defineWindowsSharedRuntimeInit(pkg llssa.Package, goarch string, inits ...llssa.Function) llssa.Function {
-	const (
-		initializeName = "__llgo_runtime_initialize"
-		ensureName     = "__llgo_runtime_ensure_initialized"
-		callbackName   = "__llgo_runtime_init_once_callback"
-	)
-
-	initialize := pkg.NewFunc(initializeName, llssa.NoArgsNoRet, llssa.CDecl)
-	initializeValue := pkg.Module().NamedFunction(initializeName)
-	initializeValue.SetLinkage(llvm.InternalLinkage)
-	b := initialize.MakeBody(1)
-	for _, init := range inits {
-		if init != nil {
-			b.Call(init.Expr)
-		}
-	}
-	b.Return()
-
-	mod := pkg.Module()
-	llvmCtx := mod.Context()
-	voidType := llvmCtx.VoidType()
-	ptrType := llvm.PointerType(voidType, 0)
-	i32Type := llvmCtx.Int32Type()
-	once := llvm.AddGlobal(mod, ptrType, "__llgo_runtime_init_once")
-	once.SetInitializer(llvm.ConstNull(ptrType))
-	once.SetLinkage(llvm.InternalLinkage)
-
-	callbackType := llvm.FunctionType(i32Type, []llvm.Type{ptrType, ptrType, ptrType}, false)
-	callback := llvm.AddFunction(mod, callbackName, callbackType)
-	callback.SetLinkage(llvm.InternalLinkage)
-	initOnceType := llvm.FunctionType(i32Type, []llvm.Type{ptrType, ptrType, ptrType, ptrType}, false)
-	initOnce := llvm.AddFunction(mod, "InitOnceExecuteOnce", initOnceType)
-	initOnce.SetDLLStorageClass(llvm.DLLImportStorageClass)
-	if goarch == "386" {
-		callback.SetFunctionCallConv(llvm.X86StdcallCallConv)
-		initOnce.SetFunctionCallConv(llvm.X86StdcallCallConv)
-	}
-
-	builder := llvmCtx.NewBuilder()
-	defer builder.Dispose()
-	callbackBlock := llvmCtx.AddBasicBlock(callback, "entry")
-	builder.SetInsertPointAtEnd(callbackBlock)
-	builder.CreateCall(llvm.FunctionType(voidType, nil, false), initializeValue, nil, "")
-	builder.CreateRet(llvm.ConstInt(i32Type, 1, false))
-
-	ensure := pkg.NewFunc(ensureName, llssa.NoArgsNoRet, llssa.CDecl)
-	ensureValue := mod.NamedFunction(ensureName)
-	ensureValue.SetVisibility(llvm.HiddenVisibility)
-	block := llvmCtx.AddBasicBlock(ensureValue, "entry")
-	builder.SetInsertPointAtEnd(block)
-	call := builder.CreateCall(initOnceType, initOnce, []llvm.Value{
-		once, callback, llvm.ConstNull(ptrType), llvm.ConstNull(ptrType),
-	}, "")
-	if goarch == "386" {
-		call.SetInstructionCallConv(llvm.X86StdcallCallConv)
-	}
-	builder.CreateRetVoid()
-	return ensure
 }
 
 func defineCExportWrappers(pkg llssa.Package, exports []cExport, ensureInit llssa.Function) {
@@ -456,8 +372,6 @@ type entryFunctions struct {
 	wasmRunMain  llssa.Function
 	rtInit       llssa.Function
 	callbackInit llssa.Function
-	processExit  llssa.Function
-	stdioFlush   llssa.Function
 	coverageExit llssa.Function
 	abiInit      llssa.Function
 	packageInits []llssa.Function
@@ -553,13 +467,6 @@ func emitRuntimeMainBody(b llssa.Builder, fns entryFunctions) {
 	if fns.coverageExit != nil {
 		b.Call(fns.coverageExit.Expr, b.Prog.IntVal(0, b.Prog.Int()))
 	}
-	if fns.processExit != nil {
-		// Preserve normal C-main stdio flushing before immediate Go termination.
-		// Flush while the other threads can still release their stream locks;
-		// DLL_PROCESS_DETACH after killing them cannot safely do that cleanup.
-		b.Call(fns.stdioFlush.Expr, b.Prog.Nil(b.Prog.VoidPtr()))
-		b.Call(fns.processExit.Expr, b.Prog.IntVal(0, b.Prog.Int32()))
-	}
 }
 
 // This uncached entry initializer runs before runtime and package init, so
@@ -618,11 +525,6 @@ func declareNoArgFunc(pkg llssa.Package, name string) llssa.Function {
 	return pkg.NewFunc(name, llssa.NoArgsNoRet, llssa.CDecl)
 }
 
-func declareRuntimeExit(pkg llssa.Package, name string) llssa.Function {
-	sig := newSignature([]types.Type{types.Typ[types.Int32]}, nil)
-	return pkg.NewFunc(name, sig, llssa.GoDecl)
-}
-
 // defineRootInitTask exposes the header of the compiler-generated Go init task.
 // LLGo runs package initialization through guarded package init functions, so
 // there are no runtime-dispatched function entries in this compatibility task.
@@ -641,61 +543,38 @@ func defineWeakNoArgStub(pkg llssa.Package, name string) llssa.Function {
 }
 
 const (
-	// The Universal CRT assigns _IONBF a different value from the Unix
-	// runtimes. Passing the Unix value invokes UCRT's invalid-parameter
-	// handler instead of disabling buffering.
-	ioNoBufUnix    = 2
-	ioNoBufWindows = 4
+	// _IONBF disables buffering on standard streams.
+	ioNoBufUnix = 2
 )
 
 // emitStdioNobuf generates code to disable buffering on stdout and stderr
 // when the LLGO_STDIO_NOBUF environment variable is set. Darwin exposes
-// pointer globals with alternate names, while the Universal CRT exposes
-// standard streams only through __acrt_iob_func.
+// pointer globals with alternate names.
 func emitStdioNobuf(b llssa.Builder, pkg llssa.Package, goos string) {
 	prog := pkg.Prog
 	streamType := prog.VoidPtr()
 	streamPtrType := prog.Pointer(streamType)
 
 	var stdoutPtr, stderrPtr llssa.Expr
-	if goos == "windows" {
-		indexType := prog.Uint32()
-		iob := declareAcrtIobFunc(pkg, streamPtrType, indexType)
-		stdoutPtr = b.Call(iob.Expr, prog.IntVal(1, indexType))
-		stderrPtr = b.Call(iob.Expr, prog.IntVal(2, indexType))
-	} else {
-		stdoutName := "stdout"
-		stderrName := "stderr"
-		if goos == "darwin" {
-			stdoutName = "__stdoutp"
-			stderrName = "__stderrp"
-		}
-		stdout := declareExternalPtrGlobal(pkg, stdoutName, streamPtrType)
-		stderr := declareExternalPtrGlobal(pkg, stderrName, streamPtrType)
-		stdoutPtr = b.Load(stdout)
-		stderrPtr = b.Load(stderr)
+	stdoutName := "stdout"
+	stderrName := "stderr"
+	if goos == "darwin" {
+		stdoutName = "__stdoutp"
+		stderrName = "__stderrp"
 	}
+	stdout := declareExternalPtrGlobal(pkg, stdoutName, streamPtrType)
+	stderr := declareExternalPtrGlobal(pkg, stderrName, streamPtrType)
+	stdoutPtr = b.Load(stdout)
+	stderrPtr = b.Load(stderr)
 	sizeType := prog.Uintptr()
 	setvbuf := declareSetvbuf(pkg, streamPtrType, prog.CStr(), prog.Int32(), sizeType)
 
-	noBufModeValue := uint64(ioNoBufUnix)
-	if goos == "windows" {
-		noBufModeValue = ioNoBufWindows
-	}
-	noBufMode := prog.IntVal(noBufModeValue, prog.Int32())
+	noBufMode := prog.IntVal(uint64(ioNoBufUnix), prog.Int32())
 	zeroSize := prog.Zero(sizeType)
 	nullBuf := prog.Nil(prog.CStr())
 
 	b.Call(setvbuf.Expr, stdoutPtr, nullBuf, noBufMode, zeroSize)
 	b.Call(setvbuf.Expr, stderrPtr, nullBuf, noBufMode, zeroSize)
-}
-
-func declareAcrtIobFunc(pkg llssa.Package, streamPtrType, indexType llssa.Type) llssa.Function {
-	sig := newSignature(
-		[]types.Type{indexType.RawType()},
-		[]types.Type{streamPtrType.RawType()},
-	)
-	return pkg.NewFunc("__acrt_iob_func", sig, llssa.CDecl)
 }
 
 func declareExternalPtrGlobal(pkg llssa.Package, name string, valueType llssa.Type) llssa.Expr {

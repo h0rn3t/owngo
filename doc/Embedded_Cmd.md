@@ -38,7 +38,7 @@ Install program or flash to device.
 
 ### llgo monitor
 Monitor serial output from embedded device.
-- `-port <device>`: Serial port device (e.g., `/dev/ttyUSB0`, `COM3`)
+- `-port <device>`: Serial port device (e.g., `/dev/ttyUSB0`)
 - `-target <platform>`: Auto-detect port from target configuration
 - `-baudrate <rate>`: Communication speed (default: 115200)
 - `[executable]`: Optional ELF file for debug info (panic address resolution)
@@ -47,7 +47,7 @@ Features:
 - Real-time bidirectional serial communication
 - Automatic port detection from target configuration
 - Debug info integration for panic address resolution
-- Cross-platform support (Linux, macOS, Windows)
+- Cross-platform support (Linux, macOS)
 - Graceful exit with Ctrl-C
 
 ## Examples

@@ -210,8 +210,6 @@ func primaryArtifactFormat(conf *Config, path string) string {
 	switch conf.Goos {
 	case "darwin":
 		return "macho"
-	case "windows":
-		return "pe"
 	case "linux", "android", "freebsd", "netbsd", "openbsd", "dragonfly", "solaris":
 		return "elf"
 	default:

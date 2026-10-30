@@ -57,14 +57,10 @@ func isQuery(fn llvm.Value) bool {
 	if len(params) != 1 {
 		return false
 	}
-	// SysV may retain the empty receiver. Win64 lowers an empty aggregate
-	// to i32. The query attribute comes from the checked Go declaration.
+	// SysV may retain the empty receiver. The query attribute comes from the
+	// checked Go declaration.
 	param := params[0]
-	if param.TypeKind() == llvm.StructTypeKind && param.StructElementTypesCount() == 0 {
-		return true
-	}
-	return strings.Contains(fn.GlobalParent().Target(), "windows") &&
-		param.TypeKind() == llvm.IntegerTypeKind && param.IntTypeWidth() == 32
+	return param.TypeKind() == llvm.StructTypeKind && param.StructElementTypesCount() == 0
 }
 
 // ABI lowering leaves register tuples and single-leaf aggregate wrappers on

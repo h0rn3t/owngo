@@ -103,9 +103,9 @@ provide that behavior. Fuzz engine and worker/cache controls are rejected
 until instrumentation, minimization, crash and cache behavior are qualified.
 Fuzz seed cases still run as ordinary tests without `-fuzz`.
 
-Profiling is qualified for native Linux, macOS and Windows runtimes without
+Profiling is qualified for native Linux and macOS runtimes without
 named targets or freestanding tags. CPU sampling requires amd64/arm64 on
-Linux/macOS or 386/amd64/arm64 on Windows. Unsupported targets fail before
+Linux/macOS. Unsupported targets fail before
 package loading instead of emitting placeholder profiles. Profile flags
 require one package, retain its executable in the invocation directory (or
 the explicit `-o` path), and resolve output directories from the invocation

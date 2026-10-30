@@ -222,16 +222,6 @@ func chromeCandidates(goos, configured string, getenv func(string) string) []str
 			"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
 			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 		}
-	case "windows":
-		candidates := []string{"chrome.exe", "chromium.exe"}
-		for _, name := range []string{"ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"} {
-			if root := getenv(name); root != "" {
-				candidates = append(candidates,
-					filepath.Join(root, "Google", "Chrome", "Application", "chrome.exe"),
-					filepath.Join(root, "Chromium", "Application", "chrome.exe"))
-			}
-		}
-		return candidates
 	default:
 		return []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"}
 	}

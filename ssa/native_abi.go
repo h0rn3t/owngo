@@ -23,8 +23,8 @@ var nativeIntegerAttributeKinds = [...]uint{nativeSignExtKind, nativeZeroExtKind
 // arguments at the call boundary; no separate integer-extension pass is needed.
 // ARM32, RISC-V, Apple arm64, SysV amd64, x86-32 and WebAssembly require
 // extension attributes for narrow arguments. RV64 also sign-extends both signed
-// and unsigned 32-bit arguments. Windows amd64 only requires zeroext for bool;
-// other arm64 ABIs leave argument extension to the callee.
+// and unsigned 32-bit arguments. Other arm64 ABIs leave argument extension to
+// the callee.
 // Return attributes require Go-to-native callback adapters: a native function
 // pointer can currently refer to an unadapted Go entry.
 func (p Program) nativeIntegerAttrs(sig *types.Signature, ft llvm.Type, add func(int, llvm.Attribute)) {
@@ -93,9 +93,6 @@ func nativeIntegerExtensionForTarget(target *Target) nativeIntegerExtension {
 			return nativeIntegerNarrowExt
 		}
 	case arch == "x86_64", arch == "amd64":
-		if strings.Contains(triple, "windows") || strings.Contains(triple, "win32") || strings.Contains(triple, "mingw") {
-			return nativeIntegerBoolExt
-		}
 		return nativeIntegerNarrowExt
 	case arch == "riscv64":
 		return nativeIntegerRV64Ext

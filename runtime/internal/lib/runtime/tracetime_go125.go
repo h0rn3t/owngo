@@ -8,13 +8,8 @@ import (
 )
 
 const (
-	// LLGo normalizes QueryPerformanceCounter to nanoseconds on Windows, so
-	// every hosted target uses the high-resolution nanotime trace path.
+	// Every hosted target uses the high-resolution nanotime trace path.
 	osHasLowResClockInt = 0
-
-	// osHasLowResClock indicates that timestamps produced by nanotime on the platform have a
-	// low resolution, typically on the order of 1 ms or more.
-	osHasLowResClock = osHasLowResClockInt > 0
 )
 
 const traceTimeDiv = (1-osHasLowResClockInt)*64 + osHasLowResClockInt*(256-224*(IsPpc64|IsPpc64le))
@@ -24,11 +19,6 @@ const traceTimeDiv = (1-osHasLowResClockInt)*64 + osHasLowResClockInt*(256-224*(
 //
 //go:linkname traceClockUnitsPerSecond runtime/trace.runtime_traceClockUnitsPerSecond
 func traceClockUnitsPerSecond() uint64 {
-	if osHasLowResClock {
-		// We're using cputicks as our clock, so we need a real estimate.
-		//return uint64(ticksPerSecond() / traceTimeDiv)
-		panic("TODO: ticksPerSecond for windows")
-	}
 	// Our clock is nanotime, so it's just the constant time division.
 	// (trace clock units / nanoseconds) * (1e9 nanoseconds / 1 second)
 	return uint64(1.0 / float64(traceTimeDiv) * 1e9)

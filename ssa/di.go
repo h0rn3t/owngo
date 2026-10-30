@@ -223,29 +223,11 @@ func (b diBuilder) createType(name string, ty Type, pos token.Position) DIType {
 			panic(fmt.Errorf("can't create debug info of basic type: %v, %T", ty.RawType(), ty.RawType()))
 		}
 
-		basicName := name
-		if b.prog.Target().effectiveGOOS() == "windows" {
-			switch t.Kind() {
-			case types.Int:
-				basicName = fmt.Sprintf("int%d", b.prog.SizeOf(ty)*8)
-			case types.Uint, types.Uintptr:
-				basicName = fmt.Sprintf("uint%d", b.prog.SizeOf(ty)*8)
-			}
-		}
 		typ = b.di.CreateBasicType(llvm.DIBasicType{
-			Name:       basicName,
+			Name:       name,
 			SizeInBits: b.prog.SizeOf(b.prog.rawType(t)) * 8,
 			Encoding:   encoding,
 		})
-		if basicName != name {
-			typ = b.di.CreateTypedef(llvm.DITypedef{
-				Name:        name,
-				Type:        typ,
-				File:        b.file(pos.Filename).ll,
-				Line:        pos.Line,
-				AlignInBits: uint32(b.prog.sizes.Alignof(t) * 8),
-			})
-		}
 	case *types.Pointer:
 		return b.createPointerType(name, b.prog.rawType(t.Elem()), pos)
 	case *types.Named:
@@ -977,15 +959,6 @@ func (b Builder) DIParamWithHome(variable *types.Var, v Expr, dv DIVar, scope DI
 
 func (b Builder) diParam(variable *types.Var, v Expr, dv DIVar, scope DIScope, pos token.Position, blk BasicBlock) Expr {
 	if b.Prog.debugInfoOptimized {
-		// Preserve the Windows pointer location policy for optimized CodeView.
-		if b.Prog.Target().effectiveGOOS() == "windows" {
-			if _, ok := v.Type.RawType().Underlying().(*types.Pointer); ok {
-				addr := b.AllocaT(v.Type)
-				b.Store(addr, v)
-				b.DIDeclare(variable, addr, dv, scope, pos, blk)
-				return Nil
-			}
-		}
 		b.DIValue(variable, v, dv, scope, pos, blk)
 		return Nil
 	}
@@ -1019,17 +992,7 @@ func (b Builder) DIValue(variable *types.Var, v Expr, dv DIVar, scope DIScope, p
 }
 
 func (b Builder) needDebugAddr(underlying types.Type, ssaType Type) bool {
-	if needConstructAddr(underlying) {
-		return true
-	}
-	// On 32-bit Windows, LLVM can lower a wide integer constant to a single
-	// address-sized DWARF stack value. That loses its upper half (notably for
-	// unsigned values), so debuggers report the variable as unavailable. Keep
-	// the complete value in addressable storage and describe it by dereference.
-	basic, ok := underlying.(*types.Basic)
-	return ok && basic.Info()&types.IsInteger != 0 &&
-		b.Prog.Target().effectiveGOOS() == "windows" &&
-		b.Prog.PointerSize() == 4 && b.Prog.SizeOf(ssaType) > uint64(b.Prog.PointerSize())
+	return needConstructAddr(underlying)
 }
 
 const (

@@ -1,7 +1,6 @@
 package cabi
 
 import (
-	"fmt"
 	"strings"
 
 	intllvm "github.com/xgo-dev/llgo/internal/xtool/llvm"
@@ -29,27 +28,6 @@ func targetArch(llvmTarget string) string {
 	return llvmTarget
 }
 
-// usesWindowsCABI reports whether the target uses the native Windows C ABI.
-// MinGW uses that ABI too; its GNU environment selects a toolchain and CRT,
-// not the SysV calling convention. MSYS and Cygwin are POSIX-emulation ABIs
-// and are deliberately excluded.
-func usesWindowsCABI(target *ssa.Target, llvmTarget string) bool {
-	if llvmTarget == "" || !strings.Contains(llvmTarget, "-") {
-		return target != nil && target.GOOS == "windows"
-	}
-	parts := strings.Split(strings.ToLower(llvmTarget), "-")
-	windows := false
-	for _, part := range parts[1:] {
-		switch {
-		case strings.Contains(part, "cygwin"), part == "cygnus", strings.Contains(part, "msys"):
-			return false
-		case part == "windows", part == "win32", strings.Contains(part, "mingw"):
-			windows = true
-		}
-	}
-	return windows
-}
-
 func NewTransformer(prog ssa.Program, llvmTarget string, targetAbi string, optimize bool) *Transformer {
 	target := prog.Target()
 	arch := target.GOARCH
@@ -61,19 +39,6 @@ func NewTransformer(prog ssa.Program, llvmTarget string, targetAbi string, optim
 		td:       prog.TargetData(),
 		arch:     arch,
 		optimize: optimize,
-	}
-	if usesWindowsCABI(target, llvmTarget) {
-		switch arch {
-		case "amd64":
-			tr.sys = &TypeInfoWindowsAmd64{tr}
-		case "arm64":
-			tr.sys = &TypeInfoWindowsArm64{&TypeInfoArm64{Transformer: tr}}
-		case "386":
-			tr.sys = &TypeInfoWindows386{tr}
-		}
-		if tr.sys != nil {
-			return tr
-		}
 	}
 	switch arch {
 	case "xtensa":
@@ -456,110 +421,12 @@ func loadIndirectParam(b llvm.Builder, info *TypeInfo, ptr llvm.Value) llvm.Valu
 	return value
 }
 
-// windows386AggregateToNative and windows386AggregateFromNative translate
-// values between the explicit Go/386 field wrappers emitted by SSA and the
-// natural aggregate layout consumed by native C code. They are no-ops for all
-// other targets and for aggregates whose Go and C layouts already agree.
-func windows386AggregateToNative(b llvm.Builder, value llvm.Value, source, native llvm.Type) llvm.Value {
-	if source == native {
-		return value
-	}
-	switch source.TypeKind() {
-	case llvm.ArrayTypeKind:
-		ret := llvm.Undef(native)
-		for i := 0; i < source.ArrayLength(); i++ {
-			item := b.CreateExtractValue(value, i, "")
-			item = windows386AggregateToNative(b, item, source.ElementType(), native.ElementType())
-			ret = b.CreateInsertValue(ret, item, i, "")
-		}
-		return ret
-	case llvm.StructTypeKind:
-		ret := llvm.Undef(native)
-		sourceFields := source.StructElementTypes()
-		nativeFields := native.StructElementTypes()
-		nativeIndex := 0
-		for sourceIndex, sourceField := range sourceFields {
-			if nativeIndex == len(nativeFields) {
-				if sourceIndex != len(sourceFields)-1 || !windows386GoAlignmentMarker(sourceField) {
-					panic("cabi: invalid trailing Go/386 aggregate field")
-				}
-				break
-			}
-			item := b.CreateExtractValue(value, sourceIndex, "")
-			if inner, wrapped := windows386GoFieldWrapper(sourceField); wrapped {
-				item = b.CreateExtractValue(item, 0, "")
-				sourceField = inner
-			}
-			item = windows386AggregateToNative(b, item, sourceField, nativeFields[nativeIndex])
-			ret = b.CreateInsertValue(ret, item, nativeIndex, "")
-			nativeIndex++
-		}
-		if nativeIndex != len(nativeFields) {
-			panic("cabi: missing Go/386 aggregate field")
-		}
-		return ret
-	default:
-		panic(fmt.Sprintf("cabi: unsupported Go/386 aggregate layout conversion from %s (%v) to %s (%v)", source, source.TypeKind(), native, native.TypeKind()))
-	}
-}
-
-func windows386AggregateFromNative(b llvm.Builder, value llvm.Value, source, native llvm.Type) llvm.Value {
-	if source == native {
-		return value
-	}
-	switch source.TypeKind() {
-	case llvm.ArrayTypeKind:
-		ret := llvm.Undef(source)
-		for i := 0; i < source.ArrayLength(); i++ {
-			item := b.CreateExtractValue(value, i, "")
-			item = windows386AggregateFromNative(b, item, source.ElementType(), native.ElementType())
-			ret = b.CreateInsertValue(ret, item, i, "")
-		}
-		return ret
-	case llvm.StructTypeKind:
-		ret := llvm.Undef(source)
-		sourceFields := source.StructElementTypes()
-		nativeFields := native.StructElementTypes()
-		nativeIndex := 0
-		for sourceIndex, sourceField := range sourceFields {
-			if nativeIndex == len(nativeFields) {
-				if sourceIndex != len(sourceFields)-1 || !windows386GoAlignmentMarker(sourceField) {
-					panic("cabi: invalid trailing Go/386 aggregate field")
-				}
-				break
-			}
-			item := b.CreateExtractValue(value, nativeIndex, "")
-			fieldNative := nativeFields[nativeIndex]
-			if inner, wrapped := windows386GoFieldWrapper(sourceField); wrapped {
-				item = windows386AggregateFromNative(b, item, inner, fieldNative)
-				wrapper := llvm.Undef(sourceField)
-				item = b.CreateInsertValue(wrapper, item, 0, "")
-			} else {
-				item = windows386AggregateFromNative(b, item, sourceField, fieldNative)
-			}
-			ret = b.CreateInsertValue(ret, item, sourceIndex, "")
-			nativeIndex++
-		}
-		if nativeIndex != len(nativeFields) {
-			panic("cabi: missing native Go/386 aggregate field")
-		}
-		return ret
-	default:
-		panic(fmt.Sprintf("cabi: unsupported native-to-Go/386 aggregate layout conversion from %s (%v) to %s (%v)", native, native.TypeKind(), source, source.TypeKind()))
-	}
-}
-
-func windows386GoAlignmentMarker(typ llvm.Type) bool {
-	return typ.TypeKind() == llvm.ArrayTypeKind && typ.ArrayLength() == 0 &&
-		typ.ElementType().TypeKind() == llvm.IntegerTypeKind
-}
-
 func aggregateToNative(b llvm.Builder, info *TypeInfo, value llvm.Value) llvm.Value {
-	return windows386AggregateToNative(b, value, info.Type, info.nativeType())
+	return value
 }
 
 func aggregateFromNative(b llvm.Builder, info *TypeInfo, value llvm.Value) llvm.Value {
-	return windows386AggregateFromNative(b, value, info.Type, info.nativeType())
+	return value
 }
 
 func (p *Transformer) transformFuncBody(m llvm.Module, ctx llvm.Context, info *FuncInfo, fn llvm.Value, nfn llvm.Value, nft llvm.Type) {

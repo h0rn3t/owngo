@@ -17,7 +17,7 @@
  */
 
 // Package sync exposes the synchronization primitives used by the hosted
-// runtime, backed by pthreads on Unix and Win32 on Windows.
+// runtime, backed by pthreads on Unix.
 package sync
 
 import (

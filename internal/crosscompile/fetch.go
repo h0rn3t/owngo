@@ -3,7 +3,6 @@ package crosscompile
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,7 +13,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/xgo-dev/llgo/internal/env"
@@ -332,90 +330,11 @@ func extractTarGz(tarGzFile, dest string) error {
 }
 
 func extractTarXz(tarXzFile, dest string) error {
-	return extractTarXzForGOOS(runtime.GOOS, os.Getenv("ProgramFiles"), os.Getenv("SystemRoot"), tarXzFile, dest)
-}
-
-func extractTarXzForGOOS(goos, programFiles, systemRoot, tarXzFile, dest string) error {
-	tarCommand := "tar"
-	tarArgs := []string{"-xf", tarXzFile, "-C", dest}
-	if goos == "windows" {
-		if sevenZip := windowsSevenZip(programFiles); sevenZip != "" {
-			return extractTarXzWith7Zip(sevenZip, tarXzFile, dest)
-		}
-		tarCommand = windowsTarCommand(systemRoot)
-	}
-	cmd := exec.Command(tarCommand, tarArgs...)
+	cmd := exec.Command("tar", "-xf", tarXzFile, "-C", dest)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tar -xf: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
-}
-
-func extractTarXzWith7Zip(sevenZip, tarXzFile, dest string) error {
-	return extractTarXzWith7ZipCommand(sevenZip, tarXzFile, dest, exec.Command)
-}
-
-func extractTarXzWith7ZipCommand(sevenZip, tarXzFile, dest string, command func(string, ...string) *exec.Cmd) error {
-	decompress := command(sevenZip, "x", "-so", tarXzFile)
-	extract := command(sevenZip, "x", "-si", "-ttar", "-y", "-o"+dest)
-	pipe, err := decompress.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("7-Zip xz pipe: %w", err)
-	}
-	extract.Stdin = pipe
-	var decompressStderr, extractStderr bytes.Buffer
-	decompress.Stderr = &decompressStderr
-	extract.Stdout = io.Discard
-	extract.Stderr = &extractStderr
-
-	// Start the consumer first so the decompressor can stream a multi-gigabyte
-	// tar without writing a second archive to the comparatively small Windows
-	// hosted-runner disk.
-	if err := extract.Start(); err != nil {
-		return fmt.Errorf("start 7-Zip tar extraction: %w", err)
-	}
-	if err := decompress.Start(); err != nil {
-		_ = extract.Process.Kill()
-		_ = extract.Wait()
-		return fmt.Errorf("start 7-Zip xz decompression: %w", err)
-	}
-	extractErr := extract.Wait()
-	decompressErr := decompress.Wait()
-	if decompressErr != nil {
-		return fmt.Errorf("7-Zip xz decompression: %w: %s", decompressErr, strings.TrimSpace(decompressStderr.String()))
-	}
-	if extractErr != nil {
-		return fmt.Errorf("7-Zip tar extraction: %w: %s", extractErr, strings.TrimSpace(extractStderr.String()))
-	}
-	return nil
-}
-
-func windowsSevenZip(programFiles string) string {
-	if programFiles != "" {
-		sevenZip := filepath.Join(programFiles, "7-Zip", "7z.exe")
-		if fileExists(sevenZip) {
-			return sevenZip
-		}
-	}
-	if sevenZip, err := exec.LookPath("7z.exe"); err == nil {
-		return sevenZip
-	}
-	return ""
-}
-
-func windowsTarCommand(systemRoot string) string {
-	if systemRoot != "" {
-		nativeTar := filepath.Join(systemRoot, "System32", "tar.exe")
-		if fileExists(nativeTar) {
-			return nativeTar
-		}
-	}
-	return "tar"
-}
-
-func fileExists(name string) bool {
-	_, err := os.Stat(name)
-	return err == nil
 }
 
 func extractZip(zipFile, dest string) error {

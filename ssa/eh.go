@@ -19,7 +19,6 @@ package ssa
 import (
 	"go/token"
 	"go/types"
-	"strings"
 	"unsafe"
 
 	"github.com/xgo-dev/llvm"
@@ -76,12 +75,6 @@ func (b Builder) AllocaSigjmpBuf() Expr {
 	n := prog.SizeOf(sigjmpBufTy)           // Get size for target architecture
 	size := prog.IntVal(n, prog.Uintptr())
 	ret := b.Alloca(size)
-	if prog.target.effectiveGOOS() == "windows" {
-		// UCRT jmp_buf uses up to 16-byte alignment on supported Windows
-		// architectures. CreateArrayAlloca otherwise inherits byte alignment
-		// from its i8 element.
-		ret.impl.SetAlignment(16)
-	}
 	return ret
 }
 
@@ -125,9 +118,6 @@ func (b Builder) Sigsetjmp(jb, savemask Expr) Expr {
 	if b.Prog.target.GOARCH == "wasm" || b.Prog.target.Target != "" {
 		return b.Setjmp(jb)
 	}
-	if b.Prog.target.effectiveGOOS() == "windows" {
-		return b.windowsSetjmp(jb)
-	}
 	fn := b.Pkg.rtFunc("Sigsetjmp")
 	b.addReturnsTwiceAttr(fn)
 	return b.Call(fn, jb, savemask)
@@ -139,83 +129,12 @@ func (b Builder) Siglongjmp(jb, retval Expr) {
 		b.Longjmp(jb, retval)
 		return
 	}
-	if b.Prog.target.effectiveGOOS() == "windows" {
-		b.windowsLongjmp(jb, retval)
-		return
-	}
 	fn := b.Pkg.rtFunc("Siglongjmp") // TODO(xsw): mark as noreturn
 	b.Call(fn, jb, retval)
 	// b.Unreachable()
 }
 
-func (b Builder) windowsSetjmp(jb Expr) Expr {
-	prog := b.Prog
-	ptrParam := types.NewParam(token.NoPos, nil, "", prog.VoidPtr().raw.Type)
-	intResult := types.NewParam(token.NoPos, nil, "", prog.CInt().raw.Type)
-	goarch := prog.target.effectiveGOARCH()
-	var name string
-	var params *types.Tuple
-	var args []Expr
-
-	switch goarch {
-	case "386":
-		name = "_setjmp3"
-		zero := prog.IntVal(0, prog.CInt())
-		params = types.NewTuple(
-			ptrParam,
-			types.NewParam(token.NoPos, nil, "", prog.CInt().raw.Type),
-		)
-		args = []Expr{jb, zero}
-	case "amd64":
-		// A nil frame tells longjmp to restore the saved context directly.
-		// LLGo owns Go defer unwinding, and RtlUnwind cannot leave a vectored
-		// exception handler that interrupted generated Go code reliably.
-		name = "_setjmpex"
-		triple := strings.ToLower(prog.target.Spec().Triple)
-		if strings.Contains(triple, "windows-gnu") || strings.Contains(triple, "mingw") {
-			// MinGW exposes the same intrinsic entry point under its GNU CRT
-			// spelling; unlike the setjmp macro this lets LLGo pass a nil frame.
-			name = "__intrinsic_setjmpex"
-		}
-		params = types.NewTuple(
-			ptrParam,
-			types.NewParam(token.NoPos, nil, "", prog.VoidPtr().raw.Type),
-		)
-		args = []Expr{jb, prog.Nil(prog.VoidPtr())}
-	case "arm64":
-		// UCRT longjmp performs a Windows virtual unwind before restoring the
-		// saved context. That cannot cross third-party assembly without .pdata,
-		// including libffi's ARM64 closure entry. LLGo owns defer unwinding, so
-		// use the runtime's ABI-only context save/restore pair instead.
-		name = "llgo_setjmp"
-		params = types.NewTuple(ptrParam)
-		args = []Expr{jb}
-	default:
-		panic("ssa: unsupported Windows architecture for setjmp: " + goarch)
-	}
-
-	sig := types.NewSignatureType(
-		nil, nil, nil, params, types.NewTuple(intResult), false,
-	)
-	fn := b.Pkg.cFunc(name, sig)
-	b.addReturnsTwiceAttr(fn)
-	return b.Call(fn, args...)
-}
-
-func (b Builder) windowsLongjmp(jb, retval Expr) {
-	goarch := b.Prog.target.effectiveGOARCH()
-	if goarch != "amd64" && goarch != "arm64" {
-		b.cLongjmp(jb, retval)
-		return
-	}
-	fn := b.Pkg.cFunc("llgo_longjmp", b.Prog.tyLongjmp())
-	b.Call(fn, jb, retval)
-}
-
 func (b Builder) Setjmp(jb Expr) Expr {
-	if b.Prog.target.effectiveGOOS() == "windows" {
-		return b.windowsSetjmp(jb)
-	}
 	return b.cSetjmp(jb)
 }
 
@@ -226,10 +145,6 @@ func (b Builder) cSetjmp(jb Expr) Expr {
 }
 
 func (b Builder) Longjmp(jb, retval Expr) {
-	if b.Prog.target.effectiveGOOS() == "windows" {
-		b.windowsLongjmp(jb, retval)
-		return
-	}
 	b.cLongjmp(jb, retval)
 }
 

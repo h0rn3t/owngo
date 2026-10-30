@@ -20,7 +20,7 @@ func Unregister(node unsafe.Pointer)
 //go:linkname SetState C.llgo_traceback_state
 func SetState(node unsafe.Pointer, state uint32)
 
-// Snapshot is opaque: Windows 386 and Go need not align uint64 identically.
+// Snapshot is opaque: do not assume its native layout matches a Go struct.
 type Snapshot struct{}
 
 //go:linkname Next C.llgo_traceback_next

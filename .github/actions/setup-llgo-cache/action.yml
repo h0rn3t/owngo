@@ -61,7 +61,7 @@ runs:
         source dev/llgo_cache_dir.sh
         cache_root="$(llgo_cache_dir)"
 
-        profile="${LLGO_WINDOWS_ABI:-native}-${LLGO_WINDOWS_ARCH:-native}"
+        profile="native"
         clang_version="$(clang --version | sed -nE '1s/.*version ([0-9]+([.][0-9]+)+).*/\1/p')"
         if [ -z "$clang_version" ]; then
           echo "Unable to determine the active Clang version" >&2

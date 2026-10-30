@@ -107,11 +107,6 @@ archives:
           mode: 0755
 checksum:
   name_template: "{{.ProjectName}}{{.Version}}.checksums.txt"
-  # Windows CGO builds run on native Windows runners and arrive as tested
-  # integrated archives. The snapshot pass produces the Unix build metadata
-  # they consume; the tag pass includes all four Windows ZIPs in the common checksum file.
-  extra_files:
-    - glob: '{{ if not .IsSnapshot }}.windows-dist/llgo{{ .Version }}.windows-*.zip{{ end }}'
 
 nfpms:
   - id: llgo
@@ -236,11 +231,8 @@ snapcrafts:
       {{- if .Arm}}v{{.Arm}}{{end}}
 
 snapshot:
-  # Tagged CI builds supply versioned Windows ZIPs to the release job.
   # Untagged checkouts need a numeric version for DEB/RPM metadata.
   version_template: '{{ if eq .Summary .Tag }}{{ .Version }}{{ else }}0.0.0-{{ .ShortCommit }}{{ end }}'
 
 release:
   prerelease: auto
-  extra_files:
-    - glob: '{{ if not .IsSnapshot }}.windows-dist/llgo{{ .Version }}.windows-*.zip{{ end }}'

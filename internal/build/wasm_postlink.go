@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/xgo-dev/llgo/internal/crosscompile"
@@ -153,9 +152,6 @@ func resolveWasmOpt() (string, error) {
 	if wasmOpt == "" {
 		if root := os.Getenv("EM_BINARYEN_ROOT"); root != "" {
 			name := "wasm-opt"
-			if runtime.GOOS == "windows" {
-				name += ".exe"
-			}
 			wasmOpt = filepath.Join(root, "bin", name)
 		} else {
 			wasmOpt = "wasm-opt"

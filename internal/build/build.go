@@ -65,7 +65,6 @@ import (
 	"github.com/xgo-dev/llgo/internal/packages"
 	"github.com/xgo-dev/llgo/internal/pclnmap"
 	"github.com/xgo-dev/llgo/internal/pclnpost"
-	"github.com/xgo-dev/llgo/internal/quoted"
 	"github.com/xgo-dev/llgo/internal/typepatch"
 	"github.com/xgo-dev/llgo/internal/wasmworkers"
 	"github.com/xgo-dev/llgo/owngo/census"
@@ -608,14 +607,7 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	}()
 	// Handle crosscompile configuration first to set correct GOOS/GOARCH
 	forceEspClang := conf.ForceEspClang || conf.Target != ""
-	nativeInput := crosscompile.NativeToolchainInput{}
-	if usesWindowsToolchainProfile(runtime.GOOS, conf) {
-		nativeInput, err = parseNativeToolchainInput(commands, conf.LinkOptions, conf.Mode != ModeGen)
-		if err != nil {
-			return nil, err
-		}
-	}
-	export, err := crosscompile.UseWithGOARMAndToolchain(conf.Goos, conf.Goarch, conf.GOARM, conf.Target, forceEspClang, conf.OptLevel, conf.ltoMode(), conf.goGlobalDCEEnabled(), nativeInput)
+	export, err := crosscompile.UseWithGOARMAndToolchain(conf.Goos, conf.Goarch, conf.GOARM, conf.Target, forceEspClang, conf.OptLevel, conf.ltoMode(), conf.goGlobalDCEEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup crosscompile: %w", err)
 	}
@@ -711,7 +703,6 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 		cfg.Mode |= packages.NeedForTest
 	}
 	emitDebugInfo := shouldEmitDebugInfo(conf, &export)
-	emitCodeView := shouldEmitCodeView(conf, &export)
 	frontendOptions := cl.Options{
 		Debug:        emitDebugInfo,
 		DebugSymbols: emitDebugInfo,
@@ -751,7 +742,6 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 		prog.SetPthreadStackSize(uint64(conf.PthreadStackSize))
 	}
 	prog.EnableLTOPluginMarkers(conf.LTOPlugin.Enabled())
-	prog.EnableCodeViewDebugInfo(emitCodeView)
 	funcInfo := conf.Mode != ModeGen && conf.PCLNMode != PCLNNone
 	prog.EnableFuncInfoMetadata(funcInfo)
 	// Keep PC-line anchors for precise runtime locations. Darwin DWARF builds
@@ -1475,50 +1465,6 @@ func removeOutFmts(outFmts *OutFmtDetails) {
 			_ = os.Remove(output)
 		}
 	}
-}
-
-func usesWindowsToolchainProfile(hostGOOS string, conf *Config) bool {
-	// Linked Windows output always needs a coherent compiler, ABI, CRT, and
-	// linker profile. This also covers a Unix-hosted LLGo compiler using an
-	// llvm-mingw toolchain. IR-only generation remains host-independent unless
-	// it runs natively on Windows, preserving golden-test behavior.
-	return conf.Target == "" && conf.Goos == "windows" &&
-		(hostGOOS == "windows" || conf.Mode != ModeGen)
-}
-
-func parseNativeToolchainInput(commands commandEnv, options LinkOptions, resolveWindows bool) (crosscompile.NativeToolchainInput, error) {
-	input := crosscompile.NativeToolchainInput{
-		Dir:            commands.dir,
-		Environ:        slices.Clone(commands.environ),
-		ResolveWindows: resolveWindows,
-	}
-	for _, setting := range []struct {
-		name       string
-		value      string
-		out        *[]string
-		allowEmpty bool
-	}{
-		{name: "CC", value: commands.lookup("CC"), out: &input.CC},
-		{name: "CXX", value: commands.lookup("CXX"), out: &input.CXX},
-		{name: "-extld", value: options.ExternalLinker, out: &input.ExternalLinker, allowEmpty: true},
-		{name: "-extldflags", value: options.ExternalLinkerFlags, out: &input.ExternalFlags, allowEmpty: true},
-	} {
-		if setting.value == "" {
-			continue
-		}
-		args, err := quoted.Split(setting.value)
-		if err != nil {
-			return crosscompile.NativeToolchainInput{}, fmt.Errorf("could not parse %s value %q: %w", setting.name, setting.value, err)
-		}
-		if len(args) == 0 {
-			if setting.allowEmpty {
-				continue
-			}
-			return crosscompile.NativeToolchainInput{}, fmt.Errorf("%s requires a non-empty command or argument list", setting.name)
-		}
-		*setting.out = args
-	}
-	return input, nil
 }
 
 // cHeaderPackages excludes the patched standard runtime implementation. Its
@@ -2873,7 +2819,7 @@ func needsCExportWrappers(ctx *context, pkg *aPackage) bool {
 	// package C defines its unqualified exports in the package module itself.
 	// Runtime-owned low-level entries keep their existing bootstrap contracts.
 	switch ctx.buildConf.Goos {
-	case "darwin", "linux", "windows":
+	case "darwin", "linux":
 		switch ctx.buildConf.BuildMode {
 		case BuildModeExe, BuildModeCShared, BuildModeCArchive:
 			return true
@@ -2947,26 +2893,6 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 	}
 
 	linkOutput := app
-	moveExactWindowsOutput := false
-	if ctx.crossCompile.Toolchain.ObjectFormat == crosscompile.ObjectFormatCOFF &&
-		ctx.buildConf.Target == "" && filepath.Ext(app) == "" {
-		switch ctx.buildConf.BuildMode {
-		case BuildModeExe:
-			// Clang's Windows driver appends .exe when -o has no extension,
-			// while cmd/go treats an explicit -o name as exact. Implicit
-			// outputs already carry Config.AppExt.
-			linkOutput = app + ".exe"
-			moveExactWindowsOutput = true
-		case BuildModeCShared:
-			if ctx.crossCompile.Toolchain.ABI == crosscompile.PlatformABIGNU {
-				// MinGW's driver appends .exe even for -shared. Like cmd/link,
-				// suppress that suffix with a trailing dot. Windows resolves
-				// it to the requested name; cross-host links need a rename.
-				linkOutput = app + "."
-				moveExactWindowsOutput = runtime.GOOS != "windows"
-			}
-		}
-	}
 	buildArgs := []string{"-o", linkOutput}
 	if ctx.buildConf.ASan {
 		buildArgs = append(buildArgs, "-fsanitize=address")
@@ -3046,24 +2972,6 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 		}
 		return err
 	}
-	if !moveExactWindowsOutput {
-		return nil
-	}
-	if ctx.buildConf.BuildMode == BuildModeExe && ctx.mode == ModeTest && !ctx.buildConf.CompileOnly {
-		// Keep the .exe sibling so os/exec's Windows PATHEXT lookup can run an
-		// extensionless explicit test output, while also publishing the exact
-		// file requested by -o.
-		if err := copyFileAtomic(linkOutput, app); err != nil {
-			return fmt.Errorf("publish exact Windows test output %s: %w", app, err)
-		}
-		return nil
-	}
-	// os.Rename replaces an existing non-directory destination. On Windows it
-	// uses MoveFileEx with MOVEFILE_REPLACE_EXISTING, avoiding a remove/rename
-	// gap in which another build could recreate app.
-	if err := os.Rename(linkOutput, app); err != nil {
-		return fmt.Errorf("publish exact Windows output %s: %w", app, err)
-	}
 	return nil
 }
 
@@ -3107,7 +3015,7 @@ INSERT BEFORE .bss;
 // debuggerABIRootArgs retains the structured record through native section GC.
 // COFF records use dllexport/COMDAT. Wasm uses the portable custom section.
 func debuggerABIRootArgs(ctx *context) []string {
-	if ctx == nil || ctx.buildConf == nil || !ctx.frontendOptions.Debug || ctx.buildConf.Goarch == "wasm" || ctx.buildConf.Goos == "windows" {
+	if ctx == nil || ctx.buildConf == nil || !ctx.frontendOptions.Debug || ctx.buildConf.Goarch == "wasm" {
 		return nil
 	}
 	var args []string
@@ -3296,11 +3204,6 @@ func siblingTool(compiler, name string) string {
 	}
 	base := filepath.Join(filepath.Dir(compiler), name)
 	candidates := []string{base}
-	if runtime.GOOS == "windows" {
-		// LLVM's native Windows distributions include the PE executable suffix
-		// even when the configured Clang path omitted it.
-		candidates = append([]string{base + ".exe"}, candidates...)
-	}
 	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate
@@ -3521,7 +3424,6 @@ func lowerMainCExportModule(ctx *context, pkg llssa.Package, exports []cExport) 
 	if !lowerMainCExportAggregates(ctx.prog, mod, exports) {
 		return false, nil
 	}
-	ctx.cTransformer.LowerWindowsVectorParams(mod)
 	ctx.cTransformer.TransformModule(pkg.Path(), mod)
 	if ctx.buildConf.Goarch != "wasm" {
 		return true, nil
@@ -3637,20 +3539,10 @@ func compilePackageModule(ctx *context, aPkg *aPackage, externs []string, verbos
 	// They must forward the caller's ABI storage, not materialize aggregates
 	// in a forwarding frame that a tail transfer immediately releases.
 	lowerLargeAggregates(ctx.prog, ret.Module())
-	ctx.cTransformer.LowerWindowsVectorParams(ret.Module())
 	ctx.cTransformer.TransformModule(ret.Path(), ret.Module())
 	ctx.cTransformer.SetSkipFuncs(nil)
 	if err := llvmfmv.Run(ret.Module(), ctx.buildConf.GOAMD64); err != nil {
 		return fmt.Errorf("%s: %w", pkgPath, err)
-	}
-	if ctx.buildConf.Goos == "windows" {
-		pragmaSyntax := append([]*ast.File(nil), pkg.Syntax...)
-		if aPkg.AltPkg != nil {
-			pragmaSyntax = append(pragmaSyntax, aPkg.AltPkg.Syntax...)
-		}
-		if err := lowerWindowsCgoImportPointers(ctx.buildConf.Goos, ctx.buildConf.Goarch, pkgPath, pragmaSyntax, ret.Module()); err != nil {
-			return err
-		}
 	}
 	lowerWasmAggregateCopies(ctx.buildConf.Goarch, ctx.prog.TargetData(), ret.Module(), llabi.AggregateLoweringConfig{
 		GoWordSize: ctx.prog.GoWordSize(),
@@ -3682,7 +3574,6 @@ func compilePackageModule(ctx *context, aPkg *aPackage, externs []string, verbos
 	}
 	lowerEmscriptenSIMDCalls(ctx, ret.Module())
 	localizeWasmStackAddresses(ctx.buildConf.Goarch, ret.Module())
-	dropUnusedWindowsTestMain(ctx, aPkg, ret.Module())
 	emitFuncInfoEntrySites(ctx, ret)
 	// ModeGen callers consume the in-memory LLVM module directly. They do not
 	// need cgo/link objects or a package archive for a later link step.
@@ -3749,37 +3640,6 @@ func compilePackageModule(ctx *context, aPkg *aPackage, externs []string, verbos
 		}
 	}
 	return nil
-}
-
-// dropUnusedWindowsTestMain mirrors cmd/link's treatment of a command package
-// under `go test`. The tested package still contains its source main function,
-// now named <import-path>.main, but the executable entry is the synthetic test
-// main. cmd/link computes Go reachability before diagnosing unresolved symbols,
-// so it can discard an unreferenced source main even when that body contains a
-// one-sided //go:linkname call. lld-link instead resolves every COFF relocation
-// before /OPT:REF section GC and reports the dead call as undefined.
-//
-// Do not rewrite //go:linkname or weaken undefined symbols: either would also
-// hide an error when the source main is genuinely reachable. Remove only this
-// test-specific entry candidate while it is LLVM IR and only after proving that
-// it has no local use, no //go:linkname reference from any loaded test package,
-// and no //export root. Ordinary builds, synthetic test mains, and non-Windows
-// object formats keep their existing behavior.
-func dropUnusedWindowsTestMain(ctx *context, pkg *aPackage, mod gllvm.Module) {
-	if ctx == nil || ctx.prog == nil || ctx.buildConf == nil || pkg == nil || pkg.Package == nil ||
-		ctx.mode != ModeTest || ctx.buildConf.Goos != "windows" || ctx.buildConf.BuildMode != BuildModeExe ||
-		pkg.Name != "main" || pkg.ForTest == "" || mod.IsNil() {
-		return
-	}
-	symbol := pkg.PkgPath + ".main"
-	fn := mod.NamedFunction(symbol)
-	if fn.IsNil() || fn.IsDeclaration() || !fn.FirstUse().IsNil() || ctx.prog.HasLinknameTarget(symbol) {
-		return
-	}
-	if _, exported := ctx.prog.PackageExport(symbol); exported {
-		return
-	}
-	fn.EraseFromParentAsFunction()
 }
 
 func printCompletedPackage(conf *Config, pkg *aPackage) {

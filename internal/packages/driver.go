@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -110,9 +109,6 @@ func LoadMetadata(cfg *Config, patterns ...string) ([]*Package, error) {
 	}
 	goBin := filepath.Join(environmentValue(cfg.Env, "GOROOT"), "bin")
 	goName := "go"
-	if runtime.GOOS == "windows" {
-		goName += ".exe"
-	}
 	if _, err := exec.LookPath(filepath.Join(goBin, goName)); err != nil {
 		return nil, fmt.Errorf("selected Go executable: %w", err)
 	}
@@ -274,7 +270,7 @@ func (response metadataResponse) packages() ([]*Package, error) {
 }
 
 func environmentKeyEqual(a, b string) bool {
-	return a == b || runtime.GOOS == "windows" && strings.EqualFold(a, b)
+	return a == b
 }
 
 func environmentValue(environ []string, key string) string {

@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -118,9 +117,6 @@ func SetupPath() {
 
 func samePath(x, y string) bool {
 	x, y = filepath.Clean(x), filepath.Clean(y)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(x, y)
-	}
 	return x == y
 }
 

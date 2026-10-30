@@ -131,13 +131,6 @@ func implicitExecutionTempPrefix(conf *Config) string {
 
 // applyPrefix applies build mode specific naming conventions
 func applyPrefix(baseName string, buildMode BuildMode, target string, goos string) string {
-	// Determine the effective OS for naming conventions
-	effectiveGoos := goos
-	if target != "" {
-		// Embedded targets follow Linux conventions
-		effectiveGoos = "linux"
-	}
-
 	switch buildMode {
 	case BuildModeCArchive:
 		// Static libraries: libname.a (add lib prefix if missing)
@@ -147,8 +140,8 @@ func applyPrefix(baseName string, buildMode BuildMode, target string, goos strin
 		return baseName
 
 	case BuildModeCShared:
-		// Shared libraries: libname.so/libname.dylib (add lib prefix if missing, except on Windows)
-		if effectiveGoos != "windows" && !strings.HasPrefix(baseName, "lib") {
+		// Shared libraries: libname.so/libname.dylib (add lib prefix if missing)
+		if !strings.HasPrefix(baseName, "lib") {
 			return "lib" + baseName
 		}
 		return baseName
@@ -382,8 +375,6 @@ func defaultAppExt(conf *Config) string {
 		return ".a"
 	case BuildModeCShared:
 		switch conf.Goos {
-		case "windows":
-			return ".dll"
 		case "darwin":
 			return ".dylib"
 		default:
@@ -421,8 +412,6 @@ func defaultAppExt(conf *Config) string {
 		}
 
 		switch conf.Goos {
-		case "windows":
-			return ".exe"
 		case "wasi", "wasip1", "js":
 			return ".wasm"
 		}

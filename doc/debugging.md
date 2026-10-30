@@ -5,20 +5,17 @@ Native Linux links compress retained DWARF with zlib by default. Use
 omits DWARF entirely. Compression retains the ordinary symbol table and the
 runtime PCLN metadata.
 
-Native macOS and Windows also accept **experimental, explicit**
+Native macOS also accepts **experimental, explicit**
 `-ldflags=-compressdwarf=true` compression. Their default remains uncompressed.
 On macOS this runs `dsymutil` and compresses the adjacent `program.dSYM`
 bundle's DWARF using GNU `__zdebug_*` sections; the executable and its code
-signature are unchanged. On Windows it compresses embedded DWARF as
-`.zdebug_*` sections, preserving section RVAs, runtime tables, and CodeView
-references. It does not compress PDBs. Signed PE images and unsupported
-layouts are rejected before rewriting the image. `-w` still omits DWARF and
+signature are unchanged. Unsupported layouts are rejected before rewriting
+the image. `-w` still omits DWARF and
 does not generate a dSYM.
 
-These formats can be read by Go's `debug/macho` and `debug/pe` packages, but
+These formats can be read by Go's `debug/macho` package, but
 reader support varies. In particular the tested Apple LLDB cannot read
-compressed Mach-O dSYMs, and LLVM 22's PE reader does not recognize
-`.zdebug_*`. `llgo debug` with its LLDB backend rejects explicit compression
+compressed Mach-O dSYMs. `llgo debug` with its LLDB backend rejects explicit compression
 on either platform. For LLDB use the default or `-compressdwarf=false`. If a
 compressed bundle already exists, regenerate an uncompressed one with
 `dsymutil program -o program.dSYM` while its debug-map objects remain
@@ -84,7 +81,7 @@ The automatic backend depends on the selected target:
 
 | Target | Backend | Session transport |
 | --- | --- | --- |
-| Native Darwin/Linux/Windows | LLDB | Local process |
+| Native Darwin/Linux | LLDB | Local process |
 | Non-Wasm embedded | GDB | Target `debug-server`, OpenOCD, or `-remote` |
 | WASI | Unavailable | W32 pthread execution uses Wasmer; source debugging is a subsequent phase |
 | Browser Wasm | Chrome DevTools | LLGo language extension and the generated Emscripten host |
@@ -135,7 +132,6 @@ Cortex-M3 `lm3s6965evb` QEMU target:
 | --- | --- | --- | --- |
 | Linux x64 | `gdb-multiarch` | LLVM 22 | Cortex-M3, preloaded and explicit download |
 | macOS arm64 | Homebrew GDB remote | LLDB | Cortex-M3, preloaded and explicit download |
-| Windows x64 | MSYS2 `gdb-multiarch` | LLVM 22 | Cortex-M3, preloaded and explicit download |
 
 macOS arm64 **remote** GDB coverage does not imply native Darwin arm64 process
 support. Likewise, these Cortex-M tests do not establish LLDB support for every
@@ -152,10 +148,9 @@ goroutine stack inspection is required:
 | Native host | GDB results with the current packaged tool | LLDB results |
 | --- | --- | --- |
 | macOS x64 with dyld image-info ABI 17 | C/Go values, runtime registry and main-thread stack pass; blocked-worker stacks are truncated because GDB's Darwin loader reader accepts image-info ABI versions only through 15. The truncation also reproduces with a pure C worker. | Complete runtime acceptance passes, including worker stacks |
-| Windows ARM64 with GDB 18 | Values, runtime registry and main-thread stack pass; blocked-worker stacks are truncated at system frames containing PAC-signed return addresses. | Complete runtime acceptance passes, including worker stacks |
 
 Passing value inspection or enumerating a goroutine does not establish that
-its full stack can be unwound. These two GDB combinations are not recorded as
+its full stack can be unwound. This GDB combination is not recorded as
 complete native runtime support, and this contribution does not bundle a
 patched GDB to remove those upstream limits.
 
@@ -212,7 +207,7 @@ llgo build -target=cortex-m-qemu -debug-artifact=host -obin ./app
 llgo build -debug-artifact=none ./app
 ```
 
-Native macOS, Linux and Windows builds follow the platform toolchain's default
+Native macOS and Linux builds follow the platform toolchain's default
 DWARF packaging. Retaining DWARF does not prescribe whether it lives in the
 executable, object files or a separate debug artifact. LLGo does not add a native
 packaging step or require a standalone dSYM/debug file. On native targets,

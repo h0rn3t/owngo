@@ -63,7 +63,7 @@ func GetPort(portFlag string, usbInterfaces []string) (string, error) {
 	switch runtime.GOOS {
 	case "freebsd":
 		ports, err = filepath.Glob("/dev/cuaU*")
-	case "darwin", "linux", "windows":
+	case "darwin", "linux":
 		var portsList []*enumerator.PortDetails
 		portsList, err = enumerator.GetDetailedPortsList()
 		if err != nil {
@@ -169,20 +169,12 @@ func GetPort(portFlag string, usbInterfaces []string) (string, error) {
 //
 // Retry mechanism:
 // - Retries up to 3 times due to potential temporary serial port access issues
-// - Windows special handling: InvalidSerialPort error during bootloader transition is normal
 func touchSerialPortAt1200bps(port string) (err error) {
 	retryCount := 3
 	for i := 0; i < retryCount; i++ {
 		// Open port at 1200bps to trigger Arduino reset
 		p, e := serial.Open(port, &serial.Mode{BaudRate: 1200})
 		if e != nil {
-			if runtime.GOOS == `windows` {
-				se, ok := e.(*serial.PortError)
-				if ok && se.Code() == serial.InvalidSerialPort {
-					// InvalidSerialPort error occurs when transitioning to boot
-					return nil
-				}
-			}
 			time.Sleep(1 * time.Second)
 			err = e
 			continue
@@ -339,16 +331,11 @@ func flashMSD(msd MSD, envMap map[string]string, verbose bool) error {
 				filepath.Join("/media", os.Getenv("USER"), volumeName),
 				filepath.Join("/mnt", volumeName),
 			}
-		case "windows":
-			candidates = []string{
-				volumeName + ":",
-			}
 		default:
 			candidates = []string{
 				filepath.Join("/Volumes", volumeName),                  // macOS
 				filepath.Join("/media", os.Getenv("USER"), volumeName), // Linux
 				filepath.Join("/mnt", volumeName),                      // Linux alternative
-				volumeName + ":",                                       // Windows
 			}
 		}
 

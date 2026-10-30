@@ -54,7 +54,7 @@ Other targets may not provide every OS service or implementation-specific runtim
 
 | Target | Current coverage |
 | --- | --- |
-| Native | Linux amd64/arm64, macOS amd64/arm64, and Windows 386/amd64/arm64 (MSVC and MinGW) release builds; primary CI on Linux amd64, macOS arm64, and Windows toolchain profiles |
+| Native | Linux amd64/arm64 and macOS amd64/arm64 release builds; primary CI on Linux amd64 and macOS arm64 |
 | WebAssembly | `js/wasm` and `wasip1/wasm` builds; WASI and Emscripten CI coverage |
 | Embedded | [`-target`](doc/Embedded_Cmd.md) configurations for supported boards and MCUs, with selected QEMU/emulator smoke tests |
 
@@ -144,26 +144,11 @@ error naming the method, target, and reason forwarding is unsupported. Call the 
 or function directly with explicit C-compatible arguments when forwarding is
 unavailable. Unused synthetic wrappers do not prevent those direct calls.
 
-#### Windows API
-
-On Windows, bind APIs declared with `WINAPI` or `__stdcall` through the `stdcall.` namespace. The convention is distinct on 386; Windows amd64 and arm64 use their unified native C ABI. An explicitly decorated 386 name such as `_MessageBoxW@16` is also accepted and is normalized to `MessageBoxW` on 64-bit targets.
-
-```go
-//go:linkname MessageBoxW stdcall.MessageBoxW
-func MessageBoxW(hwnd uintptr, text, caption *uint16, flags uint32) int32
-
-//llgo:stdcall
-type Callback func(context uintptr) uintptr
-```
-
-`stdcall.` declarations and `//llgo:stdcall` apply only to non-variadic function types. A native callback is one function pointer, so a Go callback must be a direct function reference; pass state through an explicit context pointer rather than a capturing closure.
-
 #### Calling-convention directives
 
-A function type that models a C or Windows callback carries a calling-convention directive so the generated function pointer matches the native ABI:
+A function type that models a C callback carries a calling-convention directive so the generated function pointer matches the native ABI:
 
 * `//llgo:cdecl` selects the C calling convention.
-* `//llgo:stdcall` selects the Windows stdcall convention (distinct only on 386; Windows amd64 and arm64 use their unified native C ABI).
 
 ```go
 import (
@@ -174,12 +159,11 @@ import (
 
 //llgo:cdecl
 type Handler func(data unsafe.Pointer) c.Int
-
-//llgo:stdcall
-type WinProc func(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr
 ```
 
-The older `//llgo:type C` and `//llgo:type stdcall` spellings remain supported for backward compatibility but are **deprecated**: the compiler accepts them and prints a warning naming the replacement (`//llgo:type C` → `//llgo:cdecl`, `//llgo:type stdcall` → `//llgo:stdcall`). Prefer the new directives in new code. A type may carry only one calling-convention directive; combining them (for example `//llgo:cdecl` together with `//llgo:stdcall` or `//llgo:type stdcall`) is reported as an error.
+A native callback is one function pointer, so a Go callback must be a direct function reference; pass state through an explicit context pointer rather than a capturing closure.
+
+The older `//llgo:type C` spelling remains supported for backward compatibility but is **deprecated**: the compiler accepts it and prints a warning naming the replacement (`//llgo:type C` → `//llgo:cdecl`). Prefer the new directive in new code.
 
 ### C/C++ standard libraries
 
@@ -264,7 +248,7 @@ Examples built on these bindings:
 - [LLVM 22](https://llvm.org)
 - [Clang 22](https://clang.llvm.org)
 - [LLD 22](https://lld.llvm.org)
-- [LLDB](https://lldb.llvm.org) (LLVM 22 packages on Linux/Windows; Xcode's Apple LLDB on macOS)
+- [LLDB](https://lldb.llvm.org) (LLVM 22 packages on Linux; Xcode's Apple LLDB on macOS)
 - [pkg-config 0.29+](https://gitlab.freedesktop.org/pkg-config/pkg-config)
 - [bdwgc/libgc 8.0+](https://www.hboehm.info/gc/)
 - [libffi](https://sourceware.org/libffi/)
@@ -394,35 +378,6 @@ export LDFLAGS="-L$GCC_ROOT_DIR -B$GCC_ROOT_DIR -Wl,-dynamic-linker,/lib/ld-musl
 llgo run .
 ```
 
-### on Windows
-
-The release workflow builds six integrated Windows variants, each as a ZIP: `llgo<VERSION>.windows-{386,amd64,arm64}-{msvc,mingw}.zip`. Check the [release assets](https://github.com/xgo-dev/llgo/releases) for availability in each version. Add the extracted `bin` directory to `PATH`; the archives keep the same `runtime`, `targets`, and `crosscompile/clang` layout as Unix releases. Each architecture's MSVC and MinGW archives contain the same statically linked, DLL-free `llgo.exe`.
-
-See [Windows release dependencies and PowerShell setup](WINDOWS.md) for the external tools, ABI-specific libraries, and pkg-config configuration needed to compile native programs. The document is included in every Windows ZIP.
-
-Use the archive matching your native architecture and toolchain profile. Native programs still need the corresponding SDK/CRT, Clang, and dependencies described below: Visual Studio's C++ developer environment for MSVC, or MSYS2 `CLANG64` (`amd64`) / `CLANGARM64` (`arm64`) for MinGW. For `386`, configure the native i686 MSVC or MinGW environment described in [WINDOWS.md](WINDOWS.md); automatic dependency installation is unavailable. The bundled ESP Clang matches the host architecture: ARM64 archives contain native ARM64 ESP tools and DLLs for both MSVC and MinGW variants.
-
-The recommended GNU-hosted setup is an MSYS2 `CLANG64` shell. Install the LLVM 22 stack and LLGo's native dependencies, then provide the versioned pkg-config metadata used by the Go/C++ bindings:
-
-```sh
-pacman -S --needed \
-  mingw-w64-clang-x86_64-{clang,llvm,llvm-tools,lld,lldb,compiler-rt,libc++,libunwind} \
-  mingw-w64-clang-x86_64-{gc,libffi,libuv,openssl,cjson,sqlite3,zlib,pkgconf}
-test "$(llvm-config --version | cut -d. -f1)" = 22
-pc_dir="$MINGW_PREFIX/lib/pkgconfig"
-mkdir -p "$pc_dir"
-printf '%s\n' \
-  'Name: LLVM 22' \
-  'Description: LLVM 22 host compiler and linker flags' \
-  "Version: $(llvm-config --version)" \
-  "Cflags: $(llvm-config --cflags)" \
-  "Libs: $(llvm-config --ldflags --libs all --system-libs)" \
-  > "$pc_dir/llvm-22.pc"
-```
-
-The native MSVC CI profile uses LLVM's official 22.1.8 development archive for headers, libraries, Clang, LLD, and all code-generation backends. That archive does not contain LLDB, so the profile also extracts LLDB from the matching official `win64` or `woa64` installer. LLVM 22 has no official Win32 installer; the Windows 386 lane uses the LLVM 22.1.8-based llvm-mingw 20260616 builtins and qualifies the official x64 LLDB under WoW64. The complete pinned setup, checksums, and generated `llvm-22.pc` are in `.github/actions/setup-deps/action.yml`.
-
-
 ### Install from source
 
 <!-- embedme doc/_readme/scripts/install_llgo.sh#L2-L1000 -->
@@ -445,17 +400,6 @@ On macOS or Linux:
 curl -fsSL https://raw.githubusercontent.com/xgo-dev/llgo/main/install.sh | bash
 ```
 
-On Windows with MSVC, run in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/xgo-dev/llgo/main/install.ps1 | iex
-```
-
-On Windows with MinGW, run in an MSYS2 `CLANG64` or `CLANGARM64` shell:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/xgo-dev/llgo/main/install.sh | bash
-```
 
 ## Go environment
 

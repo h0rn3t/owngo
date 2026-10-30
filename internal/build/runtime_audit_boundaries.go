@@ -112,14 +112,8 @@ C.clock_gettime_nsec_np`,
 		"target libc / platform SDK",
 		``,
 	},
-	{"stdcall.GetSystemDirectoryA", "Windows kernel32; stdcall on 386, native Windows ABI on amd64/arm64", ""},
 	{"C.__sigsetjmp C.sigsetjmp C.siglongjmp", "target libc; returns-twice and target SigjmpBuf layout", "ssa/eh.go"},
-	{
-		`C.setjmp C.longjmp`,
-		"compiler-selected Windows CRT/context entry; these logical names are not direct CRT calls",
-		`ssa/eh.go runtime/internal/runtime/_wrap/setjmp_windows_amd64.c
-runtime/internal/runtime/_wrap/setjmp_windows_arm64.c`,
-	},
+	{"C.setjmp C.longjmp", "target libc context entry", "ssa/eh.go"},
 	{"C.__llgo_wasm_main", "compiler-generated Wasm scheduler entry", "internal/build/main_module.go"},
 	{
 		`C.llgo_libc_call C.llgo_cgo_argset_call C.llgo_cgo_setuid C.llgo_cgo_seteuid C.llgo_cgo_setgid
@@ -132,8 +126,7 @@ C.llgo_cgo_setresgid C.llgo_cgo_setgroups`,
 		`C.llgo_cpu_profile_drain C.llgo_cpu_profile_refresh_signal C.llgo_cpu_profile_start
 C.llgo_cpu_profile_stop C.llgo_cpu_profile_update_signal`,
 		"LLGo platform profiler",
-		`runtime/internal/lib/runtime/_wrap/profile.c
-runtime/internal/lib/runtime/_wrap/profile_windows.c`,
+		`runtime/internal/lib/runtime/_wrap/profile.c`,
 	},
 	{"C.llgo_debugtrap", "LLGo platform debug trap", "runtime/internal/lib/runtime/_wrap/debugtrap.c"},
 	{
@@ -145,34 +138,14 @@ runtime/internal/lib/runtime/_wrap/profile_windows.c`,
 	{"C.llgo_framepointer", "LLGo frame-pointer intrinsic bridge", "runtime/internal/runtime/_wrap/fp.c"},
 	{"C.llgo_gc_stack_top", "LLGo linear-memory GC", "runtime/internal/runtime/tinygogc/_wrap/gc_wasm.c"},
 	{
-		`C.llgo_getpagesize C.llgo_iocp_associate C.llgo_iocp_create C.llgo_iocp_get C.llgo_nanotime
-C.llgo_nanotime_init C.llgo_query_performance_counter C.llgo_query_performance_frequency
-C.llgo_walltime C.llgo_windows_capture_context C.llgo_windows_lookup_function_entry
-C.llgo_windows_signal_init C.llgo_windows_virtual_unwind`,
-		"LLGo Windows SDK bridge",
-		`runtime/internal/lib/runtime/_wrap/runtime_windows.c`,
-	},
-	{
-		`C.llgo_install_windows_fault_handler C.llgo_windows_fault_capture_done
-C.llgo_windows_fault_pcbuf`,
-		"LLGo Windows fault bridge",
-		`runtime/internal/runtime/_wrap/fault_windows.c`,
-	},
-	{
 		`C.llgo_maxprocs`,
 		"LLGo platform CPU query",
-		`runtime/internal/lib/runtime/_wrap/runtime.c
-runtime/internal/lib/runtime/_wrap/runtime_windows.c`,
+		`runtime/internal/lib/runtime/_wrap/runtime.c`,
 	},
 	{
 		`C.llgo_mem_readable`,
 		"LLGo platform memory probe",
-		`runtime/internal/lib/runtime/_wrap/fault.c runtime/internal/lib/runtime/_wrap/runtime_windows.c`,
-	},
-	{
-		`C.llgo_print_byte C.llgo_print_stderr_is_console C.llgo_print_write C.llgo_print_write_console`,
-		"LLGo Windows console bridge",
-		`runtime/internal/runtime/_wrap/print_windows.c`,
+		`runtime/internal/lib/runtime/_wrap/fault.c`,
 	},
 	{
 		`C.llgo_signal_barrier C.llgo_signal_die_pipe C.llgo_signal_disable C.llgo_signal_enable
@@ -207,8 +180,6 @@ C.llgo_wasi_gc_wait_uint32`,
 		"LLGo Wasm finalizer ABI bridge",
 		`runtime/internal/lib/runtime/_wrap/finalizer_wasm.c`,
 	},
-	{"C.llgo_windows_random", "LLGo Windows random source", "runtime/internal/runtime/_wrap/rand_windows.c"},
-	{"C.llgo_windows_syscall", "LLGo Windows variable-arity syscall bridge", "runtime/internal/lib/runtime/_wrap/syscall_windows.S"},
 }
 
 func runtimeNativeProviders(owners []runtimeNativeOwner) (map[string]runtimeNativeOwner, error) {

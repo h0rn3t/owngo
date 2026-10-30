@@ -7,7 +7,6 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -46,9 +45,6 @@ func resolveDefaultGODEBUG(cfg *packages.Config, goroot string, roots []*package
 		patterns = slices.Compact(entryPaths)
 	}
 	goExe := "go"
-	if runtime.GOOS == "windows" {
-		goExe += ".exe"
-	}
 	args := []string{"list", "-e", "-json"}
 	if cfg.Tests {
 		args = append(args, "-test")

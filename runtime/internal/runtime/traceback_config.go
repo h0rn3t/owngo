@@ -29,7 +29,7 @@ func init() {
 	if env := tracebackGetenv(c.Str("GOTRACEBACK")); env != nil {
 		level = c.GoString(env)
 	}
-	tracebackEnvironment = traceback.Parse(level, tracebackWindows)
+	tracebackEnvironment = traceback.Parse(level, false)
 	tracebackPlatformConfig(true, tracebackEnvironment&traceback.WER != 0)
 	atomic.Store(&tracebackSetting, tracebackEnvironment)
 }
@@ -39,7 +39,7 @@ func TracebackSetting() uint64 { return atomic.Load(&tracebackSetting) }
 func SetTraceback(level string) {
 	// Like Go, a program may increase the environment-selected detail but
 	// cannot reduce it. Changes to the environment after startup do not count.
-	setting := traceback.Parse(level, tracebackWindows)
+	setting := traceback.Parse(level, false)
 	tracebackPlatformConfig(false, setting&traceback.WER != 0)
 	atomic.Store(&tracebackSetting, traceback.Combine(tracebackEnvironment, setting))
 }

@@ -1,7 +1,7 @@
 [workspace]
 name = "llgo-dev"
 channels = ["conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 
 [dependencies]
 go = ">=1.27,<1.28"
@@ -19,9 +19,3 @@ libuv = "*"
 
 [activation]
 scripts = ["activate_pixi.sh"]
-
-[target.win-64.activation]
-scripts = ["activate_pixi.bat"]
-
-[target.win-64.dependencies]
-pkgconf = ">=3.0.8,<4"

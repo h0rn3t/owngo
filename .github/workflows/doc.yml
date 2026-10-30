@@ -70,29 +70,19 @@ jobs:
   local_install:
     if: needs.prepare.outputs.run_code_ci == 'true'
     needs: prepare
-    name: local installs (${{ matrix.os }}${{ matrix.windows_abi && format(', {0}', matrix.windows_abi) || '' }})
+    name: local installs (${{ matrix.os }})
     timeout-minutes: 30
     strategy:
       matrix:
-        platform: [macos, ubuntu, windows-msvc, windows-mingw]
+        platform: [macos, ubuntu]
         include:
           - platform: macos
             os: macos-latest
           - platform: ubuntu
             os: ubuntu-latest
-          - platform: windows-msvc
-            os: windows-2022
-            windows_abi: msvc
-          - platform: windows-mingw
-            os: windows-2022
-            windows_abi: mingw
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Free disk space on Windows
-        if: startsWith(matrix.os, 'windows')
-        uses: ./.github/actions/free-windows-disk
 
       - name: Test local installer with LF and CRLF checkouts
         shell: bash
@@ -116,23 +106,6 @@ jobs:
           set -x
           source doc/_readme/scripts/install_ubuntu.sh
 
-      - name: Set up Python 3.12 on Windows
-        if: startsWith(matrix.os, 'windows')
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Test PowerShell installer helpers
-        if: startsWith(matrix.os, 'windows')
-        shell: pwsh
-        run: ./test/installer/install_ps1_test.ps1
-
-      - name: Install dependencies on Windows
-        if: startsWith(matrix.os, 'windows')
-        uses: ./.github/actions/setup-deps
-        with:
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
-
       - name: Test default and full local installs
         shell: bash
         run: |
@@ -142,11 +115,6 @@ jobs:
           set -x
 
           base_path="$PATH"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            python_lib=$(python -c 'import os, sys; print(os.path.join(sys.base_prefix, "libs", f"python{sys.version_info.major}{sys.version_info.minor}"))')
-            export LLGO_LIB_PYTHON="$python_lib"
-            export LLGO_STDIO_NOBUF=1
-          fi
 
           # Both README installation modes run after one platform dependency
           # setup, but use separate binary directories. Reset PATH between
@@ -155,15 +123,10 @@ jobs:
             if [ "$1" = "clone" ]; then
               # do nothing because we already have the branch; emulate the
               # cloned directory name so forks whose checkout is not named
-              # llgo work too. Remove any stale entry first: MSYS ln refuses
-              # to overwrite a real directory, and raw %GITHUB_WORKSPACE%
-              # backslashes confuse it, so convert via cygpath on Windows.
+              # llgo work too. Remove any stale entry first so the symlink is
+              # recreated cleanly.
               rm -rf llgo
-              if [[ "$RUNNER_OS" == "Windows" ]]; then
-                ln -s "$(cygpath -u "$GITHUB_WORKSPACE")" llgo
-              else
-                ln -sfn "$GITHUB_WORKSPACE" llgo
-              fi
+              ln -sfn "$GITHUB_WORKSPACE" llgo
             else
               command git "$@"
             fi
@@ -173,10 +136,6 @@ jobs:
             cd "$GITHUB_WORKSPACE"
             install_bin="$RUNNER_TEMP/llgo-$install_mode-bin"
             path_bin="$install_bin"
-            if [[ "$RUNNER_OS" == "Windows" ]]; then
-              install_bin=$(cygpath -m "$install_bin")
-              path_bin=$(cygpath -u "$install_bin")
-            fi
             mkdir -p "$path_bin"
             export GOBIN="$install_bin"
             export PATH="$path_bin:$base_path"

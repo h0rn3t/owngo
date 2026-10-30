@@ -26,15 +26,11 @@ it is not silently replaced by a warning.
   resources, runtime symbols and external DWARF described by the build output.
   Alternate firmware formats are listed individually, not summed as if every
   format must be deployed together.
-- PE/COFF is read directly using section characteristics. Section payload excludes
-  raw-file alignment padding; virtual zero-fill is counted as BSS. COFF symbol
-  ownership uses address-range estimates because symbols do not carry ELF-style
-  sizes. Stripped Windows executables retain section totals.
 - Mach-O retains the `llvm-readelf` reader and address-range estimates.
   Parentheses within Go method names are preserved.
 
 Native `flash` remains the sum of allocated code/rodata/data section payload;
-`ram` is data plus zero-fill (ELF NOBITS or PE virtual zero-fill). These are not the ELF container size,
+`ram` is data plus zero-fill (ELF NOBITS). These are not the ELF container size,
 load-image padding, physical RAM after target address-alias resolution, or
 dynamic runtime usage. Linker reservations may be included in NOBITS.
 

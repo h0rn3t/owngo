@@ -21,8 +21,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -43,15 +41,14 @@ type Config struct {
 	ResponseFileStyle ResponseFileStyle
 }
 
-// ResponseFileStyle identifies the tokenizer used by a compiler or linker.
-// Clang's GNU driver uses GNU tokenization even on Windows, while clang-cl,
-// lld-link, link.exe, and cl.exe use Windows command-line tokenization.
+// ResponseFileStyle identifies the tokenizer used by a compiler or linker
+// response file. LLGo only drives Clang's GNU-compatible driver, which uses
+// GNU tokenization.
 type ResponseFileStyle uint8
 
 const (
 	ResponseFileAuto ResponseFileStyle = iota
 	ResponseFileGNU
-	ResponseFileWindows
 )
 
 // NewConfig creates a new Config with the specified parameters.
@@ -156,66 +153,7 @@ func (c *Cmd) linkArguments(args ...string) []string {
 	allArgs := make([]string, 0, len(flags)+len(args))
 	allArgs = append(allArgs, flags...)
 	allArgs = append(allArgs, args...)
-	return resolveMSVCImportLibraries(c.Dir, allArgs)
-}
-
-// resolveMSVCImportLibraries lets clang's MSVC driver consume library names
-// emitted for Unix-compatible -l flags. The driver lowers -lname to name.lib
-// and lets the linker search every -L directory for that exact spelling; it
-// does not probe libname.lib or libname.dll.a per directory. Preserve that
-// behavior by preferring name.lib anywhere on the explicit search path, then
-// replace -lname with the first alternative spelling that exists.
-func resolveMSVCImportLibraries(baseDir string, args []string) []string {
-	if !slices.ContainsFunc(args, func(arg string) bool {
-		return strings.Contains(arg, "-windows-msvc")
-	}) {
-		return args
-	}
-	var dirs []string
-	for i, arg := range args {
-		switch {
-		case arg == "-L" && i+1 < len(args):
-			dirs = append(dirs, args[i+1])
-		case strings.HasPrefix(arg, "-L") && len(arg) > 2:
-			dirs = append(dirs, arg[2:])
-		}
-	}
-	resolved := args
-	changed := false
-	for i, arg := range args {
-		if !strings.HasPrefix(arg, "-l") || len(arg) <= 2 || arg[2] == ':' {
-			continue
-		}
-		name := arg[2:]
-		if findLibrary(baseDir, dirs, name+".lib") != "" {
-			continue
-		}
-		archive := findLibrary(baseDir, dirs, "lib"+name+".lib")
-		if archive == "" {
-			archive = findLibrary(baseDir, dirs, "lib"+name+".dll.a")
-		}
-		if archive != "" {
-			if !changed {
-				resolved = slices.Clone(args)
-				changed = true
-			}
-			resolved[i] = archive
-		}
-	}
-	return resolved
-}
-
-func findLibrary(baseDir string, dirs []string, name string) string {
-	for _, dir := range dirs {
-		path := filepath.Join(dir, name)
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(baseDir, path)
-		}
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			return path
-		}
-	}
-	return ""
+	return allArgs
 }
 
 // mergeCompilerFlags merges environment CCFLAGS/CFLAGS with config flags.
@@ -268,16 +206,6 @@ func (c *Cmd) exec(args ...string) error {
 		allArgs = append(allArgs, c.prefixArgs...)
 		args = append(allArgs, args...)
 	}
-	responseFile := ""
-	if useResponseFile(c.app, args) {
-		var err error
-		responseFile, err = writeResponseFile(args, c.responseFileStyle())
-		if err != nil {
-			return fmt.Errorf("write clang response file: %w", err)
-		}
-		defer os.Remove(responseFile)
-		args = []string{"@" + responseFile}
-	}
 	cmd := exec.Command(c.app, args...)
 	cmd.Dir = c.Dir
 	if c.Verbose {
@@ -292,38 +220,11 @@ func (c *Cmd) exec(args ...string) error {
 	return cmd.Run()
 }
 
-// Windows CreateProcess limits a command line to 32,767 UTF-16 code units.
-// UTF-8 byte length is a conservative upper bound for UTF-16 length, and this
-// lower threshold leaves room for executable-path and quoting overhead added
-// by os/exec.
-const windowsCommandLineLimit = 30 * 1024
-
-func useResponseFile(app string, args []string) bool {
-	return useResponseFileForGOOS(runtime.GOOS, app, args)
-}
-
-func useResponseFileForGOOS(goos, app string, args []string) bool {
-	if goos != "windows" {
-		return false
-	}
-	length := len(app)
-	for _, arg := range args {
-		length += 1 + len(arg)
-	}
-	return length > windowsCommandLineLimit
-}
-
 func (c *Cmd) responseFileStyle() ResponseFileStyle {
 	if c.config.ResponseFileStyle != ResponseFileAuto {
 		return c.config.ResponseFileStyle
 	}
-	name := strings.TrimSuffix(strings.ToLower(filepath.Base(c.app)), ".exe")
-	switch name {
-	case "cl", "clang-cl", "link", "lld-link":
-		return ResponseFileWindows
-	default:
-		return ResponseFileGNU
-	}
+	return ResponseFileGNU
 }
 
 func writeResponseFile(args []string, style ResponseFileStyle) (name string, err error) {
@@ -350,11 +251,7 @@ func writeResponseFileTo(file *os.File, args []string, style ResponseFileStyle) 
 		if index != 0 {
 			content.WriteByte(' ')
 		}
-		if style == ResponseFileWindows {
-			writeWindowsResponseArg(&content, arg)
-		} else {
-			writeGNUResponseArg(&content, arg)
-		}
+		writeGNUResponseArg(&content, arg)
 	}
 	content.WriteByte('\n')
 	_, err = io.WriteString(file, content.String())
@@ -374,45 +271,12 @@ func writeGNUResponseArg(out *strings.Builder, arg string) {
 	out.WriteByte('"')
 }
 
-// writeWindowsResponseArg quotes one argument using the CommandLineToArgvW
-// convention consumed by Clang, lld-link, and link.exe on Windows. Backslashes
-// are preserved unless they precede a quote or the closing delimiter; blindly
-// doubling every backslash would corrupt ordinary paths such as C:\\src.
-func writeWindowsResponseArg(out *strings.Builder, arg string) {
-	out.WriteByte('"')
-	backslashes := 0
-	for _, char := range arg {
-		if char == '\\' {
-			backslashes++
-			continue
-		}
-		if char == '"' {
-			writeBackslashes(out, backslashes*2+1)
-			out.WriteByte('"')
-		} else {
-			writeBackslashes(out, backslashes)
-			out.WriteRune(char)
-		}
-		backslashes = 0
-	}
-	writeBackslashes(out, backslashes*2)
-	out.WriteByte('"')
-}
-
-func writeBackslashes(out *strings.Builder, count int) {
-	for range count {
-		out.WriteByte('\\')
-	}
-}
-
 // CheckLinkArgs validates linking arguments by attempting a test compile.
 func (c *Cmd) CheckLinkArgs(cmdArgs []string, wasm bool) error {
 	// Create a temporary file with appropriate extension
 	extension := ""
 	if wasm {
 		extension = ".wasm"
-	} else if runtime.GOOS == "windows" {
-		extension = ".exe"
 	}
 
 	tmpFile, err := os.CreateTemp("", "llgo_check*"+extension)

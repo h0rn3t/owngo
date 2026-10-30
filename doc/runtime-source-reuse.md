@@ -103,8 +103,8 @@ go run ./dev/runtimeaudit -goos=wasip1 -goarch=wasm \
   -o=runtime-wasi.json
 ```
 
-`TestRuntimeOwnership` checks Darwin arm64, Linux amd64, Windows
-amd64/arm64/386 and these two Wasm selections against the active toolchain.
+`TestRuntimeOwnership` checks Darwin arm64, Linux amd64
+and these two Wasm selections against the active toolchain.
 Set `LLGO_RUNTIME_AUDIT_DIR` to an existing directory when running that test
 to retain its JSON reports. Negative fixtures cover new hooks, duplicate
 owners, package-scoped aliases, variable alias storage, unbounded/changed
@@ -114,7 +114,7 @@ upgrading Go; a source report alone does not establish runtime compatibility.
 The initial audit exposed hooks that were too narrowly selected:
 `runtime.getAuxv` now exists on platforms without a process auxiliary vector,
 where it returns an empty slice, and `runtime.nanotime` uses the platform clock
-on Windows/Wasm as well as Unix. The `runtime.fastrand64` compatibility entry
+on Wasm as well as Unix. The `runtime.fastrand64` compatibility entry
 now delegates to the platform random generator. Go 1.21's non-`purego`
 `hash/maphash` and external packages use this entry; LLGo's default `purego`
 selection does not require it. Direct linkname execution tests cover these hooks.
@@ -190,7 +190,7 @@ reflection and GC visibility must agree with whichever layout is selected.
 Hidden environment transport already exists (#2255); it does not provide
 Go ABIInternal. Go amd64 closures use RDX, while LLVM `nest` uses R10.
 Go arm64 uses R26; LLGo uses LLVM `nest`/X15 on AArch64 ELF and
-`swiftself`/X20 on Apple/Android/Windows. The existing libffi adapters bridge
+`swiftself`/X20 on Apple/Android. The existing libffi adapters bridge
 LLGo's own conventions (see [closure ABI](closure.md)). Matching a context
 register alone would not fix function-value layout, argument/result registers,
 stack maps or the lifetime of captured roots.

@@ -167,7 +167,7 @@ func (p *Target) Spec() (spec TargetSpec) {
 	goarm := p.goArchitectureSetting(p.GOARM)
 	spec.Triple = intllvm.GetTargetTripleWithGOARM(goos, goarch, goarm)
 	// A native toolchain profile can select a physical ABI triple that differs
-	// from the GOOS/GOARCH default (for example Windows GNU instead of MSVC).
+	// from the GOOS/GOARCH default.
 	// Named embedded targets keep their existing backend triple here: their
 	// external compiler may support a target such as Xtensa that the host LLVM
 	// library used to build LLGo does not register.
@@ -231,7 +231,7 @@ func (p *Target) Spec() (spec TargetSpec) {
 		if arm64.Crypto {
 			features = append(features, "+crypto")
 		}
-		if goos != "darwin" { // windows, linux
+		if goos != "darwin" {
 			features = append(features, "-fmv")
 		}
 		spec.Features = strings.Join(features, ",")

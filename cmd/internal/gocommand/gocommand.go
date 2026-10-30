@@ -269,9 +269,6 @@ func envNameEqual(entry, prefix string) bool {
 	if len(entry) < len(prefix) {
 		return false
 	}
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(entry[:len(prefix)], prefix)
-	}
 	return strings.HasPrefix(entry, prefix)
 }
 

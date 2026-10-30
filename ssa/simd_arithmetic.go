@@ -55,25 +55,6 @@ func (b Builder) simdCarrylessMultiply(x, y Expr, selector llvm.Value) Expr {
 }
 
 func (b Builder) simdFMA(result Type, x, y, z Expr) Expr {
-	target := b.Prog.Target()
-	if target.GOOS != "windows" || target.GOARCH != "amd64" {
-		v := b.impl.CreateIntrinsic(result.ll, llvm.LookupIntrinsicID("llvm.fma"), []llvm.Value{x.impl, y.impl, z.impl}, "")
-		return Expr{v, result}
-	}
-	// LLVM's baseline fma libcall reaches MinGW's non-fused edge cases.
-	// Preserve single rounding without requiring the optional FMA instruction.
-	scalar := b.Prog.Type(simdLanes(x.RawType()).Elem(), GoDecl)
-	name := "SIMDFMA64"
-	if x.ll.ElementType().TypeKind() == llvm.FloatTypeKind {
-		name = "SIMDFMA32"
-	}
-	fn := b.Pkg.rtFunc(RuntimeSymbol(name, "SIMDFMA32", "SIMDFMA64"))
-	vector := llvm.Undef(result.ll)
-	for i := 0; i < result.ll.VectorSize(); i++ {
-		lane := llvm.ConstInt(b.Prog.tyInt32(), uint64(i), false)
-		extract := func(v Expr) Expr { return Expr{b.impl.CreateExtractElement(v.impl, lane, ""), scalar} }
-		value := b.Call(fn, extract(x), extract(y), extract(z))
-		vector = b.impl.CreateInsertElement(vector, value.impl, lane, "")
-	}
-	return Expr{vector, result}
+	v := b.impl.CreateIntrinsic(result.ll, llvm.LookupIntrinsicID("llvm.fma"), []llvm.Value{x.impl, y.impl, z.impl}, "")
+	return Expr{v, result}
 }

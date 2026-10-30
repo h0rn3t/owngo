@@ -57,11 +57,10 @@ keeps ordinary PR startup and completion jobs out of the hosted runner queue.
 
 The amd64 Mise/Pixi environment checks, release artifact verification, Linux
 sysroot generation, snapshot cross-build, package/container validation, and
-installer distro containers use `linux_large_runner`. WinGet manifest
-preparation uses `linux_runner`. The sysroot job first verifies Docker daemon
+installer distro containers use `linux_large_runner`. The sysroot job first verifies Docker daemon
 access and a privileged container's mount capability, even on cache hits;
 cache misses also exercise QEMU/binfmt registration before cross-building.
-Native ARM64, Windows and macOS coverage keeps its existing architecture and
+Native ARM64 and macOS coverage keeps its existing architecture and
 runner selection. Public-network link checks and tag publishing keep their
 explicitly selected hosted runners.
 

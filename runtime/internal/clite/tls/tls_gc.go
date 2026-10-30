@@ -31,9 +31,9 @@ type slot[T any] struct {
 func allocSlot(size uintptr) c.Pointer {
 	// FLS/pthread slots are not collector roots. Keep the slot scanned and
 	// uncollectable until its destructor, including the Go callback closure.
-	// Do not register individual calloc ranges: on Windows BDWGC merges
-	// adjacent roots, but RemoveRoots does not split the merged range when
-	// one slot is freed, leaving a dangling root that can stall collection.
+	// Do not register individual calloc ranges: BDWGC can merge adjacent
+	// roots, but RemoveRoots does not split the merged range when one slot
+	// is freed, leaving a dangling root that can stall collection.
 	return bdwgc.MallocUncollectable(size)
 }
 

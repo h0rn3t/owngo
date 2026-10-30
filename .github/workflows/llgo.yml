@@ -97,7 +97,7 @@ jobs:
       id-token: write
     if: needs.prepare.outputs.run_code_ci == 'true'
     needs: prepare
-    name: llgo + test (${{ matrix.os }}${{ matrix.windows_abi && format(', {0}', matrix.windows_abi) || '' }}${{ matrix.windows_arch && format(', {0}', matrix.windows_arch) || '' }}, LLVM ${{ matrix.llvm }}, Go 1.27)
+    name: llgo + test (${{ matrix.os }}, LLVM ${{ matrix.llvm }}, Go 1.27)
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -107,64 +107,20 @@ jobs:
             llvm: 23
           - os: macos-latest
             llvm: 23
-          - os: windows-2022
-            llvm: 23
-            windows_abi: msvc
-            windows_arch: amd64
-            host_go_arch: x64
-          - os: windows-2022
-            llvm: 23
-            windows_abi: mingw
-            windows_arch: amd64
-            host_go_arch: x64
-          - os: windows-11-arm
-            llvm: 23
-            windows_abi: msvc
-            windows_arch: arm64
-            host_go_arch: arm64
-          - os: windows-11-arm
-            llvm: 23
-            windows_abi: mingw
-            windows_arch: arm64
-            host_go_arch: arm64
-          - os: windows-2022
-            llvm: 23
-            windows_abi: msvc
-            windows_arch: "386"
-            host_go_arch: x64
-          - os: windows-2022
-            llvm: 23
-            windows_abi: mingw
-            windows_arch: "386"
-            host_go_arch: x64
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - name: Free disk space on Windows
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/free-windows-disk
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
           llvm-version: ${{matrix.llvm}}
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
-          windows-arch: ${{ matrix.windows_arch || 'amd64' }}
       - name: Install embedded dependencies
         uses: ./.github/actions/setup-embed-deps
       - name: Setup demo dependencies
         uses: ./.github/actions/setup-demo-deps
-        with:
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
-          windows-arch: ${{ matrix.windows_arch || 'amd64' }}
-          # Only this compiler lane executes the LLDB integration suite. Test
-          # lanes still install the Python 3.12 demo ABI but skip the unrelated
-          # target-native debugger runtime.
-          install-lldb-python: "true"
 
       - name: Set up Go for build
         uses: ./.github/actions/setup-go
-        with:
-          architecture: ${{ matrix.host_go_arch || '' }}
 
       - name: Restore LLGo cache
         uses: ./.github/actions/setup-llgo-cache
@@ -175,39 +131,6 @@ jobs:
           dev/build_ci_tools.sh "$RUNNER_TEMP/llgo-bin"
           echo "$RUNNER_TEMP/llgo-bin" >> "$GITHUB_PATH"
           echo "LLGO_ROOT=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
-
-      - name: Activate native Windows target
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/activate-windows-target
-        with:
-          windows-abi: ${{ matrix.windows_abi }}
-          windows-arch: ${{ matrix.windows_arch }}
-
-      - name: Check Windows native runtime and FFI
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $llgo = Join-Path $env:RUNNER_TEMP 'llgo-bin\llgo.exe'
-          .\.github\workflows\test_windows_runtime.ps1 `
-            -LLGo $llgo `
-            -Profile "${{ matrix.windows_abi }}" `
-            -GoArch "${{ matrix.windows_arch || 'amd64' }}"
-
-      - name: Check BDWGC collection under the Windows heap lock
-        if: runner.os == 'Windows' && matrix.windows_abi == 'mingw' && matrix.windows_arch == '386'
-        shell: python {0}
-        run: |
-          import os
-          from pathlib import Path
-          import subprocess
-
-          compiler = Path(os.environ["LLGO_MINGW_TARGET_BIN"]) / "i686-w64-mingw32-clang.exe"
-          prefix = Path(os.environ["LLGO_MINGW_TARGET_VCPKG_ROOT"])
-          executable = Path(os.environ["RUNNER_TEMP"]) / "bdwgc-heap-lock.exe"
-          subprocess.run([str(compiler), "-O2", ".github/windows/test-bdwgc-heap-lock.c",
-                          "-I" + str(prefix / "include"), "-L" + str(prefix / "lib"),
-                          "-lgc", "-o", str(executable)], check=True)
-          subprocess.run([str(executable)], check=True, timeout=30)
 
       - name: Run Go 1.27 LLGo core tests
         env:
@@ -221,10 +144,6 @@ jobs:
           set -euo pipefail
 
           tool_suffix=
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            tool_suffix=.exe
-            export LLGO_STDIO_NOBUF=1
-          fi
           export LLGO="$RUNNER_TEMP/llgo-bin/llgo${tool_suffix}"
           export LLGO_TEST_LLGEN="$RUNNER_TEMP/llgo-bin/llgen${tool_suffix}"
           dev/test_go_version.sh 1.27
@@ -247,23 +166,7 @@ jobs:
           # Native thread and TLS regressions live outside test/.
           (cd runtime && "$LLGO" test -v -count=1 -timeout=2m ./internal/wordmap)
           (cd runtime && "$LLGO" test -v -run '^TestSlot(GCAllocation|DestructorGCRegistration)$' -count=20 -timeout=2m ./internal/clite/tls)
-          if [[ "$RUNNER_OS" != Windows ]]; then
-            (cd runtime && "$LLGO" test -v -run '^Test(KeyNativeLayout|DetachedStateNativeValue)$' -timeout=2m ./internal/thread)
-          fi
-
-      - name: Install Codecov CLI with Windows host Python
-        if: ${{ runner.os == 'Windows' && !cancelled() && hashFiles('coverage-llgo.txt') != '' }}
-        id: windows_codecov
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $pythonRoot = $env:LLGO_WINDOWS_PYTHON_HOME
-          & (Join-Path $pythonRoot 'python.exe') -m pip install --only-binary=:all: codecov-cli==11.3.1
-          if ($LASTEXITCODE -ne 0) { throw "Installing Codecov CLI failed: $LASTEXITCODE" }
-          $binary = Join-Path $pythonRoot 'Scripts/codecovcli.exe'
-          & $binary --version
-          if ($LASTEXITCODE -ne 0) { throw "Codecov CLI version probe failed: $LASTEXITCODE" }
-          "binary=$binary" >> $env:GITHUB_OUTPUT
+          (cd runtime && "$LLGO" test -v -run '^Test(KeyNativeLayout|DetachedStateNativeValue)$' -timeout=2m ./internal/thread)
 
       - name: Upload LLGo test coverage to Codecov
         # Preserve any profile emitted by failing tests, without uploading
@@ -271,7 +174,6 @@ jobs:
         if: ${{ !cancelled() && hashFiles('coverage-llgo.txt') != '' }}
         uses: codecov/codecov-action@v7
         with:
-          binary: ${{ steps.windows_codecov.outputs.binary }}
           use_pypi: true
           version: "11.3.1"
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -307,26 +209,11 @@ jobs:
         run: dev/test_runtime_go_versions.sh
 
       - name: Run caller regressions in C shared libraries and archives
-        if: runner.os != 'Windows'
         env:
           LLGO: ${{ runner.temp }}/llgo-bin/llgo
         run: dev/test_std_buildmodes.sh ./test/std/runtime
 
-      - name: Validate the native Windows toolchain profile
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: >-
-          .\.github\workflows\test_windows_toolchain_profile.ps1
-          -Profile "${{ matrix.windows_abi }}"
-          -GoArch "${{ matrix.windows_arch || 'amd64' }}"
-
-      - name: Test Windows CPU profiler context
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\.github\workflows\test_windows_cpuprof.ps1
-
       - name: Test demo without RPATH (expect failure)
-        if: runner.os != 'Windows'
         run: |
           echo "Testing demo without RPATH (should fail)..."
           export LLGO_FULL_RPATH=false
@@ -338,18 +225,8 @@ jobs:
             echo "✓ cargs demo correctly failed without RPATH"
           fi
 
-      - name: Test static cargs without a runtime search path
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export LLGO_FULL_RPATH=false
-          pkg-config --libs cargs
-          (cd ./_demo/c/cargs && llgo run .)
-
       - name: Test SIMD behavior with Go and LLGo
         id: native_simd
-        if: matrix.windows_arch != '386'
         shell: bash
         env:
           GOEXPERIMENT: simd
@@ -363,7 +240,7 @@ jobs:
         if: failure() && steps.native_simd.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: native-simd-${{ matrix.os }}-${{ matrix.windows_abi || 'native' }}-${{ matrix.windows_arch || 'host' }}
+          name: native-simd-${{ matrix.os }}
           path: ${{ runner.temp }}/llgo-simd-matrix
           retention-days: 3
 
@@ -371,15 +248,7 @@ jobs:
         run: bash .github/workflows/test_demo.sh
 
       - name: Test demos (embedded target)
-        if: runner.os != 'Windows' || matrix.windows_arch != 'arm64'
         run: bash .github/workflows/test_demo.sh --embedded
-
-      # Espressif only publishes an x86-64 Windows QEMU. Its runtime coverage
-      # stays on the x64 Windows lanes; the ARM64 runner still compiles every
-      # applicable firmware case with the same LLGo host toolchain.
-      - name: Test demos (embedded target, build only)
-        if: runner.os == 'Windows' && matrix.windows_arch == 'arm64'
-        run: bash .github/workflows/test_demo.sh --embedded-build-only
 
       - name: Test C header generation
         shell: bash
@@ -403,54 +272,18 @@ jobs:
           echo "Testing ESP32/ESP32-C3 build + emulator smoke..."
           cd _demo/embed
           chmod +x test-esp-serial-startup.sh
-          args=()
-          if [[ "$RUNNER_OS" == "Windows" && "${{ matrix.windows_arch }}" == "arm64" ]]; then
-            args+=(--build-only)
-          fi
-          ./test-esp-serial-startup.sh "${args[@]}"
+          ./test-esp-serial-startup.sh
 
       - name: Test ESP32-C3 startup regression
         shell: bash
         run: |
           echo "Testing ESP32-C3 startup regressions..."
-          if [[ "$RUNNER_OS" == "Windows" && "${{ matrix.windows_abi }}" == "mingw" ]]; then
-            # Native target activation can put an architecture-limited
-            # llvm-mingw bundle first on PATH. Inspect the RISC-V firmware
-            # with the architecture-native host LLVM tools instead; this does
-            # not change the compiler/linker profile selected by LLGo.
-            host_llvm_bin="$(cygpath -u "$LLGO_MINGW_HOST_ROOT")/bin"
-            export LLVM_OBJDUMP="$host_llvm_bin/llvm-objdump.exe"
-            export LLVM_NM="$host_llvm_bin/llvm-nm.exe"
-            export LLVM_READELF="$host_llvm_bin/llvm-readelf.exe"
-            for llvm_tool in "$LLVM_OBJDUMP" "$LLVM_NM" "$LLVM_READELF"; do
-              if [[ ! -x "$llvm_tool" ]]; then
-                echo "required host LLVM inspection tool not found: $llvm_tool" >&2
-                exit 1
-              fi
-            done
-          fi
-          # esptool inspects target firmware but runs on the CI host. For a
-          # cross-architecture Windows lane, use the x64 host Python so pip
-          # can install its native dependencies without cross-building them.
-          if [[ "$RUNNER_OS" == "Windows" && -n "${LLGO_WINDOWS_PYTHON_HOME:-}" ]]; then
-            host_python_home="$(cygpath -u "$LLGO_WINDOWS_PYTHON_HOME")"
-            export PATH="$host_python_home:$PATH"
-          fi
           python -m pip install esptool==5.1.0
           cd _demo/embed
           chmod +x test_esp32c3_startup.sh
-          args=()
-          if [[ "$RUNNER_OS" == "Windows" && "${{ matrix.windows_arch }}" == "arm64" ]]; then
-            args+=(--build-only)
-          fi
-          ./test_esp32c3_startup.sh "${args[@]}"
+          ./test_esp32c3_startup.sh
 
       - name: _xtool build tests
-        # _xtool contains host developer utilities that link the host LLVM
-        # libraries. Windows amd64 already covers that build; the 386
-        # and ARM64 lanes qualify target programs and cannot link those x64
-        # host libraries into target-native tools.
-        if: runner.os != 'Windows' || matrix.windows_arch == 'amd64'
         run: |
           cd _xtool
           llgo build -v ./...
@@ -482,171 +315,17 @@ jobs:
           LLGO_GDB_INTEGRATION: "1"
         run: go test ./cmd/internal/gdb -run '^TestGDB(Integration|CompleteWorkerUnwind)$' -count=1 -v
 
-      - name: Install MinGW LLDB for integration tests
-        # R12 qualifies debugger behavior for the new GNU architectures. Keep
-        # R11 focused on their language/runtime and C interoperability gates.
-        if: ${{ matrix.os == 'windows-2022' && matrix.windows_abi == 'mingw' && matrix.windows_arch == 'amd64' }}
-        shell: msys2 {0}
-        env:
-          MSYS2_LLDB_PACKAGE_VERSION: "23.1.4-1"
-          MSYS2_PYTHON_PACKAGE_VERSION: "3.14.6-2"
-        run: |
-          set -euo pipefail
-          source .github/actions/setup-deps/pacman_retry.sh
-          repo=https://repo.msys2.org/mingw/clang64
-          prefix=mingw-w64-clang-x86_64
-          pacman_args=(--noconfirm -U)
-          for dependency in cc-libs expat bzip2 mpdecimal ncurses openssl sqlite3 tcl tk tzdata; do
-            pacman_args+=(--assume-installed "$prefix-$dependency")
-          done
-          pacman_with_retry "${pacman_args[@]}" \
-            "$repo/$prefix-python-$MSYS2_PYTHON_PACKAGE_VERSION-any.pkg.tar.zst" \
-            "$repo/$prefix-lldb-$MSYS2_LLDB_PACKAGE_VERSION-any.pkg.tar.zst"
-
-          lldb_path=/clang64/bin/lldb.exe
-          "$lldb_path" --version
-          echo "LLGO_LLDB=$(cygpath -m "$lldb_path")" >> "$GITHUB_ENV"
-
       - name: LLDB integration tests
-        if: runner.os != 'Windows'
         run: |
           echo "Test lldb with llgo plugin on ${{matrix.os}} with LLVM ${{matrix.llvm}}"
           bash test/debug/runtime/runtest.sh -v
-
-      - name: LLDB integration tests (MSVC)
-        if: ${{ matrix.windows_abi == 'msvc' }}
-        shell: pwsh
-        run: |
-          Write-Host "Test lldb with llgo plugin on ${{matrix.os}} with LLVM ${{matrix.llvm}}"
-          bash test/debug/runtime/runtest.sh -v
-          if ($LASTEXITCODE -ne 0) {
-            throw "LLDB integration tests failed with exit code $LASTEXITCODE"
-          }
-
-      - name: LLDB integration tests (MinGW)
-        if: ${{ matrix.windows_abi == 'mingw' && matrix.windows_arch == 'amd64' }}
-        shell: msys2 {0}
-        run: |
-          # Git Bash prepends its own MinGW runtime DLLs to PATH. Use the
-          # CLANG64 shell so the debuggee loads its ABI-matching dependencies.
-          echo "Test lldb with llgo plugin on ${{matrix.os}} with LLVM ${{matrix.llvm}}"
-          bash test/debug/runtime/runtest.sh -v
-
-      - name: LLDB integration tests (MinGW cross-architecture)
-        if: ${{ matrix.windows_abi == 'mingw' && matrix.windows_arch != 'amd64' }}
-        shell: pwsh
-        run: |
-          Write-Host "Test lldb with llgo plugin on ${{matrix.os}} with LLVM ${{matrix.llvm}}"
-          bash test/debug/runtime/runtest.sh -v
-          if ($LASTEXITCODE -ne 0) {
-            throw "LLDB integration tests failed with exit code $LASTEXITCODE"
-          }
 
       - name: Native source-debug acceptance tests
-        if: runner.os != 'Windows'
         run: bash test/debug/native/runtest.sh
 
       - name: Native debug metadata tests
         if: ${{ startsWith(matrix.os, 'macos') && matrix.os != 'macos-15-intel' }}
         run: go test -timeout 15m ./internal/build -run '^(TestStandardDWARF|TestWindowsPDBLinkPath)$' -count=1 -v
-
-      - name: Native debug metadata tests (Windows)
-        # This Go test binary links the x64 host LLVM libraries, so it cannot
-        # be cross-linked as 386 or ARM64. The target-native LLDB steps above
-        # cover those architectures.
-        if: ${{ runner.os == 'Windows' && matrix.windows_arch == 'amd64' }}
-        shell: pwsh
-        run: |
-          if ("${{ matrix.windows_abi }}" -eq "msvc") {
-            # Target activation selects /MD for generated programs, while the
-            # upstream host LLVM libraries use /MT. Match the host libraries
-            # when cgo links this host-only test executable.
-            $env:CC = $env:LLGO_WINDOWS_HOST_CC
-            $env:CXX = $env:LLGO_WINDOWS_HOST_CXX
-          }
-          go test -timeout 15m ./internal/build -run '^(TestStandardDWARF|TestWindowsPDBLinkPath)$' -count=1 -v
-          if ($LASTEXITCODE -ne 0) {
-            throw "Native debug metadata tests failed with exit code $LASTEXITCODE"
-          }
-
-      # Keep shell setup last so its POSIX compatibility tools cannot affect
-      # the native compiler, runtime, demo, or debugger qualification above.
-      - name: Set up the MSYS2 host shell for MSVC
-        if: ${{ matrix.windows_abi == 'msvc' }}
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MSYS
-          path-type: inherit
-          update: false
-          cache: false
-
-      - name: Test from the MSYS2 host shell
-        if: ${{ runner.os == 'Windows' }}
-        shell: msys2 {0}
-        run: bash .github/workflows/test_windows_host_shell.sh
-
-      - name: Install Cygwin for host-shell qualification
-        if: ${{ matrix.os == 'windows-2022' && matrix.windows_arch == 'amd64' }}
-        id: cygwin
-        uses: cygwin/cygwin-install-action@v6
-        with:
-          add-to-path: false
-
-      - name: Test from the Cygwin host shell
-        if: ${{ matrix.os == 'windows-2022' && matrix.windows_arch == 'amd64' }}
-        shell: pwsh
-        env:
-          CYGWIN_ROOT: ${{ steps.cygwin.outputs.root }}
-        run: |
-          $bash = Join-Path $env:CYGWIN_ROOT "bin\bash.exe"
-          if (-not (Test-Path $bash)) {
-            throw "Cygwin bash was not found at $bash"
-          }
-          # The earlier MSYS2 setup remains on the inherited Windows PATH. Use
-          # Cygwin's own path converter and shell explicitly so an MSYS
-          # cygpath cannot turn D:\ into the invalid Cygwin path /d/.
-          & $bash --noprofile --norc -c 'export PATH=/usr/bin:/bin:$PATH; cd "$(/usr/bin/cygpath -u "$GITHUB_WORKSPACE")" && /usr/bin/bash .github/workflows/test_windows_host_shell.sh'
-          if ($LASTEXITCODE -ne 0) {
-            throw "Cygwin host-shell qualification failed with exit code $LASTEXITCODE"
-          }
-
-      # Install the debugger in an isolated MSYS2 tree after shell/LLDB
-      # qualification: rolling GDB dependencies must not update pinned LLVM
-      # packages or replace the compiler lane's shell configuration early.
-      - name: Install Windows GDB
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/setup-gdb
-
-      - name: GDB native values and registry (Windows)
-        if: runner.os == 'Windows'
-        timeout-minutes: 15
-        shell: pwsh
-        env:
-          LLGO_GDB_INTEGRATION: "1"
-        run: |
-          Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue
-          # This package is pure Go. Its target-native driver can run on 386
-          # without linking the x64 host LLVM libraries; CC retains the
-          # selected target ABI, architecture and CRT for C fallback fixtures.
-          go test ./cmd/internal/gdb -run '^TestGDBIntegration$' -count=1 -v
-          if ($LASTEXITCODE -ne 0) {
-            throw "GDB integration tests failed with exit code $LASTEXITCODE"
-          }
-
-      - name: GDB complete worker unwind (Windows amd64 and 386)
-        # ARM64 native GDB 18 lacks PAC masks. Its values/registry gate above
-        # remains required; blocked-worker unwind is an explicit limitation.
-        if: runner.os == 'Windows' && matrix.windows_arch != 'arm64'
-        timeout-minutes: 15
-        shell: pwsh
-        env:
-          LLGO_GDB_INTEGRATION: "1"
-        run: |
-          Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue
-          go test ./cmd/internal/gdb -run '^TestGDBCompleteWorkerUnwind$' -count=1 -v
-          if ($LASTEXITCODE -ne 0) {
-            throw "Complete GDB worker unwind failed with exit code $LASTEXITCODE"
-          }
 
   runtime-arm64:
     if: needs.prepare.outputs.run_code_ci == 'true'
@@ -836,70 +515,6 @@ jobs:
         run: |
           python3 -m unittest discover -s test/sizebuild -p '*_test.py'
           python3 test/sizebuild/runtest.py --target=wasi
-
-  windows-gnu-cross:
-    if: needs.prepare.outputs.run_code_ci == 'true'
-    needs: prepare
-    name: windows GNU cross (${{ matrix.os }}, ${{ matrix.windows_arch == 'all' && 'amd64 + arm64 + 386' || matrix.windows_arch }})
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            windows_arch: amd64
-          - os: ubuntu-24.04
-            windows_arch: arm64
-          - os: ubuntu-24.04
-            windows_arch: "386"
-          # Share the host compiler, llvm-mingw archive and vcpkg bootstrap
-          # across targets while retaining every macOS-to-Windows build.
-          - os: macos-latest
-            windows_arch: all
-    runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install host dependencies
-        uses: ./.github/actions/setup-deps
-        with:
-          llvm-version: 23
-
-      - name: Set up Go for building llgo
-        uses: ./.github/actions/setup-go
-        with:
-          go-version: "1.27.0"
-
-      - name: Build Unix host compiler
-        id: host_compiler
-        shell: bash
-        run: |
-          go build -p=2 -o "$RUNNER_TEMP/llgo-host" ./cmd/llgo
-          # This development binary lives outside LLGO_ROOT/bin. Point it at
-          # the checkout explicitly so standard-library source patches are
-          # available to the following cross-host builds.
-          echo "LLGO_ROOT=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
-
-      - name: Test cross-host windows/amd64
-        if: ${{ !cancelled() && steps.host_compiler.outcome == 'success' && (matrix.windows_arch == 'all' || matrix.windows_arch == 'amd64') }}
-        uses: ./.github/actions/test-windows-cross
-        with:
-          llgo: ${{ runner.temp }}/llgo-host
-          windows-arch: amd64
-
-      - name: Test cross-host windows/arm64
-        if: ${{ !cancelled() && steps.host_compiler.outcome == 'success' && (matrix.windows_arch == 'all' || matrix.windows_arch == 'arm64') }}
-        uses: ./.github/actions/test-windows-cross
-        with:
-          llgo: ${{ runner.temp }}/llgo-host
-          windows-arch: arm64
-
-      - name: Test cross-host windows/386
-        if: ${{ !cancelled() && steps.host_compiler.outcome == 'success' && (matrix.windows_arch == 'all' || matrix.windows_arch == '386') }}
-        uses: ./.github/actions/test-windows-cross
-        with:
-          llgo: ${{ runner.temp }}/llgo-host
-          windows-arch: "386"
 
   wasm-browser-debug:
     permissions:

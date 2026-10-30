@@ -112,8 +112,8 @@ func (g CompileGroup) Compile(
 	if err != nil {
 		return err
 	}
-	// newlib contains hundreds of object files, whose expanded paths exceed
-	// Windows' CreateProcess command-line limit. LLVM tools support response
+	// newlib contains hundreds of object files, whose expanded paths may exceed
+	// the OS command-line limit. LLVM tools support response
 	// files on every host, so keep the object list out of the process command
 	// line rather than splitting one archive update into platform-only batches.
 	cmd := exec.Command(llvmAr, "rcs", archive, "@"+responseFile)
@@ -166,7 +166,7 @@ func compileFiles(count int, compile func(int) error) error {
 func writeArchiveResponseFile(dir string, objFiles []string) (string, error) {
 	var contents strings.Builder
 	for _, objFile := range objFiles {
-		// LLVM's response-file parser accepts forward slashes on Windows. Quote
+		// LLVM's response-file parser accepts forward slashes. Quote
 		// each argument so temporary roots containing spaces remain one path.
 		contents.WriteByte('"')
 		contents.WriteString(filepath.ToSlash(objFile))

@@ -16,7 +16,7 @@ All C/C++ bindings live in the [LLAR Hub](https://github.com/llarhub) organizati
 go get github.com/llarhub/cjson
 ```
 
-Before building, install the underlying C/C++ library (and `pkg-config`) on your machine; each binding's README explains the exact packages for macOS, Linux and Windows, and which upstream library version the binding was generated from. Most bindings are generated with [llcppg](https://github.com/xgo-dev/llcppg), the LLGo binding generator for C/C++ libraries.
+Before building, install the underlying C/C++ library (and `pkg-config`) on your machine; each binding's README explains the exact packages for macOS and Linux, and which upstream library version the binding was generated from. Most bindings are generated with [llcppg](https://github.com/xgo-dev/llcppg), the LLGo binding generator for C/C++ libraries.
 
 | Name | Import Path | Description | Release | GoDoc |
 | --- | --- | --- | --- | --- |

@@ -4,7 +4,6 @@ import (
 	"go/version"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 )
@@ -50,7 +49,7 @@ func (e commandEnv) lookup(name string) string {
 		if !ok {
 			continue
 		}
-		if key == name || runtime.GOOS == "windows" && strings.EqualFold(key, name) {
+		if key == name {
 			return value
 		}
 	}

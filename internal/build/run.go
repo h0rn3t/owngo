@@ -451,7 +451,7 @@ func runEmuCmdTo(commands commandEnv, envMap map[string]string, emulatorTemplate
 			return newRunnerFailure(details, "", runnerStatusInvalidCommand, -1,
 				fmt.Errorf("resolve Wasmer working directory: %w", err))
 		}
-		workVolume, tempVolume, guestCwd := wasiHostDirectories(cwd, os.TempDir(), runtime.GOOS == "windows")
+		workVolume, tempVolume, guestCwd := wasiHostDirectories(cwd, os.TempDir())
 		for i, part := range cmdParts {
 			if part == "--volume=." {
 				cmdParts[i] = "--volume=" + workVolume
@@ -484,12 +484,7 @@ func runEmuCmdTo(commands commandEnv, envMap map[string]string, emulatorTemplate
 	return runRunnerCommand(commands, cmdParts[0], cmdParts[1:], details, stdout, stderr)
 }
 
-func wasiHostDirectories(cwd, tempDir string, windows bool) (workVolume, tempVolume, guestCwd string) {
-	if windows {
-		// Wasmer splits a volume at its last colon. Give drive-letter host
-		// paths explicit POSIX guest names, including Go's default /tmp.
-		return cwd + ":/work", tempDir + ":/tmp", "/work"
-	}
+func wasiHostDirectories(cwd, tempDir string) (workVolume, tempVolume, guestCwd string) {
 	return cwd, "/tmp", cwd
 }
 

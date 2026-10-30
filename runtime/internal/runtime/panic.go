@@ -424,7 +424,6 @@ func freedefer(d *_defer) {
 }
 
 // Separate function so that it can split stack.
-// Windows otherwise runs out of stack space.
 func freedeferpanic() {
 	// _panic must be cleared before d is unlinked from gp.
 	throw("freedefer with d._panic != nil")
@@ -1349,7 +1348,7 @@ func canpanic() bool {
 		releasem(mp)
 		return false
 	}
-	if GOOS == "windows" && mp.libcallsp != 0 {
+	if mp.libcallsp != 0 {
 		releasem(mp)
 		return false
 	}

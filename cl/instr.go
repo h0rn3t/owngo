@@ -2121,11 +2121,6 @@ func (p *context) emitPCLineLabel(b llssa.Builder, pos token.Pos) {
 	if p.prog.PointerSize() == 4 {
 		ptrDirective = ".long"
 		align = "2"
-		if target.GOOS == "windows" {
-			// COFF follows the Windows C ABI and aligns the uint64 ID to offset
-			// 8 after a 32-bit pointer. The runtime uses the same 16-byte record.
-			recordPadding = ".long 0\n"
-		}
 	}
 	// Keep section names in sync with internal/build/funcinfo_table.go
 	// (pcLineSiteSectionInfo). ELF ties the record to its final code location
@@ -2134,18 +2129,12 @@ func (p *context) emitPCLineLabel(b llssa.Builder, pos token.Pos) {
 	// latter without rewriting symbol names embedded in inline-asm strings.
 	// Mach-O uses a live_support section plus one linker-private atom symbol per
 	// record so -dead_strip keeps a record exactly when the function containing
-	// its label is live. COFF uses an associative COMDAT tied to the function
-	// section containing the local anchor, so /OPT:REF has the same behavior.
+	// its label is live.
 	pushSection := ".pushsection llgo_pcline,\"awo\",@progbits," + asmLabel
 	recordSymbol := ""
-	switch target.GOOS {
-	case "darwin":
+	if target.GOOS == "darwin" {
 		pushSection = ".pushsection __DATA,__llgo_pcl,regular,live_support"
 		recordSymbol = "l_llgo_pcline_rec_${:uid}:\n"
-	case "windows":
-		// '$' is an inline-asm escape. '$$m' reaches the COFF assembler as
-		// the '$m' subsection suffix used for lexicographic merging.
-		pushSection = ".pushsection .llgopcl$$m,\"dr\",associative," + asmLabel
 	}
 	b.InlineAsmNoDebug(
 		asmLabel + ":\n" +
@@ -2166,10 +2155,9 @@ func canEmitPCLineLabelsForTarget(target *llssa.Target) bool {
 	if target.Target != "" || target.GOARCH == "wasm" {
 		return false
 	}
-	// ELF uses SHF_LINK_ORDER associated sections; Mach-O uses live_support;
-	// COFF uses associative COMDAT sections.
+	// ELF uses SHF_LINK_ORDER associated sections; Mach-O uses live_support.
 	switch target.GOOS {
-	case "linux", "darwin", "windows":
+	case "linux", "darwin":
 		return true
 	}
 	return false

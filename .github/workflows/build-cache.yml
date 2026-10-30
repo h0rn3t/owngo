@@ -30,7 +30,7 @@ jobs:
   build-cache:
     if: needs.prepare.outputs.run_code_ci == 'true'
     needs: prepare
-    name: build-cache (${{ matrix.os }}${{ matrix.windows_abi && format(', {0}', matrix.windows_abi) || '' }}, ${{ matrix.llvm }})
+    name: build-cache (${{ matrix.os }}, ${{ matrix.llvm }})
     timeout-minutes: 30
     strategy:
       matrix:
@@ -39,25 +39,14 @@ jobs:
             llvm: 23
           - os: ubuntu-latest
             llvm: 23
-          - os: windows-2022
-            llvm: 23
-            windows_abi: msvc
-          - os: windows-2022
-            llvm: 23
-            windows_abi: mingw
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Free disk space on Windows
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/free-windows-disk
 
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
           llvm-version: ${{matrix.llvm}}
-          windows-abi: ${{ matrix.windows_abi || 'msvc' }}
 
       - name: Set up Go
         uses: ./.github/actions/setup-go
