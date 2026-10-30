@@ -590,3 +590,76 @@ func grafted(depth int) int {
 		t.Error("foo.grafted has runtime.DecCyclic, want the tree live after graft")
 	}
 }
+
+// TestOwnGoLoopPlace: місце, визначене в тілі циклу, — новий об'єкт кожної
+// ітерації, тож free і Dec стоять у тілі. Об'єкт, який phi несе в наступну
+// ітерацію, лишається живим.
+func TestOwnGoLoopPlace(t *testing.T) {
+	const src = `package foo
+
+type Tree struct {
+	Left, Right *Tree
+}
+
+func NewTree(depth int) *Tree {
+	if depth > 0 {
+		return &Tree{Left: NewTree(depth - 1), Right: NewTree(depth - 1)}
+	}
+	return &Tree{}
+}
+
+func (t *Tree) Count() int {
+	if t.Left == nil {
+		return 1
+	}
+	return 1 + t.Right.Count() + t.Left.Count()
+}
+
+func trees(n, depth int) int {
+	acc := 0
+	for i := 0; i < n; i++ {
+		a := NewTree(depth)
+		acc += a.Count()
+	}
+	return acc
+}
+
+func ints(n int) int {
+	acc := 0
+	for i := 0; i < n; i++ {
+		p := new(int)
+		*p = i
+		acc += *p
+	}
+	return acc
+}
+
+func carried(n int) int {
+	var prev *int
+	acc := 0
+	for i := 0; i < n; i++ {
+		if prev != nil {
+			acc += *prev
+		}
+		p := new(int)
+		*p = i
+		prev = p
+	}
+	return acc
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.trees").String(), "runtime.DecCyclic") {
+		t.Error("foo.trees has no runtime.DecCyclic in the loop body")
+	}
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.ints").String(), "runtime.FreeAccounted") {
+		t.Error("foo.ints has no runtime.FreeAccounted in the loop body")
+	}
+	body := mustNamedFunction(t, mod, "foo.carried").String()
+	if strings.Contains(body, "runtime.FreeAccounted") || strings.Contains(body, "runtime.DecAccounted") {
+		t.Error("foo.carried frees the object the next iteration reads")
+	}
+}
