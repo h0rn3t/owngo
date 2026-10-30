@@ -401,3 +401,38 @@ func returnRing() *node {
 		}
 	}
 }
+
+// TestOwnGoUncountedEscape: місце без DecAccounted не отримує слово лічильника.
+// Інакше вказівник, що виходить із функції, вказує в середину блока malloc,
+// і FreeAccounted у викликача (як для make(map) поверх runtime.makemap)
+// звільняє не початок блока.
+func TestOwnGoUncountedEscape(t *testing.T) {
+	const src = `package foo
+
+type box struct{ v int }
+
+func returned() *box {
+	b := new(box)
+	b.v = 1
+	return b
+}
+
+func joined(b *box) *box {
+	if b == nil {
+		b = new(box)
+	}
+	b.v = 1
+	return b
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.returned", "foo.joined"} {
+		body := mustNamedFunction(t, mod, name).String()
+		if strings.Contains(body, "runtime.AllocCounted") {
+			t.Errorf("%s has runtime.AllocCounted, want a plain allocation", name)
+		}
+	}
+}
