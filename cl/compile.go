@@ -86,6 +86,9 @@ type Options struct {
 	// type checking and before ssa.Package.Build so go/ssa does not emit
 	// one store per element. Keys use StaticByteArrayKey(pkg.Path(), name).
 	StaticByteArrays map[string][]byte
+	// OwnGoFree вставляє runtime.Free після останнього використання місця,
+	// яке census v1 позначає static. Без прапорця прохід не працює.
+	OwnGoFree bool
 }
 
 // SetDebug sets debug flags.
