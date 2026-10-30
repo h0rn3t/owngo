@@ -27,11 +27,14 @@ type Summary struct {
 // Side — код escapeKind для втечі самого вказівника; 0 означає, що параметр його не зберігає.
 // Content — те саме для вказівника, зчитаного зсередини параметра.
 // Alias — індекси результатів, у які вказівник протікає.
+// Writes — функція пише в пам'ять, досяжну з параметра, або передає його
+// виклику, що пише.
 type Param struct {
 	Unknown bool
 	Side    uint8
 	Content uint8
 	Alias   []int
+	Writes  bool
 }
 
 // AFact позначає Summary фактом go/analysis.
@@ -292,7 +295,7 @@ func paramsEqual(a, b []Param) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].Unknown != b[i].Unknown || a[i].Side != b[i].Side || a[i].Content != b[i].Content || !slices.Equal(a[i].Alias, b[i].Alias) {
+		if a[i].Unknown != b[i].Unknown || a[i].Side != b[i].Side || a[i].Content != b[i].Content || a[i].Writes != b[i].Writes || !slices.Equal(a[i].Alias, b[i].Alias) {
 			return false
 		}
 	}
@@ -430,7 +433,8 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		return changed
 	case *ssa.Store:
 		extra := mergeSets(tok[instr.Val], derived[instr.Val])
-		changed := unionAt(content, instr.Addr, extra)
+		changed := sum.markWrites(mergeSets(tok[instr.Addr], derived[instr.Addr]))
+		changed = unionAt(content, instr.Addr, extra) || changed
 		if base := addressBase(instr.Addr); base != instr.Addr {
 			changed = unionAt(content, base, extra) || changed
 		}
@@ -446,7 +450,8 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		return sum.raiseSide(content[instr.X], escapeChannel, false) || changed
 	case *ssa.MapUpdate:
 		extra := mergeSets(mergeSets(tok[instr.Value], derived[instr.Value]), mergeSets(tok[instr.Key], derived[instr.Key]))
-		changed := unionAt(content, instr.Map, extra)
+		changed := sum.markWrites(mergeSets(tok[instr.Map], derived[instr.Map]))
+		changed = unionAt(content, instr.Map, extra) || changed
 		if base := addressBase(instr.Map); base != instr.Map {
 			changed = unionAt(content, base, extra) || changed
 		}
@@ -464,6 +469,14 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 			return unionAt(derived, instr, content[instr.X]) || changed
 		}
 		changed := unionAt(tok, instr, tok[instr.X])
+		return unionAt(derived, instr, derived[instr.X]) || changed
+	case *ssa.Convert:
+		// Через unsafe.Pointer у пам'ять параметра можна записати що завгодно.
+		changed := false
+		if basic, ok := instr.Type().Underlying().(*types.Basic); ok && basic.Kind() == types.UnsafePointer {
+			changed = sum.markWrites(mergeSets(tok[instr.X], derived[instr.X]))
+		}
+		changed = unionAt(tok, instr, tok[instr.X]) || changed
 		return unionAt(derived, instr, derived[instr.X]) || changed
 	case *ssa.Extract:
 		call, ok := instr.Tuple.(*ssa.Call)
@@ -508,6 +521,9 @@ func applyCall(instr ssa.Instruction, call *ssa.CallCommon, sum *Summary, tok, d
 			changed = sum.markUnknown(derived[arg]) || changed
 			changed = sum.markUnknown(content[arg]) || changed
 			continue
+		}
+		if ps.Writes {
+			changed = sum.markWrites(mergeSets(tok[arg], derived[arg])) || changed
 		}
 		changed = sum.raiseSide(tok[arg], escapeKind(ps.Side), false) || changed
 		changed = sum.raiseSide(derived[arg], escapeKind(ps.Side), true) || changed
@@ -608,6 +624,18 @@ func (s *Summary) raiseSide(ids pset, k escapeKind, content bool) bool {
 	return changed
 }
 
+func (s *Summary) markWrites(ids pset) bool {
+	changed := false
+	for id := range ids {
+		if id < 0 || id >= len(s.Params) || s.Params[id].Writes {
+			continue
+		}
+		s.Params[id].Writes = true
+		changed = true
+	}
+	return changed
+}
+
 func (s *Summary) markUnknown(ids pset) bool {
 	changed := false
 	for id := range ids {
@@ -653,6 +681,7 @@ func mergeParam(a, b Param) Param {
 	if b.Content > a.Content {
 		a.Content = b.Content
 	}
+	a.Writes = a.Writes || b.Writes
 	for _, ri := range b.Alias {
 		if slices.Contains(a.Alias, ri) {
 			continue

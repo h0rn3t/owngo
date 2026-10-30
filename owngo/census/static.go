@@ -49,7 +49,7 @@ func Place(funcs []*ssa.Function) (
 				counted[alloc] = struct{}{}
 			}
 		}
-		rings := cyclicSites(fn, msg, pts, storeInc)
+		rings := cyclicSites(fn, msg, pts, storeInc, ctx)
 		for site := range rings {
 			counted[site] = struct{}{}
 			if ctx.noDec[site] {
@@ -299,7 +299,7 @@ func readers(site ssa.Instruction, pts map[ssa.Value]siteSet) []ssa.Instruction 
 // що вказує на місце, вживається лише в доступі до поля, записі в поле
 // обходу, порівнянні й phi; інакше місце, а за ним і місця, що його
 // записали, лічильника не отримують.
-func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.Value]siteSet, storeInc map[ssa.Instruction][]ssa.Value) siteSet {
+func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.Value]siteSet, storeInc map[ssa.Instruction][]ssa.Value, v1 *v1Ctx) siteSet {
 	cand := siteSet{}
 	for site, label := range msg {
 		alloc, ok := site.(*ssa.Alloc)
@@ -314,7 +314,7 @@ func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 		changed = false
 		for v, sites := range pts {
 			// Адресу поля перевіряє fieldUses через її базове значення.
-			if _, ok := v.(*ssa.FieldAddr); ok || v.Parent() != fn || !overlaps(sites, cand) || ringUses(v, cand) {
+			if _, ok := v.(*ssa.FieldAddr); ok || v.Parent() != fn || !overlaps(sites, cand) || ringUses(v, cand, v1) {
 				continue
 			}
 			for site := range sites {
@@ -355,7 +355,8 @@ func overlaps(a, b siteSet) bool {
 }
 
 // ringUses звітує, що кожне вживання v тримає його всередині кільця.
-func ringUses(v ssa.Value, cand siteSet) bool {
+// Виклик дозволений, якщо параметр за зведенням лише читається.
+func ringUses(v ssa.Value, cand siteSet, v1 *v1Ctx) bool {
 	refs := v.Referrers()
 	if refs == nil {
 		return true
@@ -365,6 +366,10 @@ func ringUses(v ssa.Value, cand siteSet) bool {
 		case *ssa.Phi, *ssa.DebugRef:
 		case *ssa.BinOp:
 			if ref.Op != token.EQL && ref.Op != token.NEQ {
+				return false
+			}
+		case *ssa.Call:
+			if !readOnlyArg(&ref.Call, v, v1) {
 				return false
 			}
 		case *ssa.FieldAddr:
@@ -461,4 +466,28 @@ func pointee(t types.Type) types.Type {
 		return p.Elem()
 	}
 	return nil
+}
+
+// readOnlyArg: v — аргумент статичного виклику з відомим зведенням, де
+// параметр не втікає, і функція в його пам'ять не пише.
+func readOnlyArg(call *ssa.CallCommon, v ssa.Value, v1 *v1Ctx) bool {
+	callee := call.StaticCallee()
+	if callee == nil || call.Value == v || v1 == nil {
+		return false
+	}
+	sum := summaryOf(v1, callee)
+	for i, arg := range call.Args {
+		if arg != v {
+			continue
+		}
+		idx := summaryIndex(call, i)
+		if sum == nil || idx >= len(sum.Params) {
+			return false
+		}
+		p := sum.Params[idx]
+		if p.Unknown || p.Side != 0 || p.Content != 0 || p.Writes {
+			return false
+		}
+	}
+	return true
 }
