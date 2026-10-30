@@ -331,3 +331,73 @@ func localConcat(a, b string) int {
 		t.Errorf("OwnGoFree false: foo.staticConcat runtime.FreeAccounted count = %d, want 0", got)
 	}
 }
+
+func TestOwnGoCyclic(t *testing.T) {
+	const src = `package foo
+
+type node struct {
+	next *node
+	val  int
+}
+
+var sink *node
+
+func use(n *node) { _ = n.val }
+
+func localRing() int {
+	a := &node{val: 1}
+	b := &node{val: 2}
+	a.next = b
+	b.next = a
+	return a.val + b.next.val
+}
+
+func unknownRing(f func(*node)) int {
+	a := &node{val: 1}
+	b := &node{val: 2}
+	a.next = b
+	b.next = a
+	f(a)
+	return b.val
+}
+
+func goRing() {
+	a := &node{}
+	a.next = a
+	go use(a)
+}
+
+func chanRing(ch chan *node) {
+	a := &node{}
+	a.next = a
+	ch <- a
+}
+
+func globalRing() {
+	a := &node{}
+	a.next = a
+	sink = a
+}
+
+func returnRing() *node {
+	a := &node{}
+	a.next = a
+	return a
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	ring := mustNamedFunction(t, mod, "foo.localRing").String()
+	for _, call := range []string{"runtime.AllocCounted", "runtime.Inc", "runtime.DecCyclic"} {
+		if !strings.Contains(ring, call) {
+			t.Errorf("foo.localRing has no %s", call)
+		}
+	}
+	for _, name := range []string{"foo.unknownRing", "foo.goRing", "foo.chanRing", "foo.globalRing", "foo.returnRing"} {
+		if got := strings.Count(mustNamedFunction(t, mod, name).String(), "runtime.DecCyclic"); got != 0 {
+			t.Errorf("%s runtime.DecCyclic count = %d, want 0", name, got)
+		}
+	}
+}
