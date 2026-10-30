@@ -50,14 +50,14 @@ jobs:
         # release. User-code compatibility is covered by LLGo's test matrix.
         include:
           - os: macos-latest
-            llvm: 22
+            llvm: 23
           - os: ubuntu-latest
-            llvm: 22
+            llvm: 23
           - os: windows-2022
-            llvm: 22
+            llvm: 23
             windows_abi: msvc
           - os: windows-2022
-            llvm: 22
+            llvm: 23
             windows_abi: mingw
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:
@@ -356,7 +356,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
-          llvm-version: 22
+          llvm-version: 23
 
       - name: Set up Go
         uses: ./.github/actions/setup-go
@@ -399,7 +399,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/setup-deps
         with:
-          llvm-version: 22
+          llvm-version: 23
 
       - name: Set up Go
         uses: ./.github/actions/setup-go

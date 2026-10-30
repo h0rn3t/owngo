@@ -36,14 +36,14 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            llvm: 22
+            llvm: 23
           - os: ubuntu-latest
-            llvm: 22
+            llvm: 23
           - os: windows-2022
-            llvm: 22
+            llvm: 23
             windows_abi: msvc
           - os: windows-2022
-            llvm: 22
+            llvm: 23
             windows_abi: mingw
     runs-on: ${{ startsWith(matrix.os, 'ubuntu') && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}
     steps:

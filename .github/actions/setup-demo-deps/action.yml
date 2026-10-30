@@ -52,7 +52,7 @@ runs:
       with:
         # This is the host-tools interpreter: use x64 on Windows ARM, where
         # emulation retains access to wheels that upstream projects do not
-        # publish for native ARM64 Python. The target interpreter and LLVM 22
+        # publish for native ARM64 Python. The target interpreter and LLVM 23
         # LLDB's matching Python runtime are installed separately below.
         python-version: "3.12"
         architecture: x64
@@ -74,42 +74,31 @@ runs:
         architecture: ${{ inputs.windows-arch == 'arm64' && 'arm64' || 'x86' }}
         update-environment: false
 
-    - name: Set up LLDB Python 3.11 on Windows
-      if: runner.os == 'Windows' && inputs.install-lldb-python == 'true' && inputs.windows-arch != '386' && (inputs.windows-abi == 'msvc' || inputs.windows-arch != 'amd64')
-      id: windows_lldb_python
-      uses: actions/setup-python@v7
-      env:
-        PATH: ${{ steps.windows_setup_python_path.outputs.path }}
-      with:
-        # LLVM 22.1.8's official win64 and Windows-on-Arm LLDB packages both
-        # link python311.dll. Native Win32 LLDB uses llvm-mingw's bundled
-        # Python instead, keeping the interpreter and debugger ABI matched.
-        python-version: "3.11.9"
-        architecture: ${{ inputs.windows-arch == 'arm64' && 'arm64' || 'x64' }}
-        update-environment: false
-
     - name: Configure LLDB Python on Windows
       if: runner.os == 'Windows' && inputs.install-lldb-python == 'true' && (inputs.windows-abi == 'msvc' || inputs.windows-arch != 'amd64')
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
         if ("${{ inputs.windows-arch }}" -eq "386") {
-          $lldbRoot = Join-Path $env:RUNNER_TOOL_CACHE "llgo-windows-support\22.1.8\386\lldb"
+          $lldbRoot = Join-Path $env:RUNNER_TOOL_CACHE "llgo-windows-support\23.1.4\386\lldb"
           $prefix = Join-Path $lldbRoot "python"
           $pythonPath = Join-Path $prefix "lib\python3.14\site-packages"
           $env:PYTHONHOME = $prefix
           $env:PYTHONPATH = $pythonPath
           $env:PATH = "$(Join-Path $lldbRoot 'bin');$env:PATH"
-          & (Join-Path $lldbRoot "bin\lldb.exe") --batch -o "script import os, struct, lldb; (struct.calcsize('P') == 4 and lldb.SBDebugger.GetVersionString().startswith('lldb version 22.1.8')) or os._exit(1)"
+          & (Join-Path $lldbRoot "bin\lldb.exe") --batch -o "script import os, struct, lldb; (struct.calcsize('P') == 4 and lldb.SBDebugger.GetVersionString().startswith('lldb version 23.1.4')) or os._exit(1)"
           if ($LASTEXITCODE -ne 0) {
             throw "The native Win32 LLDB/Python runtime check failed"
           }
           Add-Content -Encoding utf8 $env:GITHUB_ENV "LLGO_WINDOWS_LLDB_PYTHONPATH=$pythonPath"
         } else {
-          $python = "${{ steps.windows_lldb_python.outputs.python-path }}"
+          # LLVM 23 LLDB links the stable python3.dll ABI, so the host and
+          # target Python 3.12 interpreters above already satisfy it. No
+          # version-pinned LLDB interpreter is needed.
+          $python = "${{ steps.windows_target_python.outputs.python-path || steps.windows_python.outputs.python-path }}"
           $prefix = (& $python -c "import sys; print(sys.base_prefix)").Trim()
-          if (-not (Test-Path (Join-Path $prefix "python311.dll"))) {
-            throw "The LLVM 22 LLDB Python runtime is incomplete: $prefix"
+          if (-not (Test-Path (Join-Path $prefix "python3.dll"))) {
+            throw "The LLVM 23 LLDB Python runtime is incomplete: $prefix"
           }
         }
         Add-Content -Encoding utf8 $env:GITHUB_ENV "LLGO_WINDOWS_LLDB_PYTHON_HOME=$prefix"

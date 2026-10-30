@@ -229,7 +229,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/llgo-release-downloads/llvm-arm64
-          key: llgo-release-llvm-archive-v1-de718c58ebbc5f61d58c17b90457fcf42983bc2c4a4aba3e010d108713bfd7f1
+          key: llgo-release-llvm-archive-v1-f0d2e32424850ffb9b6aef190587a8298353d858a8a7260f490c173fe98d681
       - name: Cache Windows x86 LLVM SDK archive
         if: matrix.goarch == '386'
         uses: actions/cache@v6

@@ -394,7 +394,7 @@ sys.exit(subprocess.call(command + ['./internal/build']))
         resolve = action["runs"]["steps"][0]["run"]
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
-            for tool, output in (("go", "go1.27.0"), ("clang", "clang version 22.1.8")):
+            for tool, output in (("go", "go1.27.0"), ("clang", "clang version 23.1.4")):
                 path = directory / tool
                 path.write_text(f"#!/bin/sh\necho '{output}'\n")
                 path.chmod(0o755)
@@ -499,10 +499,10 @@ sys.exit(subprocess.call(command + ['./internal/build']))
         self.assertNotIn("build-windows-x86-toolchains", jobs)
         self.assertFalse((WORKFLOWS.parent / "windows/build-x86-toolchains.sh").exists())
         pins = json.loads((WORKFLOWS.parent / "windows/espressif-toolchain.json").read_text())
-        self.assertRegex(pins["release"], r"^22\.1\.4_\d{8}$")
+        self.assertRegex(pins["release"], r"^23\.1\.4_\d{8}(\.\d+)?$")
         self.assertRegex(pins["producer_commit"], r"^[0-9a-f]{40}$")
-        self.assertEqual(pins["sdk"]["version"], "22.1.8")
-        self.assertEqual(pins["sdk"]["asset"], "llvm-sdk-22.1.8-i686-w64-mingw32.tar.xz")
+        self.assertEqual(pins["sdk"]["version"], "23.1.4")
+        self.assertEqual(pins["sdk"]["asset"], "llvm-sdk-23.1.4-i686-w64-mingw32.tar.xz")
         self.assertRegex(pins["sdk"]["sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(set(pins["payloads"]), {"386", "amd64", "arm64"})
         for arch, target in (("386", "i686"), ("amd64", "x86_64"), ("arm64", "aarch64")):
