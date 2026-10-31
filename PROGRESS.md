@@ -590,3 +590,11 @@
 - На прохання розробника, після P7.1. `owngo/bench/fannkuchredux` і `owngo/bench/binarytreesarena`: `wg.Add` + `go` замінено на `wg.Go`, коментарі й `nolint:modernize` про обхід бага прибрано.
 - `go test -race`, `go vet`, `golangci-lint` обох пакетів — чисто. Під `-O0 -asan` з `ASAN_OPTIONS=detect_leaks=0`: fannkuch-redux `7` — код 0, вивід як `expected-7.txt`; arena `12` — код 0; тексту ASan немає.
 - Повторний замір, Debian 13 amd64, 8 ядер, найкращий із трьох. `compare-fannkuchredux.sh 12`: owngo `-Os` 6.39 с (було 5.74), owngo `-O2 -lto full` 2.44 с (було 2.32), llgo 11.97 с, `go` 3.19 с, Rust #6 2.14 с; RSS 11 МБ у всіх. `compare-binarytrees.sh`: arena 0.41 с, 358 МБ; Rust #5 0.67 с, 322 МБ. Вивід усіх збігається. Чи сповільнення owngo `-Os` на ~10% — від `wg.Go` чи шум, не з'ясовано.
+
+## 2026-10-31 — P7.2
+
+- Залишок задачі — прийняття і `owngo/REPORT-BENCH.md`; програма, Rust #6, скрипт порівняння і крок workflow вже були в репозиторії.
+- Прийняття, Debian 13 amd64, 8 ядер, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `llgo build -tags owngo` і `./fannkuchredux 12` — код 0, вивід побайтно як `expected-12.txt`. `llgo run -tags owngo -O0 -asan . 7` з `ASAN_OPTIONS=detect_leaks=0` — код 0, вивід як `expected-7.txt`, stderr порожній.
+- `compare-fannkuchredux.sh 12 3`, найкращий із трьох: owngo `-Os` 5.63 с, owngo `-O2 -lto full` 2.38 с, llgo без тега 12.93 с, `GOAMD64=v2 go` 3.19 с, Rust #6 2.21 с; RSS 11 МБ у всіх, вивід збігається. Owngo `-Os` 5.63 с проти 6.39 с попереднього заміру на тому самому коді — сповільнення після `wg.Go` було шумом.
+- `owngo/REPORT-BENCH.md`: таблиця, причини відставання від `go` і llgo без тега від `owngo` (з записів 2026-10-31), історія заміру.
+- Лишилось: P7.3.
