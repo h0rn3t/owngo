@@ -47,14 +47,15 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 
 Готові фази 0–6: виміри на профілях сервісів, `free` для статичного володіння, неатомарний RC для локальних об'єктів, звільнення неявних алокацій (`append`, конкатенація рядків), збирач циклів у `DecCyclic`. Зараз — фаза 7: алокації без місця в census на корпусі програм Benchmarks Game.
 
-Бенчмарки (Debian 13 amd64, 8 ядер):
+Бенчмарки (Debian 13 amd64, 8 ядер, Go 1.27.1, LLVM 23, rustc 1.85.1; найкращий із трьох прогонів, 2026-10-31):
 
-| Програма | `go` | llgo `-tags owngo` | Пікова RSS `owngo` |
-| --- | --- | --- | --- |
-| [binary-trees 21](owngo/REPORT-BINARYTREES.md) | 5.6 с | 56 с | 688 МБ (`go` — 555–618 МБ) |
-| [fannkuch-redux 12](owngo/REPORT-BENCH.md) | 3.19 с | 2.38 с (`-O2 -lto full`) | 11 МБ |
+| Програма | `go` | llgo `-tags owngo` | Rust | Пікова RSS: `go` / `owngo` / Rust |
+| --- | --- | --- | --- | --- |
+| [binary-trees 21](owngo/REPORT-BINARYTREES.md) | 5.61 с | 56.36 с | 0.67 с (#5: арена bumpalo + rayon) | 571 / 688 / 322 МБ |
+| binary-trees 21, Go з ручною ареною ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.47 с | 0.43 с | 0.67 с (той самий #5) | 227 / 358 / 322 МБ |
+| [fannkuch-redux 12](owngo/REPORT-BENCH.md) | 3.11 с | 6.17 с; 2.48 с з `-O2 -lto full` | 2.18 с (#6: rayon, SSE4) | 11 / 11 / 11 МБ |
 
-Вивід обох програм побайтно збігається з очікуваним.
+Вивід усіх програм побайтно збігається з очікуваним. Rust #5 для binary-trees кладе дерева в арену, тож з Go #2 без змін (рядок 1) це не порівняння звільнення по одному вузлу. Рядок 2 — той самий алгоритм, де Go-код сам тримає вузли в арені, як Rust: так `owngo` швидший за Rust. `fannkuch-redux` — порт Rust #6 на Go. Команди: `owngo/bench/compare-fannkuchredux.sh 12 3` і збірки зі звіту binary-trees.
 
 ## Збірка і запуск
 
