@@ -623,3 +623,10 @@
 - Прийняття: `go test -count=1 ./owngo/census/ -run UnmatchedReason` зелений, сума причин дорівнює рядку `unmatched` `Weigh`. `go test -race ./owngo/census/` зелений, `go vet` чистий. `census.sh` — код 0, звіт — `owngo/REPORT-PHASE7.md`.
 - Найбільша причина поза обв'язкою в усіх трьох програмах — голий `runtime` (структури M, G, профілювальника і GC самого `gc`). Рядок `module` — одна вибірка на `binarytrees/main.go:125` (аргумент `Sprintf`, імовірно упаковка в інтерфейс; не перевірено), 16 байтів.
 - Лишилось: P7.5; трек — S1.
+
+## 2026-10-31 — P7.5 Місце для найбільшої причини
+
+- `owngo/bench/census.sh` на `f885a2940` — код 0. Найбільша причина `unmatched` поза обв'язкою — голий `runtime` у всіх трьох програмах: binarytrees 34 048 байтів (1.5%), binarytreesarena 30 648 (13.4%), fannkuchredux 19 048 (56.3%). Це вибірки runtime `gc`, не вид алокації програми, тож класифікатор не змінено; причина і байти — розділ P7.5 у `owngo/REPORT-PHASE7.md`.
+- `go test -count=1 ./owngo/census/` — зелений. Коду задача не змінює.
+- Рядок `module` (`binarytrees/main.go:125`, 16 байтів) лишається без місця.
+- Лишилось: P7.6 (гейт фази 7); трек — S1.
