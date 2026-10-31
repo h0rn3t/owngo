@@ -663,3 +663,45 @@ func carried(n int) int {
 		t.Error("foo.carried frees the object the next iteration reads")
 	}
 }
+
+// TestOwnGoFreeEdgeDeath — P8.0: місце static, останнє використання якого
+// в циклі або перед гілкою з раннім return, звільняється на вході блока,
+// де значення вже мертве. Так помирає таблиця runtime.DecCyclic.
+func TestOwnGoFreeEdgeDeath(t *testing.T) {
+	const src = `package foo
+
+func fill(t *[8]int, i int) { t[i&7] = i }
+
+func loopLast(n int) int {
+	var t [8]int
+	fill(&t, n)
+	acc := 0
+	for i := 0; i < n; i++ {
+		acc += t[i&7]
+	}
+	return acc
+}
+
+func earlyReturn(ok bool) int {
+	var t [8]int
+	fill(&t, 1)
+	if !ok {
+		return 0
+	}
+	return t[1]
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	frees := map[string]int{
+		"foo.loopLast":    1,
+		"foo.earlyReturn": 2,
+	}
+	for name, want := range frees {
+		if got := accountedFrees(mustNamedFunction(t, mod, name).String()); got != want {
+			t.Errorf("%s accounted frees = %d, want %d", name, got, want)
+		}
+	}
+}
