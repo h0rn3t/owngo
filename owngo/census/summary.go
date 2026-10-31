@@ -484,6 +484,16 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 			return false
 		}
 		return unionAt(tok, instr, tuple[call][instr.Index])
+	case *ssa.MakeClosure:
+		// Захоплена змінна лежить у комірці-binding: вміст комірки — вміст
+		// замикання, тож go чи збереження замикання доходить до параметра.
+		t, d := operandSets(instr, tok, derived)
+		changed := unionAt(tok, instr, t)
+		changed = unionAt(derived, instr, d) || changed
+		for _, binding := range instr.Bindings {
+			changed = unionAt(content, instr, content[binding]) || changed
+		}
+		return changed
 	default:
 		value, ok := instr.(ssa.Value)
 		if !ok {

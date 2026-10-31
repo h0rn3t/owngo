@@ -575,3 +575,12 @@
 - `owngo/bench/fannkuchreduxrust`: Rust #6 без змін, rayon 1.12.0 у `Cargo.lock`. `owngo/bench/compare-fannkuchredux.sh` (і крок у `owngo-binarytrees.yml`): owngo `-Os` 5.74 с, owngo `-O2 -lto full` 2.32 с, llgo 12.29 с, `go` 3.13 с, Rust #6 2.14 с (найкращий із трьох), RSS 11 МБ у всіх, вивід збігається.
 - Встановлено з apt: `linux-perf` 6.12, `cargo`/`rustc` 1.85.1.
 - Лишилось з P7.2: `owngo/REPORT-BENCH.md`.
+
+## 2026-10-31 — P7.1
+
+- Причина: `(*sync.WaitGroup).Go` кладе `f` у комірку (`new func()`), а замикання `Go$1` бере комірку як binding. `go t4()` піднімав `content` замикання, але `MakeClosure` у зведенні не переносив у нього вміст своїх комірок — `f` лишався без втечі, викликач звільняв захоплені змінні. Виправлення в `applySummary`: вміст комірок-binding стає вмістом замикання; `go`, канал чи збереження замикання доходять до параметра.
+- Тести спершу (окремий коміт, червоні): `TestWaitGroupGo` у census — зведення справжнього `sync` (тіла з stdlib) і обгортки `app.Run(wg, f)`; `TestOwnGoWaitGroupGo` у `cl` — до виправлення 2 `FreeAccounted`/`DecAccounted` у функції з `wg.Go(func(){ x++ })`. Фікстура `owngo/asan/wggo`: до виправлення — `heap-use-after-free` у `spawn$1`, після — код 0.
+- Прийняття, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `go test ./owngo/census/ -run WaitGroupGo`, `go test ./cl/ -run OwnGoWaitGroupGo` — зелені. `llgo run -tags owngo -O0 -asan` у `owngo/asan/wggo` з `ASAN_OPTIONS=detect_leaks=0` — код 0 без тексту ASan.
+- Регресія: `go test -race ./owngo/census/...`, `go test ./cl/ -run OwnGo` зелені. `owngo/bytes/*`, `owngo/cyclic` — код 0; binary-trees `10` — вивід як у `go`. ASan `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive` — код 0 без звітів; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`. `gofmt`, `go vet`, `golangci-lint --new-from-rev` — чисто. ASan під `ulimit -v 4194304` не стартує (тіньова пам'ять), тож прогони без ліміту.
+- `fannkuchredux` і `binarytreesarena` лишаються на `wg.Add` + `go`: файли програм задача не змінює.
+- Лишилось: P7.2, `owngo/REPORT-BENCH.md`.
