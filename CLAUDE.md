@@ -26,7 +26,7 @@ LLGo is a Go compiler based on LLVM designed to better integrate Go with the C e
 
 ## Development Environment
 
-For detailed dependency requirements and installation instructions, see the [Dependencies](README.md#dependencies) and [How to install](README.md#how-to-install) sections in the README.
+For detailed dependency requirements and installation instructions, see the [Dependencies](LLGO.md#dependencies) and [How to install](LLGO.md#how-to-install) sections in LLGO.md.
 
 ## Testing & Validation
 
