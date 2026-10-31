@@ -26,6 +26,7 @@ package build
 import (
 	"go/token"
 	"go/types"
+	"slices"
 
 	"github.com/xgo-dev/llgo/internal/crosscompile"
 	"github.com/xgo-dev/llgo/internal/packages"
@@ -204,6 +205,12 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		coverageExit = mainPkg.NewFunc("runtime.runCoverageExitHook",
 			newSignature([]types.Type{types.Typ[types.Int]}, nil), llssa.GoDecl)
 	}
+	var owngoExit llssa.Function
+	if slices.Contains(splitSourcePatchBuildTags(ctx.buildConf.Tags), "owngo") {
+		// Як і hook покриття: os.Exit друкує звіт owngo через
+		// os.runtime_beforeExit, а звичайне повернення з main його оминає.
+		owngoExit = declareNoArgFunc(mainPkg, "runtime.runOwnGoExitHook")
+	}
 	entryFn := defineEntryFunction(ctx, mainPkg, argcVar, argvVar, argvValueType, entryFunctions{
 		godebugInit:  godebugInit,
 		runtimeStub:  runtimeStub,
@@ -213,6 +220,7 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		rtInit:       rtInit,
 		callbackInit: callbackInit,
 		coverageExit: coverageExit,
+		owngoExit:    owngoExit,
 		abiInit:      abiInit,
 		packageInits: packageInits,
 	})
@@ -373,6 +381,7 @@ type entryFunctions struct {
 	rtInit       llssa.Function
 	callbackInit llssa.Function
 	coverageExit llssa.Function
+	owngoExit    llssa.Function
 	abiInit      llssa.Function
 	packageInits []llssa.Function
 }
@@ -466,6 +475,9 @@ func emitRuntimeMainBody(b llssa.Builder, fns entryFunctions) {
 	}
 	if fns.coverageExit != nil {
 		b.Call(fns.coverageExit.Expr, b.Prog.IntVal(0, b.Prog.Int()))
+	}
+	if fns.owngoExit != nil {
+		b.Call(fns.owngoExit.Expr)
 	}
 }
 
