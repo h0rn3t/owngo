@@ -614,3 +614,12 @@
 - `owngo/bench/census.sh [OUT]`: профіль `-memprofilerate=1` тестом `TestProfile`, `phase0 -dir … -profdir …`, звірка суми категорій v1 і `unmatched` з сумою `alloc_space` у `pprof -raw`, таблиця Markdown у stdout. Каталог Go без `profile_test.go` — помилка, каталог без файлів Go (Rust) пропускається.
 - Прогін (Debian 13 amd64, 8 ядер, Go 1.27.1): код 0, суми рівні для кожної програми. `unmatched`: binarytrees 47 632 байти (2.1%), binarytreesarena 36 824 (16.5%), fannkuchredux 29 888 (88.1%). Таблиця — `owngo/REPORT-PHASE7.md`.
 - Лишилось: P7.4; трек — S1.
+
+## 2026-10-31 — P7.4 Причини `unmatched`
+
+- `Frame.Func` — ім'я функції з `pprof -raw`.
+- `census.UnmatchedReasons(sites, stdlibSites, samples, moduleDir, goroot)`: розклад рядка `unmatched` на `harness`, `runtime`, `stdlib`, `external`, `module`. Обв'язку визначає весь стек: є `testing`, `_testmain.go` або `*_test.go`, немає нетестового файлу програми. Решту — перший кадр поза runtime, як `Outside`. `stdlib` з'єднується з `stdlibSites` через `Weigh`; `Packages` — імпорти stdlib кадрів цього рядка; `Lines` — функція і рядок для `module`.
+- `phase0`: `unmatched_v1` у JSON; пакети `Packages` завантажуються і класифікуються v1, як `-dir`. `census.sh` звіряє суму причин з `unmatched` і друкує таблиці причин, рядка stdlib і рядків без місця.
+- Прийняття: `go test -count=1 ./owngo/census/ -run UnmatchedReason` зелений, сума причин дорівнює рядку `unmatched` `Weigh`. `go test -race ./owngo/census/` зелений, `go vet` чистий. `census.sh` — код 0, звіт — `owngo/REPORT-PHASE7.md`.
+- Найбільша причина поза обв'язкою в усіх трьох програмах — голий `runtime` (структури M, G, профілювальника і GC самого `gc`). Рядок `module` — одна вибірка, упаковка аргументу `Sprintf` на рядку `binarytrees/main.go:125`, 16 байтів.
+- Лишилось: P7.5; трек — S1.
