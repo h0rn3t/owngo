@@ -7,10 +7,10 @@
       "label": "Main",
       "path": "series/main/main/summary.json",
       "configPath": "series/main/main/config.json",
-      "commitPath": "commits/b1d11846978a1ad96781a9be8b26ee5c8fc30df3.json",
-      "sha": "b1d11846978a1ad96781a9be8b26ee5c8fc30df3",
-      "sourceUrl": "https://github.com/h0rn3t/owngo/commit/b1d11846978a1ad96781a9be8b26ee5c8fc30df3",
-      "updatedAt": "2026-10-31T11:43:27.925Z"
+      "commitPath": "commits/a349192ed1b5079d9a0f061869a0390994f4aeb8.json",
+      "sha": "a349192ed1b5079d9a0f061869a0390994f4aeb8",
+      "sourceUrl": "https://github.com/h0rn3t/owngo/commit/a349192ed1b5079d9a0f061869a0390994f4aeb8",
+      "updatedAt": "2026-10-31T16:23:11.976Z"
     }
   ]
 }
