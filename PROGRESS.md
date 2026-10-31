@@ -607,3 +607,10 @@
 - Причина 56 с: глобальні `atomic.Add` на кожну алокацію — `NoteAlloc` і `memProfileAddObject` (upstream). На `18` — 45.6 с CPU на 8 ядрах проти 5.2 с під `taskset -c 0`. Тимчасова правка без обох: `n=21` — 7.2 с, з LTO 6.8 с. Файли рантайму повернуто.
 - Рішення розробника: трек швидкодії (`INTENT.md`, `PLAN.md`, задачі S1–S4), ціль — Go #2 з тегом `owngo` не повільніше за 1.5× від Rust #5.
 - Лишилось: P7.3; трек — S1.
+
+## 2026-10-31 — P7.3 Профілі корпусу
+
+- `profile_test.go` з `TestProfile` у `binarytrees` (`10`), `binarytreesarena` (`10`), `fannkuchredux` (`7`): тест кличе `main`, файли програм не змінено.
+- `owngo/bench/census.sh [OUT]`: профіль `-memprofilerate=1` тестом `TestProfile`, `phase0 -dir … -profdir …`, звірка суми категорій v1 і `unmatched` з сумою `alloc_space` у `pprof -raw`, таблиця Markdown у stdout. Каталог Go без `profile_test.go` — помилка, каталог без файлів Go (Rust) пропускається.
+- Прогін (Debian 13 amd64, 8 ядер, Go 1.27.1): код 0, суми рівні для кожної програми. `unmatched`: binarytrees 47 632 байти (2.1%), binarytreesarena 36 824 (16.5%), fannkuchredux 29 888 (88.1%). Таблиця — `owngo/REPORT-PHASE7.md`.
+- Лишилось: P7.4; трек — S1.
