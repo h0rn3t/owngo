@@ -649,3 +649,11 @@
 - `go test ./cl/ -run OwnGo`, `go test ./internal/build/ -run TestGenMainModuleOwnGoExit` — зелені; `go vet`, `golangci-lint --new-from-rev` — чисто. ASan: `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo` і корпус — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`.
 - Повний `go test ./cl/` і `./internal/build/` (~17 хв) не проганялись.
 - Лишилось: P8.1; трек — S1.
+
+## 2026-10-31 — P8.1 План після гейта
+
+- Розписано задачі фази 8 у `PLAN.md`: P8.2 вибір алокатора (програма `owngo/bench/allocbase`, BDWGC, власний size-class, mimalloc і libc як відлік), P8.3 алокатор і `Base` під тегом `owngo`, P8.4 статична база (похідний вказівник у функції бази не блокує `decSite`), P8.5 свіжий результат — внутрішній вказівник (`Dec` через `Base` у викликача), P8.6 байти, P8.7 ASan, P8.8 гейт.
+- Стан, на який спирається план: тег `owngo` додає `nogc`, тобто libc `malloc` без бази; `interiorPoints` у `decSite` і `noteTransfer` блокують місце за будь-яким `FieldAddr`/`IndexAddr`/`Slice`, навіть локальним.
+- Під `-asan` база — `__sanitizer_get_allocated_begin` (є в `allocator_interface.h` LLVM 23); вибір алокатора збірку ASan не змінює.
+- Код не змінювався, тести не проганялись.
+- Лишилось: P8.2; трек — S1.
