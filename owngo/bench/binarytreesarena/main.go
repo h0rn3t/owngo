@@ -68,22 +68,17 @@ func run(n int) []byte {
 	// горутинах, а ітерації всіх глибин порізані на шматки, які робітники
 	// беруть атомарним лічильником, як rayon краде задачі. Глибини не чекають
 	// одна одну, і ядро без роботи не простоює до кінця глибини.
-	// Не wg.Go: owngo звільняє змінні, захоплені замиканням, одразу після
-	// виклику, бо не бачить, що WaitGroup.Go передає f у go.
 	var wg sync.WaitGroup
 	var stretchCheck int
-	wg.Add(2)
-	go func() {
+	wg.Go(func() {
 		a := newArena(maxDepth + 1)
 		a.tree(0, uint(maxDepth+1))
 		stretchCheck = a.check(0)
-		wg.Done()
-	}()
+	})
 	longLived := newArena(maxDepth)
-	go func() {
+	wg.Go(func() {
 		longLived.tree(0, uint(maxDepth))
-		wg.Done()
-	}()
+	})
 
 	workers := runtime.NumCPU()
 	type chunk struct{ depth, iterations int }
@@ -99,8 +94,7 @@ func run(n int) []byte {
 	checks := make([]atomic.Int64, maxDepth+1)
 	var next atomic.Int64
 	for range workers {
-		wg.Add(1)
-		go func() { //nolint:modernize // owngo frees captures passed to wg.Go, see above
+		wg.Go(func() {
 			a := newArena(maxDepth)
 			for {
 				k := next.Add(1) - 1
@@ -115,8 +109,7 @@ func run(n int) []byte {
 				}
 				checks[c.depth].Add(int64(sum))
 			}
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 

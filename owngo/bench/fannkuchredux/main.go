@@ -112,15 +112,12 @@ func fannkuch(n int) (checksum, maxFlips int) {
 		outer = rotate(outer, n-1)
 	}
 
-	// Не wg.Go: owngo звільняє змінні, захоплені замиканням, одразу після
-	// виклику, бо не бачить, що WaitGroup.Go передає f у go.
 	sums := make([]int, len(tasks))
 	flips := make([]int, len(tasks))
 	var next atomic.Int64
 	var wg sync.WaitGroup
 	for range min(runtime.NumCPU(), len(tasks)) {
-		wg.Add(1)
-		go func() { //nolint:modernize // owngo frees captures passed to wg.Go, see above
+		wg.Go(func() {
 			for {
 				k := next.Add(1) - 1
 				if k >= int64(len(tasks)) {
@@ -128,8 +125,7 @@ func fannkuch(n int) (checksum, maxFlips int) {
 				}
 				sums[k], flips[k] = block(tasks[k].perm, tasks[k].count, n)
 			}
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 

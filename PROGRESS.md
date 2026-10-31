@@ -584,3 +584,9 @@
 - Регресія: `go test -race ./owngo/census/...`, `go test ./cl/ -run OwnGo` зелені. `owngo/bytes/*`, `owngo/cyclic` — код 0; binary-trees `10` — вивід як у `go`. ASan `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive` — код 0 без звітів; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`. `gofmt`, `go vet`, `golangci-lint --new-from-rev` — чисто. ASan під `ulimit -v 4194304` не стартує (тіньова пам'ять), тож прогони без ліміту.
 - `fannkuchredux` і `binarytreesarena` лишаються на `wg.Add` + `go`: файли програм задача не змінює.
 - Лишилось: P7.2, `owngo/REPORT-BENCH.md`.
+
+## 2026-10-31 — fannkuch-redux і binarytreesarena на `wg.Go`
+
+- На прохання розробника, після P7.1. `owngo/bench/fannkuchredux` і `owngo/bench/binarytreesarena`: `wg.Add` + `go` замінено на `wg.Go`, коментарі й `nolint:modernize` про обхід бага прибрано.
+- `go test -race`, `go vet`, `golangci-lint` обох пакетів — чисто. Під `-O0 -asan` з `ASAN_OPTIONS=detect_leaks=0`: fannkuch-redux `7` — код 0, вивід як `expected-7.txt`; arena `12` — код 0; тексту ASan немає.
+- Повторний замір, Debian 13 amd64, 8 ядер, найкращий із трьох. `compare-fannkuchredux.sh 12`: owngo `-Os` 6.39 с (було 5.74), owngo `-O2 -lto full` 2.44 с (було 2.32), llgo 11.97 с, `go` 3.19 с, Rust #6 2.14 с; RSS 11 МБ у всіх. `compare-binarytrees.sh`: arena 0.41 с, 358 МБ; Rust #5 0.67 с, 322 МБ. Вивід усіх збігається. Чи сповільнення owngo `-Os` на ~10% — від `wg.Go` чи шум, не з'ясовано.
