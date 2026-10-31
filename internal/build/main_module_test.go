@@ -173,6 +173,36 @@ func TestGenMainModuleCoverageExit(t *testing.T) {
 	}
 }
 
+// Звіт owngo друкується і тоді, коли main повертається без os.Exit.
+func TestGenMainModuleOwnGoExit(t *testing.T) {
+	for _, tags := range []string{"", "owngo,nogc"} {
+		t.Run("tags="+tags, func(t *testing.T) {
+			ctx := &context{
+				prog: llssa.NewProgram(nil),
+				buildConf: &Config{
+					BuildMode: BuildModeExe,
+					Goos:      "linux",
+					Goarch:    "amd64",
+					Tags:      tags,
+				},
+			}
+			defer ctx.prog.Dispose()
+			pkg := &packages.Package{PkgPath: "example.com/app", ExportFile: "app.a"}
+			ir := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true}).LPkg.String()
+			if tags == "" {
+				if strings.Contains(ir, "runtime.runOwnGoExitHook") {
+					t.Error("genMainModule(tags=\"\") calls runtime.runOwnGoExitHook, want no call")
+				}
+				return
+			}
+			assertInOrder(t, ir,
+				`call void @"example.com/app.main"()`,
+				`call void @runtime.runOwnGoExitHook()`,
+			)
+		})
+	}
+}
+
 func TestGenMainModuleWindowsStdioNobufUsesUCRTStreams(t *testing.T) {
 	llvm.InitializeAllTargets()
 	t.Setenv(llgoStdioNobuf, "1")
