@@ -630,3 +630,12 @@
 - `go test -count=1 ./owngo/census/` — зелений. Коду задача не змінює.
 - Рядок `module` (`binarytrees/main.go:125`, 16 байтів) лишається без місця.
 - Лишилось: P7.6 (гейт фази 7); трек — S1.
+
+## 2026-10-31 — P7.6 Гейт фази 7
+
+- Звіт `owngo` друкувався лише через `os.Exit` (`os_beforeExit`), тож програми корпусу, які виходять поверненням з `main`, під тегом `owngo` нічого не друкували. За рішенням розробника вхідна функція тепер викликає `runtime.runOwnGoExitHook` після `main`, як hook покриття (`internal/build/main_module.go`). Тест спершу, окремим комітом: `TestGenMainModuleOwnGoExit` — червоний до виправлення, зелений після. Фікстура з `os.Exit(0)` друкує звіт один раз. `go test ./cl/ -run OwnGo` зелений, `go vet` і `golangci-lint --new-from-rev` — чисто.
+- `TestGenMainModule*` для Windows (`WindowsExitsAfterMain`, `CoverageExit/windows`, `WindowsStdioNobufUsesUCRTStreams`, `WindowsCSharedInitializesFromCExport`, `CArchiveRegistersCExportThread/windows/386`) падають і на ревізії до зміни; в `owngo/BASELINE.md` їх немає — базу знімали на darwin.
+- `owngo live` корпусу (`10`, `10`, `7`): live разом 150 886 байтів, `static` 89 125 (59.1%), `cyclic` 32 832, `pinned` 15 928, `rc-local` 10 673, `rc-shared` 2 328. Вивід програм — як очікуваний.
+- `live static` binarytrees росте як 2^n (87 554 на `10`, 1 398 274 на `14`), а census місць `static` на рядках програми не ставить. Причина не встановлена.
+- Рішення в `INTENT.md` («Рішення гейта фази 7»): ківш — внутрішній вказівник за фіксованим шляхом; поріг 50% до нього не застосовується, бо суми немає. `static` перетинає половину live корпусу, але це ківш фази 4, тож він іде окремою задачею P8.0, за рішенням розробника. У `PLAN.md` — розділ фази 8: P8.0 (`live static` binarytrees), P8.1 (план після гейта).
+- Лишилось: P8.0; трек — S1.
