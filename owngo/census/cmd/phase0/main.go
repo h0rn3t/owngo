@@ -44,7 +44,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return errors.New("usage: phase0 -dir module [-profdir profiles]")
 	}
 
-	roots, skipped, err := loadRoots(*dir)
+	roots, skipped, err := loadRoots(*dir, "./...")
 	if err != nil {
 		return err
 	}
@@ -81,6 +81,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 	gaps, gapErrs := stackGaps(*dir, roots, strict)
 	var weights, weightsCons, weightsV1 []census.Weight
+	var unmatched *census.UnmatchedSplit
 	if *profDir != "" {
 		samples, err := readProfiles(*profDir)
 		if err != nil {
@@ -89,6 +90,11 @@ func run(args []string, stdout, stderr io.Writer) error {
 		weights = census.Weigh(strict, samples)
 		weightsCons = census.Weigh(conservative, samples)
 		weightsV1 = census.Weigh(v1Sites, samples)
+		split, err := unmatchedReasons(*dir, v1Sites, samples)
+		if err != nil {
+			return err
+		}
+		unmatched = &split
 	}
 
 	rev := gitRev(*dir)
@@ -107,6 +113,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		"weights":              weights,
 		"weights_conservative": weightsCons,
 		"weights_v1":           weightsV1,
+		"unmatched_v1":         unmatched,
 	}
 	if err := json.MarshalWrite(stdout, out); err != nil {
 		return err
@@ -117,8 +124,31 @@ func run(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func loadRoots(dir string) ([]*packages.Package, []string, error) {
-	pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: dir}, "./...")
+// unmatchedReasons розкладає вибірки без місця v1 за причиною. Рядок stdlib
+// з'єднується з місцями v1 пакетів stdlib, через кадри яких він проходить.
+func unmatchedReasons(dir string, sites []census.Site, samples []census.AllocSample) (census.UnmatchedSplit, error) {
+	out, err := exec.Command("go", "env", "GOROOT").Output()
+	if err != nil {
+		return census.UnmatchedSplit{}, fmt.Errorf("go env GOROOT: %w", err)
+	}
+	goroot := strings.TrimSpace(string(out))
+	split := census.UnmatchedReasons(sites, nil, samples, dir, goroot)
+	if len(split.Packages) == 0 {
+		return split, nil
+	}
+	stdlib, _, err := loadRoots(dir, split.Packages...)
+	if err != nil {
+		return census.UnmatchedSplit{}, err
+	}
+	stdlibSites, err := classify(stdlib, false, true)
+	if err != nil {
+		return census.UnmatchedSplit{}, err
+	}
+	return census.UnmatchedReasons(sites, stdlibSites, samples, dir, goroot), nil
+}
+
+func loadRoots(dir string, patterns ...string) ([]*packages.Package, []string, error) {
+	pkgs, err := packages.Load(&packages.Config{Mode: packages.LoadAllSyntax, Dir: dir}, patterns...)
 	if err != nil {
 		return nil, nil, err
 	}

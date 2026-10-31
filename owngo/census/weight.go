@@ -26,7 +26,9 @@ var (
 )
 
 // Frame — один кадр стека алокації. У вибірці кадри йдуть від листа до викликача.
+// Func — ім'я функції, як його друкує pprof -raw.
 type Frame struct {
+	Func string
 	File string
 	Line int
 }
@@ -189,7 +191,7 @@ func takeLocation(line string, locs map[int][]Frame, current int) (int, error) {
 		if err != nil {
 			return current, fmt.Errorf("рядок %q: %w", m[4], ErrAllocProfile)
 		}
-		locs[id] = []Frame{{File: m[3], Line: lineNo}}
+		locs[id] = []Frame{{Func: m[2], File: m[3], Line: lineNo}}
 		return id, nil
 	}
 	if current == 0 {
@@ -203,7 +205,7 @@ func takeLocation(line string, locs map[int][]Frame, current int) (int, error) {
 	if err != nil {
 		return current, fmt.Errorf("рядок %q: %w", m[3], ErrAllocProfile)
 	}
-	locs[current] = append(locs[current], Frame{File: m[2], Line: lineNo})
+	locs[current] = append(locs[current], Frame{Func: m[1], File: m[2], Line: lineNo})
 	return current, nil
 }
 
