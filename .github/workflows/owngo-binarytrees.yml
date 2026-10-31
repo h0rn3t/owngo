@@ -1,0 +1,56 @@
+name: OwnGo binary-trees
+
+# Порівнює binarytreesarena під llgo -tags owngo з програмою Rust #5 із
+# Benchmarks Game на ./binarytrees 21. Час не має порогу: таблиця йде в
+# підсумок job, а падає job лише на розбіжному виводі.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "owngo/**"
+      - "cl/**"
+      - "ssa/**"
+      - "runtime/**"
+      - "internal/build/**"
+      - ".github/workflows/owngo-binarytrees.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owngo-binarytrees.yml-${{ github.event_name }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
+jobs:
+  binarytrees:
+    name: binary-trees 21 (owngo vs Rust)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LLGO_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          llvm-version: 23
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
+
+      - name: Compare
+        run: |
+          set -o pipefail
+          owngo/bench/compare-binarytrees.sh 21 3 | tee -a "$GITHUB_STEP_SUMMARY"
