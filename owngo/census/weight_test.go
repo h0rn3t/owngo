@@ -234,15 +234,15 @@ func TestParseAllocProfile(t *testing.T) {
 			Objects: 2,
 			Bytes:   64,
 			Frames: []Frame{
-				{File: "/app/leaf.go", Line: 3},
-				{File: "/app/outer.go", Line: 9},
-				{File: "/goroot/src/runtime/pprof/pprof.go", Line: 405},
+				{Func: "main.leaf", File: "/app/leaf.go", Line: 3},
+				{Func: "main.outer", File: "/app/outer.go", Line: 9},
+				{Func: "runtime/pprof.(*Profile).WriteTo", File: "/goroot/src/runtime/pprof/pprof.go", Line: 405},
 			},
 		},
 		{
 			Objects: 5,
 			Bytes:   101,
-			Frames:  []Frame{{File: "/app/only.go", Line: 4}},
+			Frames:  []Frame{{Func: "main.only", File: "/app/only.go", Line: 4}},
 		},
 	}
 	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
@@ -268,7 +268,7 @@ Mappings
 	want := []AllocSample{{
 		Objects: 1,
 		Bytes:   32,
-		Frames:  []Frame{{File: "/goroot/src/maps/maps.go", Line: 55}},
+		Frames:  []Frame{{Func: "maps.Clone[go.shape.func ]", File: "/goroot/src/maps/maps.go", Line: 55}},
 	}}
 	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
 		t.Errorf("ParseAllocProfile() = %#v, want %#v", got, want)
@@ -291,7 +291,7 @@ Mappings
 	want := []AllocSample{{
 		Objects: 4,
 		Bytes:   80,
-		Frames:  []Frame{{File: "/app/a.go", Line: 1}},
+		Frames:  []Frame{{Func: "main.f", File: "/app/a.go", Line: 1}},
 	}}
 	if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", want) {
 		t.Errorf("ParseAllocProfile() = %#v, want %#v", got, want)
