@@ -209,7 +209,9 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	if slices.Contains(splitSourcePatchBuildTags(ctx.buildConf.Tags), "owngo") {
 		// Як і hook покриття: os.Exit друкує звіт owngo через
 		// os.runtime_beforeExit, а звичайне повернення з main його оминає.
-		owngoExit = declareNoArgFunc(mainPkg, "runtime.runOwnGoExitHook")
+		// Пакет runtime бібліотеки є не в кожній програмі, тож виклик іде
+		// прямо в ReportExit рантайму, який лінкується завжди.
+		owngoExit = declareNoArgFunc(mainPkg, rtPkgPath+".ReportExit")
 	}
 	entryFn := defineEntryFunction(ctx, mainPkg, argcVar, argvVar, argvValueType, entryFunctions{
 		godebugInit:  godebugInit,

@@ -174,6 +174,8 @@ func TestGenMainModuleCoverageExit(t *testing.T) {
 }
 
 // Звіт owngo друкується і тоді, коли main повертається без os.Exit.
+// Виклик іде в runtime/internal/runtime: пакет runtime бібліотеки
+// лінкується лише тоді, коли програма його імпортує.
 func TestGenMainModuleOwnGoExit(t *testing.T) {
 	for _, tags := range []string{"", "owngo,nogc"} {
 		t.Run("tags="+tags, func(t *testing.T) {
@@ -190,14 +192,14 @@ func TestGenMainModuleOwnGoExit(t *testing.T) {
 			pkg := &packages.Package{PkgPath: "example.com/app", ExportFile: "app.a"}
 			ir := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true}).LPkg.String()
 			if tags == "" {
-				if strings.Contains(ir, "runtime.runOwnGoExitHook") {
-					t.Error("genMainModule(tags=\"\") calls runtime.runOwnGoExitHook, want no call")
+				if strings.Contains(ir, ".ReportExit") {
+					t.Error("genMainModule(tags=\"\") calls ReportExit, want no call")
 				}
 				return
 			}
 			assertInOrder(t, ir,
 				`call void @"example.com/app.main"()`,
-				`call void @runtime.runOwnGoExitHook()`,
+				`call void @"`+llssa.PkgRuntime+`.ReportExit"()`,
 			)
 		})
 	}
