@@ -551,3 +551,27 @@
 - Знайдено: замикання, передане в `sync.(*WaitGroup).Go`, втрачає захоплені змінні — після виклику стоять `FreeAccounted` і `DecAccounted`, горутина читає звільнене (nil-розіменування вже на `4`). Зведення не бачить, що `WaitGroup.Go` передає `f` у `go`. У програмі — `wg.Add` + `go`.
 - `owngo/bench/binarytreesrust` (Rust #5 без змін, `Cargo.lock`), `owngo/bench/compare-binarytrees.sh` і workflow `owngo-binarytrees.yml`: таблиця часу й RSS у підсумку job, падіння лише на розбіжному виводі. Локально, 8 ядер: arena 0.42 с, Rust 0.67 с. Тести контрактів `.github/scripts` нових падінь не дали.
 - Лишилось: задача на `WaitGroup.Go` у census; спільні атомарні лічильники на кожну алокацію.
+
+## 2026-10-31 — P7.0
+
+- Фазу 7 розписано в `PLAN.md`: P7.1 `WaitGroup.Go` (баг безпеки пам'яті з попереднього запису), P7.2 fannkuch-redux у корпусі (Go з Benchmarks Game і Rust #6), P7.3 профілі корпусу, P7.4 причини `unmatched`, P7.5 місце для найбільшої причини, P7.6 гейт.
+- База змінена рішенням розробника і записана в `INTENT.md` («База фази 7»): профілів 17 сервісів і їхніх клонів на машині розробки немає, фаза міряє корпус `owngo/bench`, який поповнює розробник. Числа гейта фази 6 лишаються фактом.
+- Пробний замір (поза репозиторієм, Debian 13 amd64, Go 1.27.1): binary-trees Go #2 під `go test -memprofilerate=1` на `10`, `phase0 -dir … -profdir …`. 22 місця v1; `cyclic` 2 173 672 байти, `rc-shared` 576, `rc-local` 176, `unmatched` 41 832 (128 об'єктів, 1.9%). `phase0` читає лише `.raw` і `.out`: файл `.prof` пропускається мовчки й дає нульові ваги.
+- Лишилось: P7.1.
+
+## 2026-10-31 — fannkuch-redux: порт Rust #6 на Go (частина P7.2)
+
+- На прохання розробника. `owngo/bench/fannkuchredux` — порт Rust #6 (Henry Jayakusuma, за C++ #6 Andrei Simion), Revised BSD у `LICENSE`. Перестановка — `uint64` по півбайту (n ≤ 16): перевертання префікса — `bits.ReverseBytes64`, обмін півбайтів і маска, обертання — два зсуви; обидва без циклу, замість `pshufb` з таблиць масок. Поділ роботи той самий: n·(n-1) блоків, пул робітників на атомарному лічильнику. `wg.Add` + `go` замість `wg.Go` через баг P7.1.
+- `TestRun` порівнює `7` і `12` з `testdata` (вивід зі сторінки бенчмарку), `TestRunTrivial` — n = 0, 1, 2. `go test -race`, `go vet`, `golangci-lint` (базовий конфіг плагіна) — чисто; `go fix` пропонує `wg.Go`, не прийнято.
+- `12`, Debian 13 amd64, 8 ядер, тричі: `llgo build -tags owngo` — 5.95–6.07 с; `GOAMD64=v2 go build` — 3.17–3.38 с; llgo без тега — 12.27–13.17 с. Пікова RSS — 11 МБ у всіх. Вивід побайтно як очікуваний. Rust #6 тут не збирався. Чому llgo без тега вдвічі повільніший за `owngo`, не з'ясовано.
+- `llgo run -tags owngo -O0 -asan . 7` з `ASAN_OPTIONS=detect_leaks=0` — код 0 без тексту ASan.
+- Лишилось з P7.2: `fannkuchreduxrust`, рядок у скрипті порівняння і workflow, `owngo/REPORT-BENCH.md`.
+
+## 2026-10-31 — fannkuch-redux: чому повільніше за go, Rust #6 у порівнянні
+
+- На прохання розробника. Debian 13 amd64, 8 ядер, `12`. Усі збірки повністю завантажують 8 ядер (CPU-час ≈ 8× wall), тож різниця — у вартості обчислень, не в масштабуванні.
+- `owngo` проти `go` (44 с проти 24 с CPU). Типовий рівень llgo — `Os` (`internal/optlevel/optlevel.go:21`); він ставить `optsize` на всі функції, і LLVM не вбудовує `reverse`, `rotate`, `advance` у `block`. `math/bits.ReverseBytes64` (одна `bswap`) — виклик в інший модуль, вбудовується лише з LTO. Ще 6 `AssertNegativeShift` на зсувах на змінну і `count` у купі: `&count` у `advance` дає `AllocZ` у `block`. `-O2` — 30.6 с CPU, `-O3` — 36.1 с, `-O2 -lto full` — 17.8 с CPU, 2.34 с wall, швидше за `go` (3.2 с).
+- llgo без тега проти `owngo` (99 с проти 44 с CPU). Код `block` у двох збірках майже однаковий, на одному ядрі llgo не повільніший (`11`: 2.99 с проти 3.33 с; з LTO 1.44 с проти 1.35 с). На 8 ядрах — false sharing: 16-байтові `count` робітників Boehm GC кладе в одну кеш-лінію, `count[layer]++` ганяє її між ядрами; `malloc` під `owngo` має арени на потік. Копія з `count [64]uint8` під llgo без тега з LTO — 2.60 с замість 7.06 с, як `owngo` (2.55 с). `perf c2c` не знімався: `kernel.perf_event_paranoid` = 4, зміну відхилено.
+- `owngo/bench/fannkuchreduxrust`: Rust #6 без змін, rayon 1.12.0 у `Cargo.lock`. `owngo/bench/compare-fannkuchredux.sh` (і крок у `owngo-binarytrees.yml`): owngo `-Os` 5.74 с, owngo `-O2 -lto full` 2.32 с, llgo 12.29 с, `go` 3.13 с, Rust #6 2.14 с (найкращий із трьох), RSS 11 МБ у всіх, вивід збігається.
+- Встановлено з apt: `linux-perf` 6.12, `cargo`/`rustc` 1.85.1.
+- Лишилось з P7.2: `owngo/REPORT-BENCH.md`.

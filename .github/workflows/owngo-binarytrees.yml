@@ -54,3 +54,8 @@ jobs:
         run: |
           set -o pipefail
           owngo/bench/compare-binarytrees.sh 21 3 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Compare fannkuch-redux
+        run: |
+          set -o pipefail
+          owngo/bench/compare-fannkuchredux.sh 12 3 | tee -a "$GITHUB_STEP_SUMMARY"
