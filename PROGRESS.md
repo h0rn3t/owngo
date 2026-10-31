@@ -639,3 +639,13 @@
 - `live static` binarytrees росте як 2^n (87 554 на `10`, 1 398 274 на `14`), а census місць `static` на рядках програми не ставить. Причина не встановлена.
 - Рішення в `INTENT.md` («Рішення гейта фази 7»): ківш — внутрішній вказівник за фіксованим шляхом; поріг 50% до нього не застосовується, бо суми немає. `static` перетинає половину live корпусу, але це ківш фази 4, тож він іде окремою задачею P8.0, за рішенням розробника. У `PLAN.md` — розділ фази 8: P8.0 (`live static` binarytrees), P8.1 (план після гейта).
 - Лишилось: P8.0; трек — S1.
+
+## 2026-10-31 — P8.0 `live static` binarytrees
+
+- Місце — `var table [8]*CyclicDesc` у `runtime.DecCyclic`: 64 байти в купі на кожен виклик, без free. Причина — `deaths` (`cl/owngo_free.go`) не ставив free на значення, що вмирає на ребрі: останнє використання в циклі чи перед раннім `return`. Обмеження розміщення free з фази 1, не регресія фаз 4 чи 6.
+- Тест спершу, окремим комітом: `TestOwnGoFreeEdgeDeath` (до виправлення: `loopLast` 0 звільнень замість 1, `earlyReturn` 1 замість 2). Виправлення: free на вході наступника з одним попередником, якщо місце його домінує і в ньому значення вже мертве.
+- Виправлено власну помилку P7.6: hook звіту жив у пакеті `runtime` бібліотеки, який лінкується лише з імпортом, тож фікстури `owngo/asan/*uaf` не лінкувались (код 1 від лінкера, не від ASan). Вхідна функція тепер кличе `ReportExit` з `runtime/internal/runtime`; тест `TestGenMainModuleOwnGoExit` оновлено, червоний до виправлення.
+- `live static` корпусу — 0; binarytrees `freed` зріс рівно на колишній `live static` (87 554 на `10`, 1 398 274 на `14`). Вивід програм — як очікуваний. Таблиця — `owngo/REPORT-PHASE8.md`.
+- `go test ./cl/ -run OwnGo`, `go test ./internal/build/ -run TestGenMainModuleOwnGoExit` — зелені; `go vet`, `golangci-lint --new-from-rev` — чисто. ASan: `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo` і корпус — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`.
+- Повний `go test ./cl/` і `./internal/build/` (~17 хв) не проганялись.
+- Лишилось: P8.1; трек — S1.
