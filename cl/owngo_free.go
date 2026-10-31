@@ -109,11 +109,12 @@ func ssaPackageFuncs(pkg *ssa.Package) []*ssa.Function {
 // об'єкт уже не живий. Гілка, де читання лишається попереду, free не отримує:
 // об'єкт доживає до виходу процесу. defer тримає аргумент до RunDefers, тож
 // таке місце в цій фазі не звільняється.
-func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction, keepStored bool) map[ssa.Instruction][]ssa.Value {
+func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction, keepStored bool) (after map[ssa.Instruction][]ssa.Value, entry map[*ssa.BasicBlock][]ssa.Value) {
 	if fn == nil || len(fn.Blocks) == 0 || len(uses) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := map[ssa.Instruction][]ssa.Value{}
+	entry = map[*ssa.BasicBlock][]ssa.Value{}
 	for site, users := range uses {
 		if site == nil || site.Parent() != fn || deferred(users) {
 			continue
@@ -133,7 +134,13 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 				user[instr] = true
 			}
 		}
-		for instr := range deaths(fn, user, site) {
+		lasts, edges := deaths(fn, user, site)
+		for _, block := range edges {
+			if site.Block() != nil && site.Block().Dominates(block) {
+				entry[block] = append(entry[block], val)
+			}
+		}
+		for instr := range lasts {
 			// Використання аліаса в блоці, якого алокація не домінує,
 			// не має місця для free: значення LLVM там недоступне.
 			if instr.Block() == nil || site.Block() == nil || !site.Block().Dominates(instr.Block()) {
@@ -143,9 +150,12 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 		}
 	}
 	if len(out) == 0 {
-		return nil
+		out = nil
 	}
-	return out
+	if len(entry) == 0 {
+		entry = nil
+	}
+	return out, entry
 }
 
 // pointerStored звітує, що саме значення вказівника кладуть у пам'ять,
@@ -205,7 +215,7 @@ func deferred(users []ssa.Instruction) bool {
 // його не робить: кожне виконання site створює новий об'єкт, тож через
 // зворотне ребро циклу попередній об'єкт живим не лишається. Об'єкт, який
 // несе phi, має свого читача в заголовку і лишається живим.
-func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instruction) map[ssa.Instruction]struct{} {
+func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instruction) (map[ssa.Instruction]struct{}, []*ssa.BasicBlock) {
 	n := len(fn.Blocks)
 	def := site.Block()
 	used := make([]bool, n)
@@ -256,7 +266,22 @@ func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instructio
 			out[last] = struct{}{}
 		}
 	}
-	return out
+	// Значення, живе на виході блока, вмирає на ребрі в наступника, де воно
+	// вже мертве: останнє використання в циклі чи перед раннім return.
+	// Free стає на вхід наступника, якщо інших попередників у нього немає.
+	// Блок алокації сюди не йде: на його вході живе лише наступна алокація.
+	var edges []*ssa.BasicBlock
+	for _, block := range fn.Blocks {
+		if block == nil || !liveOut[block.Index] {
+			continue
+		}
+		for _, succ := range block.Succs {
+			if succ != nil && succ != def && !liveIn[succ.Index] && len(succ.Preds) == 1 {
+				edges = append(edges, succ)
+			}
+		}
+	}
+	return out, edges
 }
 
 func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
@@ -279,11 +304,17 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 }
 
 func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
-	defer p.emitOwnGoDec(b, instr)
-	sites := p.ownGoFreeAfter[instr]
-	if len(sites) == 0 {
-		return
-	}
+	p.emitOwnGoFreeSites(b, p.ownGoFreeAfter[instr])
+	p.emitOwnGoDecSites(b, p.ownGoDecAfter[instr])
+}
+
+// emitOwnGoEntryFree звільняє місця, що вмерли на ребрі в block.
+func (p *context) emitOwnGoEntryFree(b llssa.Builder, block *ssa.BasicBlock) {
+	p.emitOwnGoFreeSites(b, p.ownGoFreeEntry[block])
+	p.emitOwnGoDecSites(b, p.ownGoDecEntry[block])
+}
+
+func (p *context) emitOwnGoFreeSites(b llssa.Builder, sites []ssa.Value) {
 	for _, site := range sites {
 		ptr := p.ownGoFreePtr(b, site)
 		if ptr.IsNil() {
@@ -304,11 +335,7 @@ func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
 	}
 }
 
-func (p *context) emitOwnGoDec(b llssa.Builder, instr ssa.Instruction) {
-	sites := p.ownGoDecAfter[instr]
-	if len(sites) == 0 {
-		return
-	}
+func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 	for _, site := range sites {
 		ptr := p.ownGoFreePtr(b, site)
 		if ptr.IsNil() {

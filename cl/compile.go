@@ -252,6 +252,8 @@ type context struct {
 	ownGoInc             map[ssa.Instruction][]ssa.Value
 	ownGoFreeAfter       map[ssa.Instruction][]ssa.Value
 	ownGoDecAfter        map[ssa.Instruction][]ssa.Value
+	ownGoFreeEntry       map[*ssa.BasicBlock][]ssa.Value
+	ownGoDecEntry        map[*ssa.BasicBlock][]ssa.Value
 	ownGoDescs           map[types.Type]llssa.Expr
 }
 
@@ -849,8 +851,8 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			}
 			p.prepareExportedLocalContext(f)
 			p.bvals = make(map[ssa.Value]llssa.Expr)
-			p.ownGoFreeAfter = ownGoFreeAfter(f, p.ownGoUses, false)
-			p.ownGoDecAfter = ownGoFreeAfter(f, p.ownGoDecUses, true)
+			p.ownGoFreeAfter, p.ownGoFreeEntry = ownGoFreeAfter(f, p.ownGoUses, false)
+			p.ownGoDecAfter, p.ownGoDecEntry = ownGoFreeAfter(f, p.ownGoDecUses, true)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
 			p.prepareCooperativeSafepoints(f, isCgo)
 			p.prepareGCRoots(f, hasCtx)
@@ -1205,6 +1207,8 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	if block.Index == 0 && p.safepointEntry {
 		p.emitCooperativeSafepoint(b)
 	}
+
+	p.emitOwnGoEntryFree(b, block)
 
 	if doModInit {
 		p.initializeLocalGuards(b)
