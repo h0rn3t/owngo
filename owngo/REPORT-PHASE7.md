@@ -78,6 +78,6 @@ Debian 13 amd64, 8 ядер, Go 1.27.1, ревізія `b781a392c`. `owngo/bench
 | binarytreesarena | unmatched | 0 | 1 | 112 |
 | fannkuchredux | unmatched | 0 | 1 | 112 |
 
-Рядок `module` — одна вибірка: `binarytrees.Run.func3`, `binarytrees/main.go:125`, 1 об'єкт, 16 байтів. Це аргумент `iterations` у `fmt.Sprintf(...)`, який упаковується в інтерфейс (`runtime.convT64`). Вибірка стоїть на рядку аргументу, місце census на цьому рядку не стоїть. В іншому прогоні — 2 об'єкти, 32 байти.
+Рядок `module` — одна вибірка: `binarytrees.Run.func3`, `binarytrees/main.go:125`, 1 об'єкт, 16 байтів. Стек вибірки — один кадр, без runtime. На рядку — аргумент `iterations` виклику `fmt.Sprintf` з рядка 124; найімовірніше, це упаковка аргументу в інтерфейс, яку pprof ставить на рядок аргументу, а census — ні. Не перевірено. В іншому прогоні — 2 об'єкти, 32 байти.
 
 Найбільша причина поза обв'язкою в кожній програмі — голий `runtime`. Найбільші стеки — структури самого runtime `gc`: `runtime.allocm` (M), `runtime.malg` (G), `runtime.makeProfStackFP` (стеки профілювальника), `runtime.gcBgMarkWorker`. У бінарнику llgo runtime інший, тож це вибірки інструмента виміру, а не алокації програми.
