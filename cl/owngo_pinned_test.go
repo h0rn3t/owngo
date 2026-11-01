@@ -31,7 +31,8 @@ func Keep() {
 	keep = &T{}
 }
 `
-	const line = "foo.go:10:24: owngo: pinned: allocation converted to unsafe.Pointer stays live until exit\n"
+	// Позиція місця — Lbrace літерала, як у діагностиках census.
+	const line = "foo.go:10:26: owngo: pinned: allocation converted to unsafe.Pointer stays live until exit\n"
 	tests := []struct {
 		name string
 		src  string

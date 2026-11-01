@@ -1,8 +1,11 @@
 package cl
 
 import (
+	"cmp"
+	"fmt"
 	"go/token"
 	"go/types"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,12 +41,23 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 		return
 	}
 	p.ownGoCat = make(map[ssa.Instruction]uint64, len(cats))
+	var pinned []token.Position
 	for site, label := range cats {
 		cat, ok := ownGoCategory(label)
 		if !ok {
 			continue
 		}
 		p.ownGoCat[site] = cat
+		if cat == ownGoPinned && p.options.OwnGoWarn != nil {
+			pinned = append(pinned, pkg.Prog.Fset.Position(site.Pos()))
+		}
+	}
+	slices.SortFunc(pinned, func(a, b token.Position) int {
+		return cmp.Or(strings.Compare(a.Filename, b.Filename), cmp.Compare(a.Line, b.Line), cmp.Compare(a.Column, b.Column))
+	})
+	for _, pos := range pinned {
+		// Попередження не зупиняє збірку: помилці запису нікуди йти.
+		_, _ = fmt.Fprintf(p.options.OwnGoWarn, "%v: owngo: pinned: allocation converted to unsafe.Pointer stays live until exit\n", pos)
 	}
 }
 

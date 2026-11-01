@@ -860,3 +860,11 @@
 - 100 місць `pinned` у збірці, усі в stdlib і рантаймі; у пакетах програм — жодного. Байти дають чотири: `mapassign_faststr`, параметр `s` — 4 960 (310 × 16, адреса параметра лише для читання іншим типом, росте з кількістю присвоєнь у мапу з рядковим ключем); `float64frombits` — 8 (те саме); `poolLocal` у `(*sync.Pool).pin`/`pinSlow` — 128 на потік, віддається мапі потоку рантайму (приріст binarytrees `10`→`14`: п'ять потоків → сім).
 - Перетворення лише в межах функції — 4 968 байтів у кожній програмі (97.5% live `pinned` binarytreesarena і fannkuchredux). Це витік на кожен виклик, у `gc` — стек. Задачі фази його не закривають (закріплене лишається закріпленим); факт іде в гейт.
 - Лишилось: P10.2.
+
+## 2026-11-01 — P10.2 Попередження компілятора
+
+- `cl.Options.OwnGoWarn io.Writer`: `prepareOwnGoFree` пише рядок `<file>:<line>:<col>: owngo: pinned: allocation converted to unsafe.Pointer stays live until exit` на кожне місце `pinned` пакета, у порядку позицій. Позиція — як у census (`Lbrace` композитного літерала).
+- `internal/build`: `OwnGoWarn = os.Stderr` лише під тегом `owngo` і лише для пакетів модуля початкових пакетів збірки. `Module.Main` замало: рантайм llgo вантажиться окремим головним модулем, і перша версія друкувала 26 місць рантайму. Попередження друкується і на кешованій збірці (cl виконується й при попаданні в кеш).
+- Тест спершу, окремим комітом `230e46e5d` (до реалізації — `unknown field OwnGoWarn`): `TestOwnGoPinnedWarning` — `pinned` (один рядок), `plain` і `notag` (жодного). Очікувану колонку виправлено з 24 (`&`) на 26 (`{`) — помилка очікування, не реалізації.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): окремий модуль з `unsafe.Pointer(&T{a: 1})` — `llgo run -tags owngo` рівно один рядок `main.go:13:26`, код 0; той самий без тегу — жодного рядка. `llgo build -a -tags owngo` binarytrees, binarytreesarena, fannkuchredux — нуль рядків (P10.1: місць модуля немає). `go test -count=1 ./cl/ -run OwnGo` — 22 `PASS`. `go vet`, `golangci-lint --new-from-rev` (`cl`, `internal/build`) — чисто.
+- Не перевірялось: повний `go test ./internal/build/` (тести збірки потребують `clang++` у PATH хука).

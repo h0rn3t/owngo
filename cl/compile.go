@@ -91,6 +91,9 @@ type Options struct {
 	// місця, яке census v1 позначає static, і runtime.NoteAlloc для купового
 	// місця з відомим розміром. Без прапорця прохід не працює.
 	OwnGoFree bool
+	// OwnGoWarn отримує рядок попередження на кожне місце pinned пакета.
+	// Збірка дає його лише пакетам головного модуля; nil — без попереджень.
+	OwnGoWarn io.Writer
 }
 
 // SetDebug sets debug flags.

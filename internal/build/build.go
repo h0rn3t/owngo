@@ -3390,6 +3390,13 @@ func preparePackageModule(ctx *context, aPkg *aPackage, verbose bool) ([]string,
 	// package C retains its direct, unqualified definitions in its own module.
 	options.CExportWrappers = needsCExportWrappers(ctx, aPkg)
 	options.StaticByteArrays = aPkg.staticByteArrays
+	// Рантайм llgo вантажиться як окремий головний модуль, тож Module.Main
+	// замало: попередження — лише для модуля пакетів, які збирає користувач.
+	if options.OwnGoFree && pkg.Module != nil && slices.ContainsFunc(ctx.initial, func(root *packages.Package) bool {
+		return root.Module != nil && root.Module.Main && root.Module.Path == pkg.Module.Path
+	}) {
+		options.OwnGoWarn = os.Stderr
+	}
 	ret, externs, err := cl.NewPackageExWithEmbedMetaOptions(
 		ctx.prog, ctx.callerTracking, ctx.patches, aPkg.rewriteVars,
 		aPkg.SSA, syntax, embedMap, needMeta, options)
