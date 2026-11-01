@@ -745,3 +745,13 @@
 - Місця binarytreesarena і fannkuchredux мають позначку `rc-shared: move`: замикання йде аргументом у `(*sync.WaitGroup).Go`, а `go` стоїть там. Отримувач і `f` самого `WaitGroup.Go` — `rc-shared: go`.
 - Код не змінювався; Go-тести не проганялись.
 - Лишилось: P9.2; трек — S1.
+
+## 2026-11-01 — P9.2 `IncShared` і `DecShared` під тегом `owngo`
+
+- `runtime/internal/runtime/account_owngo.go`: `SharedDesc{Size, Cat, Edges}` і `SharedEdge{Off, Shared, Cyclic, Size}`. `IncShared` — атомарне додавання. `DecShared` — атомарне віднімання (послідовно узгоджене: release, а на нулі acquire), на нулі — каскад: дитина `Shared` отримує атомарне зменшення і на нулі йде в стек роботи в своєму слові (три нижні біти — індекс дескриптора, як у `DecCyclic`), `Cyclic` — `DecCyclic`, інакше — `DecAccounted` з `Size`. Байти кожного вузла — у підсумок з категорією його дескриптора. Понад вісім спільних дескрипторів — звільняється лише корінь (витік, як у `DecCyclic`). `child` тепер бере зміщення.
+- Таблицю дескрипторів `DecShared` передає за значенням: з `&table` go/ssa кладе масив у купу, і прохід звільняє його як `static` (64 байти у `freed` на кожен виклик). Так досі робить `DecCyclic`.
+- Тест спершу, окремим комітом `ae0f80032`: фікстура `owngo/atomicrc`; до реалізації — `undefined symbol` для `IncShared`/`DecShared`. У коміті реалізації фікстура міряє `Freed()` і `Live` прямо навколо одного `DecShared`: перша версія з замиканнями ловила звільнення, які прохід вставляє в код самої фікстури. Для переміщеної дитини `cyclic` надбавку таблиці `DecCyclic` фікстура калібрує викликом `DecCyclic`, що нічого не звільняє.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `llgo run -tags owngo ./owngo/atomicrc` — код 0, `atomicrc-ok 1000000` (8 × 10⁶ пар, ланцюг 10⁷ у горутині, кільце живе, переміщені `cyclic` і `rc-local` звільнені, `zerobase`, nil). `-O0 -asan` з `ASAN_OPTIONS=detect_leaks=0` на `100000` — код 0 без тексту ASan. Мутація: неатомарний `IncShared` — `pairs freed delta 0 want 16`, код 1. `go test -count=1 ./cl/ -run OwnGo` — 19 `PASS`. `golangci-lint --new-from-rev` (`runtime`, теги `owngo,nogc`) — одне `unsafeptr` на стек роботи `DecShared`, той самий прийом, що три старі в `DecCyclic`.
+- Знайдено, не виправлено: `owngo/cyclicdeep` на HEAD до зміни теж падає (`freed 16064 want 16000` на `1000`) — таблиця `DecCyclic` у `freed` з P8.0.
+- Не перевірялось: macOS; TSan.
+- Лишилось: P9.3; трек — S1.

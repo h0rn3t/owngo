@@ -72,6 +72,9 @@ func incShared(ptr unsafe.Pointer)
 //go:linkname decShared github.com/xgo-dev/llgo/runtime/internal/runtime.DecShared
 func decShared(ptr unsafe.Pointer, desc unsafe.Pointer)
 
+//go:linkname decCyclic github.com/xgo-dev/llgo/runtime/internal/runtime.DecCyclic
+func decCyclic(ptr unsafe.Pointer, desc unsafe.Pointer)
+
 //go:linkname noteAlloc github.com/xgo-dev/llgo/runtime/internal/runtime.NoteAlloc
 func noteAlloc(size uintptr, cat int32)
 
@@ -103,16 +106,19 @@ func newSNode(val int) *snode {
 	return s
 }
 
-// check звіряє зміну Freed і сумарне зменшення Live після f з want.
-func check(name string, want uint64, f func()) {
+// check звіряє зміну Freed (want плюс extra — службові байти рантайму)
+// і сумарне зменшення Live категорій rc-local … cyclic (want) навколо
+// одного DecShared. Виклик прямий: звільнення, які прохід вставляє в код
+// самої фікстури, у різницю не потрапляють.
+func check(name string, want, extra uint64, ptr, desc unsafe.Pointer) {
 	before := freed()
 	var liveBefore [catCyclic + 1]uint64
 	for cat := catRCLocal; cat <= catCyclic; cat++ {
 		liveBefore[cat] = live(cat)
 	}
-	f()
-	if got := freed() - before; got != want {
-		fmt.Fprintln(os.Stderr, name, "freed delta", got, "want", want)
+	decShared(ptr, desc)
+	if got := freed() - before; got != want+extra {
+		fmt.Fprintln(os.Stderr, name, "freed delta", got, "want", want+extra)
 		os.Exit(1)
 	}
 	var dropped uint64
@@ -138,74 +144,73 @@ func main() {
 
 	// Вісім горутин по n пар на одному об'єкті: жодна пара не звільняє,
 	// останній DecShared звільняє рівно раз.
-	check("pairs", uint64(snodeDesc.size), func() {
-		obj := unsafe.Pointer(newSNode(0))
-		var wg sync.WaitGroup
-		for range 8 {
-			incShared(obj)
-			wg.Go(func() {
-				for range n {
-					incShared(obj)
-					decShared(obj, desc)
-				}
+	obj := unsafe.Pointer(newSNode(0))
+	var wg sync.WaitGroup
+	for range 8 {
+		incShared(obj)
+		wg.Go(func() {
+			for range n {
+				incShared(obj)
 				decShared(obj, desc)
-			})
-		}
-		wg.Wait()
-		decShared(obj, desc)
-	})
+			}
+			decShared(obj, desc)
+		})
+	}
+	wg.Wait()
+	check("pairs", uint64(snodeDesc.size), 0, obj, desc)
 
 	// Ланцюг: одиниця кожного вузла переміщена в next, один DecShared
 	// у горутині з типовим стеком.
 	length := 10 * n
-	check("chain", uint64(length)*uint64(snodeDesc.size), func() {
-		head := newSNode(0)
-		tail := head
-		for i := 1; i < length; i++ {
-			next := newSNode(i)
-			tail.next = next
-			tail = next
-		}
-		done := make(chan struct{})
-		go func() {
-			decShared(unsafe.Pointer(head), desc)
-			close(done)
-		}()
-		<-done
-	})
+	head := newSNode(0)
+	tail := head
+	for i := 1; i < length; i++ {
+		next := newSNode(i)
+		tail.next = next
+		tail = next
+	}
+	done := make(chan struct{})
+	go func() {
+		check("chain", uint64(length)*uint64(snodeDesc.size), 0, unsafe.Pointer(head), desc)
+		close(done)
+	}()
+	<-done
 
 	// Кільце двох спільних вузлів лишається живим.
-	check("ring", 0, func() {
-		a, b := newSNode(1), newSNode(2)
-		a.next = b
-		incShared(unsafe.Pointer(a))
-		b.next = a
-		decShared(unsafe.Pointer(a), desc)
-	})
+	a, b := newSNode(1), newSNode(2)
+	a.next = b
+	incShared(unsafe.Pointer(a))
+	b.next = a
+	check("ring", 0, 0, unsafe.Pointer(a), desc)
 
 	// Переміщені діти cyclic і rc-local звільняються каскадом.
+	p := (*pnode)(allocCounted(unsafe.Sizeof(pnode{})))
+	*p = pnode{}
+	noteAlloc(unsafe.Sizeof(pnode{}), catRCShared)
+	c := (*cnode)(allocCounted(unsafe.Sizeof(cnode{})))
+	*c = cnode{val: 3}
+	noteAlloc(unsafe.Sizeof(cnode{}), catCyclic)
+	leaf := (*int)(allocCounted(unsafe.Sizeof(0)))
+	*leaf = 4
+	noteAlloc(unsafe.Sizeof(0), catRCLocal)
+	p.ring, p.leaf = c, leaf
+	// DecCyclic тримає свою таблицю в купі й звільняє її як static, тож
+	// Freed росте і без звільнення вузла. Надбавку дає DecCyclic на вузлі
+	// з двома посиланнями.
+	probe := allocCounted(unsafe.Sizeof(cnode{}))
+	*(*cnode)(probe) = cnode{}
+	incShared(probe)
+	before := freed()
+	decCyclic(probe, unsafe.Pointer(&cnodeDesc))
+	table := freed() - before
 	want := uint64(pnodeDesc.size + cnodeDesc.size + unsafe.Sizeof(0))
-	check("moved", want, func() {
-		p := (*pnode)(allocCounted(unsafe.Sizeof(pnode{})))
-		*p = pnode{}
-		noteAlloc(unsafe.Sizeof(pnode{}), catRCShared)
-		c := (*cnode)(allocCounted(unsafe.Sizeof(cnode{})))
-		*c = cnode{val: 3}
-		noteAlloc(unsafe.Sizeof(cnode{}), catCyclic)
-		leaf := (*int)(allocCounted(unsafe.Sizeof(0)))
-		*leaf = 4
-		noteAlloc(unsafe.Sizeof(0), catRCLocal)
-		p.ring, p.leaf = c, leaf
-		decShared(unsafe.Pointer(p), unsafe.Pointer(&pnodeDesc))
-	})
+	check("moved", want, table, unsafe.Pointer(p), unsafe.Pointer(&pnodeDesc))
 
-	check("zerobase", 0, func() {
-		z := allocCounted(0)
-		incShared(z)
-		decShared(z, desc)
-		decShared(z, desc)
-		incShared(nil)
-		decShared(nil, desc)
-	})
+	z := allocCounted(0)
+	incShared(z)
+	decShared(z, desc)
+	check("zerobase", 0, 0, z, desc)
+	incShared(nil)
+	check("nil", 0, 0, nil, desc)
 	println("atomicrc-ok", n)
 }

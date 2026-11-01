@@ -218,7 +218,7 @@ func cyclicIndex(table *[cyclicTableLen]*CyclicDesc, desc *CyclicDesc) int {
 // стало нулем. Корінь у стек не йде: його ребра вже зняті.
 func trialEdges(node unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer, table *[cyclicTableLen]*CyclicDesc, work uintptr) uintptr {
 	for _, e := range desc.Edges {
-		c := child(node, e)
+		c := child(node, e.Off)
 		if c == nil {
 			continue
 		}
@@ -234,7 +234,7 @@ func trialEdges(node unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer, tabl
 
 func restoreEdges(node unsafe.Pointer, desc *CyclicDesc) {
 	for _, e := range desc.Edges {
-		if c := child(node, e); c != nil {
+		if c := child(node, e.Off); c != nil {
 			*countWord(c)++
 		}
 	}
@@ -248,13 +248,146 @@ func cyclicFreed(size uintptr) {
 	atomic.Add(&liveBytes[CatCyclic], -uint64(size))
 }
 
+// SharedDesc описує тип об'єкта спільної втечі для DecShared: байти
+// користувача, категорію підсумку і поля, які проходить каскад.
+type SharedDesc struct {
+	Size  uintptr
+	Cat   int32
+	Edges []SharedEdge
+}
+
+// SharedEdge — поле об'єкта спільної втечі зі зміщенням Off від вказівника
+// користувача. Ненульова ціль — вказівник AllocCounted. Shared задає дитину
+// спільної втечі: вона отримує DecShared. Інакше Cyclic задає переміщену
+// дитину cyclic: DecCyclic. Без обох дитина отримує DecAccounted з Size.
+type SharedEdge struct {
+	Off    uintptr
+	Shared *SharedDesc
+	Cyclic *CyclicDesc
+	Size   uintptr
+}
+
+// IncShared атомарно збільшує слово перед ptr на одиницю. zerobase і nil
+// лишаються.
+func IncShared(ptr unsafe.Pointer) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+		return
+	}
+	atomic.Add(countWord(ptr), 1)
+}
+
+// DecShared атомарно зменшує слово перед ptr на одиницю. Зменшення
+// послідовно узгоджене, тож воно має порядок release, а на нулі — acquire:
+// усе, що інші горутини робили з об'єктом до своїх DecShared, видно тій,
+// що звільняє. На нулі об'єкт і все, що досяжне лише через нього, бачить
+// одна горутина: каскад проходить поля за desc, звільняє вузли через
+// FreeRoot на адресу слова і переносить їхні байти користувача в підсумок
+// FreeAccounted з категорією дескриптора вузла. zerobase і nil нічого не
+// звільняють.
+//
+// Пробного видалення немає: цикл через спільний об'єкт лишається живим.
+// Обхід пам'яті не виділяє і стеком не росте: слово вузла, що став нулем,
+// тримає посилання стеку роботи, а три нижні біти — індекс дескриптора
+// в таблиці досяжних з desc дескрипторів.
+func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+		return
+	}
+	root := countWord(ptr)
+	if atomic.Sub(root, 1) != 1 {
+		return
+	}
+	table, ok := sharedTable(desc)
+	if !ok {
+		// Без каскаду: діти лишають свої слова. Це витік, не звільнення живого.
+		FreeRoot(unsafe.Pointer(root))
+		if desc != nil {
+			sharedFreed(desc.Size, desc.Cat)
+		}
+		return
+	}
+	var sizes [catCount]uintptr
+	*root = 0
+	work := uintptr(ptr)
+	for work != 0 {
+		node := unsafe.Pointer(work)
+		w := countWord(node)
+		work = *w &^ cyclicIndexMask
+		d := table[*w&cyclicIndexMask]
+		for _, e := range d.Edges {
+			c := child(node, e.Off)
+			switch {
+			case c == nil:
+			case e.Shared != nil:
+				if cw := countWord(c); atomic.Sub(cw, 1) == 1 {
+					*cw = work | uintptr(sharedIndex(table, e.Shared))
+					work = uintptr(c)
+				}
+			case e.Cyclic != nil:
+				DecCyclic(c, e.Cyclic)
+			default:
+				DecAccounted(c, e.Size)
+			}
+		}
+		FreeRoot(unsafe.Pointer(w))
+		if d.Cat >= 0 && d.Cat < catCount {
+			sizes[d.Cat] += d.Size
+		}
+	}
+	for cat, size := range sizes {
+		sharedFreed(size, int32(cat))
+	}
+}
+
+// sharedTable збирає дескриптори, досяжні з desc за ребрами Shared, з desc
+// під індексом 0. false — дескриптора немає або їх понад вісім. Таблиця
+// йде за значенням: адреса локального масиву перенесла б його в купу.
+func sharedTable(desc *SharedDesc) (table [cyclicTableLen]*SharedDesc, ok bool) {
+	if desc == nil {
+		return table, false
+	}
+	table[0] = desc
+	n := 1
+	for i := 0; i < n; i++ {
+		for _, e := range table[i].Edges {
+			if e.Shared == nil || sharedIndex(table, e.Shared) >= 0 {
+				continue
+			}
+			if n == cyclicTableLen {
+				return table, false
+			}
+			table[n] = e.Shared
+			n++
+		}
+	}
+	return table, true
+}
+
+func sharedIndex(table [cyclicTableLen]*SharedDesc, desc *SharedDesc) int {
+	for i, d := range table {
+		if d == desc {
+			return i
+		}
+	}
+	return -1
+}
+
+func sharedFreed(size uintptr, cat int32) {
+	if size == 0 || cat < 0 || cat >= catCount {
+		return
+	}
+	atomic.Add(&freedBytes, uint64(size))
+	atomic.Add(&liveBytes[cat], -uint64(size))
+}
+
 func countWord(ptr unsafe.Pointer) *uintptr {
 	return (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
 }
 
-// child повертає ціль ребра e вузла ptr або nil, якщо ціль не рахується.
-func child(ptr unsafe.Pointer, e CyclicEdge) unsafe.Pointer {
-	c := *(*unsafe.Pointer)(unsafe.Add(ptr, e.Off))
+// child повертає ціль поля зі зміщенням off вузла ptr або nil, якщо ціль
+// не рахується.
+func child(ptr unsafe.Pointer, off uintptr) unsafe.Pointer {
+	c := *(*unsafe.Pointer)(unsafe.Add(ptr, off))
 	if c == unsafe.Pointer(&zerobase) {
 		return nil
 	}
