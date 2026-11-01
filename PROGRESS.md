@@ -808,3 +808,12 @@
 - Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./owngo/census/` і `-race` — зелені; `go test -count=1 ./cl/ -run OwnGo` — 21 `PASS`. ASan-фікстури — ті самі коди (10 живих — 0, 8 UAF — 1 і `heap-use-after-free`); binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan. `atomicrc`, `cyclicdeep` — код 0. `go vet`, `golangci-lint --new-from-rev` — чисто.
 - Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS; TSan; профіль `perf`.
 - Лишилось: P9.8 (гейт фази 9); трек — S1.
+
+## 2026-11-01 — P9.8 Гейт фази 9
+
+- Замір корпусу на `f95bb2189` (`llgo run -tags owngo`, `/usr/lib/llvm-23/bin` першим у `PATH`): вивід побайтно як у `go run`. Live корпусу 61 569 → 28 473 (−53.8%): `pinned` 15 928 (55.9%), `rc-local` 10 449 (36.7%), `rc-shared` 2 024 (7.1%), `cyclic` 72, `static` 0.
+- Рішення в `INTENT.md` («Рішення гейта фази 9»): ківш — `pinned`. Шлях і поріг збігаються: `pinned` перетинає половину нової бази (14 236.5), а проти бази P8.8 — ні, і текст рішення порівнює з базою цього заміру.
+- Склад залишку `rc-shared` binarytreesarena і fannkuchredux (176 / 168) знято тимчасовою гістограмою P9.1: місця `move` через `wg.Go`, `var wg` (`shared`) і комірка отримувача `wg` у самому `WaitGroup.Go`.
+- У `PLAN.md` — розділ фази 10 з P10.0 (план після гейта).
+- Код не змінювався; Go-тести не проганялись (крім тимчасової гістограми).
+- Лишилось: P10.0; трек — S1.
