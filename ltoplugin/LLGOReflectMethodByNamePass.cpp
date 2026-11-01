@@ -594,6 +594,13 @@ bool collectIndexConstants(Value *Index, SmallVectorImpl<Constant *> &Constants,
 std::optional<uint64_t>
 firstIndexArrayBound(ArrayRef<Constant *> Bases, Type *ElemTy,
                      const DataLayout &DL) {
+  // LLVM 23 канонізує GEP до байтового типу кроку ([16 x i8] замість рядкової
+  // структури), тому межу рахуємо за розмірами, а не за рівністю типів.
+  if (!ElemTy->isSized())
+    return std::nullopt;
+  uint64_t ElemSize = DL.getTypeAllocSize(ElemTy).getFixedValue();
+  if (ElemSize == 0)
+    return std::nullopt;
   std::optional<uint64_t> Bound;
   for (Constant *Base : Bases) {
     int64_t Offset = 0;
@@ -601,9 +608,12 @@ firstIndexArrayBound(ArrayRef<Constant *> Bases, Type *ElemTy,
     auto *GV = Root ? dyn_cast<GlobalVariable>(Root->stripPointerCasts())
                     : nullptr;
     auto *ArrayTy = GV ? dyn_cast<ArrayType>(GV->getValueType()) : nullptr;
-    if (!ArrayTy || ArrayTy->getElementType() != ElemTy || Offset != 0)
+    if (!ArrayTy || Offset != 0)
       return std::nullopt;
-    uint64_t Current = ArrayTy->getNumElements();
+    uint64_t ArraySize = DL.getTypeAllocSize(ArrayTy).getFixedValue();
+    if (ArraySize % ElemSize != 0)
+      return std::nullopt;
+    uint64_t Current = ArraySize / ElemSize;
     if (Bound && *Bound != Current)
       return std::nullopt;
     Bound = Current;
@@ -707,8 +717,14 @@ bool enumerateLocalStringSlots(Value *Ptr, const DataLayout &DL,
   if (!Base || Base->isArrayAllocation())
     return false;
 
+  // LLVM 23 канонізує GEP до байтового типу кроку ([16 x i8]), тому
+  // порівнюємо крок GEP із розміром елемента масиву, а не самі типи.
   auto *ArrayTy = dyn_cast<ArrayType>(Base->getAllocatedType());
-  if (!ArrayTy || ArrayTy->getElementType() != GEP->getSourceElementType())
+  Type *StrideTy = GEP->getSourceElementType();
+  if (!ArrayTy || !StrideTy->isSized())
+    return false;
+  uint64_t ElemSize = DL.getTypeAllocSize(ArrayTy->getElementType());
+  if (ElemSize == 0 || DL.getTypeAllocSize(StrideTy) != ElemSize)
     return false;
 
   SmallVector<Constant *, 4> Indices;
@@ -716,7 +732,6 @@ bool enumerateLocalStringSlots(Value *Ptr, const DataLayout &DL,
                              ArrayTy->getNumElements()))
     return false;
 
-  uint64_t ElemSize = DL.getTypeAllocSize(ArrayTy->getElementType());
   for (Constant *Index : Indices) {
     auto *IndexC = dyn_cast<ConstantInt>(Index);
     if (!IndexC || IndexC->isNegative())
