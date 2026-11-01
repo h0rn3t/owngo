@@ -82,7 +82,7 @@ func Place(funcs []*ssa.Function) (
 			}
 			// Слово без Dec нічого не дає, а вказівник, що виходить із функції,
 			// мусить лишатися початком блока malloc.
-			if !decSite(site, label, pts, ctx.noDec) {
+			if !decSite(site, label, pts, ctx) {
 				continue
 			}
 			counted[site] = struct{}{}
@@ -123,8 +123,8 @@ func countedAlloc(site ssa.Instruction, label string) bool {
 	return head == "rc-local"
 }
 
-func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, noDec map[ssa.Instruction]bool) bool {
-	if noDec[site] || interiorPoints(site, pts) {
+func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, v1 *v1Ctx) bool {
+	if v1.noDec[site] || interiorEscapes(site, pts, v1) {
 		return false
 	}
 	_, reason, _ := strings.Cut(label, ": ")
@@ -204,16 +204,85 @@ func closureUses(users []ssa.Instruction) (extra []ssa.Instruction, leaves bool)
 	return extra, false
 }
 
-func interiorPoints(site ssa.Instruction, pts map[ssa.Value]siteSet) bool {
+// interiorEscapes звітує, що похідний вказівник на місце може пережити
+// функцію або вказати не на нього. Dec стоїть на самому місці після
+// останнього читача, а читачі включають вживання похідних (readers), тож
+// похідний вказівник, що лишається в функції бази, місця не блокує.
+func interiorEscapes(site ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx) bool {
 	for val, set := range pts {
-		if _, ok := set[site]; !ok {
+		if _, ok := set[site]; !ok || !interiorPointer(val) {
 			continue
 		}
-		if interiorPointer(val) {
+		if !ownBase(val, site, pts) || !localInterior(val, v1) {
 			return true
 		}
 	}
 	return false
+}
+
+// ownBase звітує, що ланцюг адрес val починається зі значення функції
+// місця, яке вказує лише на це місце: саме місце чи читання змінної,
+// захопленої замиканням.
+func ownBase(val ssa.Value, site ssa.Instruction, pts map[ssa.Value]siteSet) bool {
+	base := val
+	for {
+		switch x := base.(type) {
+		case *ssa.FieldAddr:
+			base = x.X
+		case *ssa.IndexAddr:
+			base = x.X
+		case *ssa.Slice:
+			base = x.X
+		case *ssa.ChangeType:
+			base = x.X
+		case *ssa.Convert:
+			base = x.X
+		default:
+			set := pts[base]
+			_, ok := set[site]
+			return base.Parent() == site.Parent() && len(set) == 1 && ok
+		}
+	}
+}
+
+// localInterior звітує, що val лише читають, пишуть за ним, порівнюють,
+// беруть від нього похідний вказівник (той перевіряється окремо) і
+// передають параметру, який лише читається.
+func localInterior(val ssa.Value, v1 *v1Ctx) bool {
+	refs := val.Referrers()
+	if refs == nil {
+		return true
+	}
+	for _, ref := range *refs {
+		switch ref := ref.(type) {
+		case *ssa.DebugRef, *ssa.FieldAddr, *ssa.IndexAddr, *ssa.Slice, *ssa.ChangeType, *ssa.Convert:
+		case *ssa.UnOp:
+			if ref.Op != token.MUL {
+				return false
+			}
+		case *ssa.Store:
+			if ref.Val == val {
+				return false
+			}
+		case *ssa.BinOp:
+			if ref.Op != token.EQL && ref.Op != token.NEQ {
+				return false
+			}
+		case *ssa.Call:
+			if name, ok := builtinName(&ref.Call); ok {
+				if name != "len" && name != "cap" && name != "copy" {
+					return false
+				}
+				continue
+			}
+			if !readOnlyArg(&ref.Call, val, v1) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func interiorPointer(v ssa.Value) bool {
