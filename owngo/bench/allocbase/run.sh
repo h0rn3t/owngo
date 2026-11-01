@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Міряє кандидатів алокатора фази 8 (P8.2): libc malloc (відлік без бази),
-# BDWGC без збирання, прототип size-class (sizeclass.c) і mimalloc 3.0.1.
+# BDWGC без збирання, алокатор owngo (P8.3, runtime/internal/runtime/_wrap/
+# owngo_alloc.c) і mimalloc 3.0.1.
 # Окрема збірка з -fsanitize=address перевіряє базу через
 # __sanitizer_get_allocated_begin. Кожен замір — окремий процес, найкращий
 # із RUNS. Таблиця Markdown — у stdout. Код 1 — неправильна база.
@@ -31,7 +32,7 @@ else
 fi
 
 # Системний libmimalloc підміняє malloc, тож mimalloc — окремий бінарник.
-cflags=(-O2 -pthread "$dir/main.c" "$dir/sizeclass.c" -lgc)
+cflags=(-O2 -pthread "$dir/main.c" "$dir/../../../runtime/internal/runtime/_wrap/owngo_alloc.c" -lgc)
 clang "${cflags[@]}" -o "$work/allocbase"
 clang -DALLOCBASE_MIMALLOC "${cflags[@]}" "${mi[@]}" -o "$work/allocbase-mimalloc"
 clang -DALLOCBASE_ASAN -fsanitize=address "${cflags[@]}" -o "$work/allocbase-asan"
@@ -69,7 +70,7 @@ base() {
 
 echo "| Кандидат | База | Пари, 1 потік | Пари, 8 потоків | Дерево 20 | Пікова RSS дерева | RSS після звільнення |"
 echo "| --- | --- | ---: | ---: | ---: | ---: | ---: |"
-for cand in libc bdwgc sizeclass mimalloc; do
+for cand in libc bdwgc owngo mimalloc; do
 	name=$cand
 	[[ $cand == mimalloc ]] && name=$mi_name
 	b=$(base "$(bin "$cand")" "$cand")

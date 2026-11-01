@@ -667,3 +667,13 @@
 - Встановлено `libmimalloc-dev` (Debian 13). Джерело mimalloc 3.0.1 з GitHub — лише для заміру з латкою, за дозволом розробника; у репозиторій не входить.
 - Код компілятора й рантайму не змінювався, Go-тести не проганялись.
 - Лишилось: P8.3; трек — S1.
+
+## 2026-11-01 — P8.3 Алокатор і `Base` під тегом `owngo`
+
+- Тести спершу, окремим комітом `c80ebedb8`: фікстура `owngo/basefind` і кейси `owngoasan` у `TestApplyOwngoTag`. До реалізації: лінкер — `undefined symbol: runtime.Base`, тест тегу — `"owngo,nogc", want "owngo,nogc,owngoasan"`.
+- Алокатор `runtime/internal/runtime/_wrap/owngo_alloc.c` (`alloc_owngo.go`, тег `owngo && !owngoasan && (linux || darwin)`). Додано до прототипу: порожня сторінка йде в пул, а понад 4 МіБ — у `madvise`; звільнення з чужого потоку йде через `remote` і `pending`; власник сторінки — купа, і купу мертвого потоку бере новий потік; діапазони великих блоків використовуються повторно; регіон обмежено `RLIMIT_AS`/2; метадані сторінки вирівняні на 128 байтів. `FreeDeferNode` тепер теж іде через алокатор: раніше вузол `defer` з `AllocU` звільняв libc `free`. Під `-asan` збірка додає тег `owngoasan`, і `Base` = `__sanitizer_get_allocated_begin`.
+- `allocbase` міряє повний алокатор, прототип `sizeclass.c` видалено. 1 потік: 0.081 с (mimalloc з латкою 0.103). 8 потоків: 0.167 с (0.130). Пікова RSS дерева: 66 816 КіБ (67 328), після звільнення 6 012 КіБ. Умову `INTENT.md` виконано.
+- binarytrees `18` під `taskset -c 0`: 4.94 → 3.48 с. На `21` (8 ядер): 57.07 → 48.56 с, вивід як очікуваний.
+- Прийняття, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `basefind` — код 0 і під `-tags owngo`, і під `-O0 -asan`. `go test -count=1 ./cl/ -run OwnGo` — 16 `PASS`. `go test ./internal/build/ -run 'TestApplyOwngoTag|TestASan'` — `PASS`. ASan-фікстури — ті самі коди виходу, що в P8.0. Корпус: вивід побайтно як очікуваний, `freed` як у P8.0. `go vet` і `golangci-lint --new-from-rev` — чисто (у рантаймі лишились старі `possible misuse of unsafe.Pointer` в інших файлах).
+- Не перевірялось: TSan (пісочниця не вимикає ASLR); повні `go test ./cl/` і `./internal/build/`; macOS. На macOS фікстури `owngo/counted` і `owngo/runtimefree` (через `malloc_size`) під новим алокатором впадуть.
+- Лишилось: P8.4; трек — S1.

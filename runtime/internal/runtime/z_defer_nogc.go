@@ -1,4 +1,4 @@
-//go:build nogc && !baremetal && (!wasm || !llgo.wasm.gc.linear)
+//go:build nogc && !baremetal && (!wasm || !llgo.wasm.gc.linear) && !(owngo && !owngoasan && (linux || darwin))
 
 /*
  * Copyright (c) 2025 The XGo Authors (xgo.dev). All rights reserved.

@@ -1523,15 +1523,21 @@ func cSharedImportLibraryArgs(toolchain crosscompile.NativeToolchain, output str
 }
 
 // applyOwngoTag вибирає файли рантайму nogc, коли заданий тег owngo.
+// Під -asan ще додає owngoasan: купу тоді веде malloc ASan, а не алокатор owngo.
 func applyOwngoTag(conf *Config) {
 	tags := splitSourcePatchBuildTags(conf.Tags)
-	if !slices.Contains(tags, "owngo") || slices.Contains(tags, "nogc") {
+	if !slices.Contains(tags, "owngo") {
 		return
 	}
-	if conf.Tags != "" {
-		conf.Tags += ","
+	for _, tag := range []string{"nogc", "owngoasan"} {
+		if slices.Contains(tags, tag) || tag == "owngoasan" && !conf.ASan {
+			continue
+		}
+		if conf.Tags != "" {
+			conf.Tags += ","
+		}
+		conf.Tags += tag
 	}
-	conf.Tags += "nogc"
 }
 
 // DefaultBuildTags returns the build tags LLGo always enables.

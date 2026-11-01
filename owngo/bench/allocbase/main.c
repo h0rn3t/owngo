@@ -4,7 +4,8 @@
 //
 //   allocbase <кандидат> base|seq|par|tree
 //
-// Кандидати: libc, bdwgc, sizeclass. Збірка з -DALLOCBASE_MIMALLOC — лише
+// Кандидати: libc, bdwgc, owngo (алокатор рантайму,
+// runtime/internal/runtime/_wrap/owngo_alloc.c). Збірка з -DALLOCBASE_MIMALLOC — лише
 // mimalloc: системний libmimalloc підміняє malloc, тож у бінарнику libc його
 // бути не може. Збірка з -fsanitize=address (-DALLOCBASE_ASAN) — лише asan,
 // режим base.
@@ -22,7 +23,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "sizeclass.h"
+// Алокатор owngo (P8.3) — runtime/internal/runtime/_wrap/owngo_alloc.c.
+void *owngo_malloc(size_t size);
+void owngo_free(void *p);
+void *owngo_base(const void *p);
 
 #ifdef ALLOCBASE_ASAN
 #include <sanitizer/allocator_interface.h>
@@ -75,7 +79,7 @@ static const candidate candidates[] = {
 #else
 	{"libc", no_init, malloc, free, NULL},
 	{"bdwgc", gc_init, gc_alloc, gc_free, gc_base},
-	{"sizeclass", sc_init, sc_malloc, sc_free_block, sc_base},
+	{"owngo", no_init, owngo_malloc, owngo_free, owngo_base},
 #endif
 };
 
