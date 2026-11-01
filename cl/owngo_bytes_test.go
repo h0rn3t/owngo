@@ -44,3 +44,15 @@ func TestOwnGoSharedBytes(t *testing.T) {
 		})
 	}
 }
+
+// TestOwnGoPinnedBytes — P10.4: закріплене місце в межах функції, через межу
+// виклику і в полі звільненого батька лишається серед живих; фікстура сама
+// звіряє Freed, Live(pinned) і суму живих.
+func TestOwnGoPinnedBytes(t *testing.T) {
+	conf := build.NewDefaultConf(build.ModeRun)
+	conf.Tags = "owngo"
+	out, err := cltest.RunAndCaptureWithConf("../owngo/bytes/pinned", "", conf)
+	if err != nil {
+		t.Errorf("llgo run -tags owngo ./owngo/bytes/pinned error = %v, want exit 0\n%s", err, out)
+	}
+}
