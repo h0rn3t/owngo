@@ -9,7 +9,12 @@ import (
 // Замикання робить місце rc-local: без нього місце static і звільняється free.
 const interiorSrc = `package p
 
-type S struct{ a, f int }
+type S struct {
+	a, f int
+	u    func()
+}
+
+func (s *S) m() {}
 
 var g *int
 
@@ -103,6 +108,27 @@ func written() int {
 	return get()
 }
 
+func capturedReturned() *S {
+	s := new(S)
+	get := func() int { return s.a }
+	_ = get()
+	return s
+}
+
+// Форма flag.NewFlagSet: значення методу в полі, місце повертається.
+func methodReturned() *S {
+	s := new(S)
+	s.u = s.m
+	return s
+}
+
+func capturedPanics() {
+	s := new(S)
+	get := func() int { return s.a }
+	_ = get()
+	panic(s)
+}
+
 func viaPhi(c bool) int {
 	s := new(S)
 	get := func() int { return s.a }
@@ -135,6 +161,10 @@ func TestInteriorDec(t *testing.T) {
 		{"unknown", false},
 		{"written", false},
 		{"viaPhi", false},
+		// Позначка closure сильніша за return і panic, але місце живе після функції.
+		{"capturedReturned", false},
+		{"methodReturned", false},
+		{"capturedPanics", false},
 	}
 	for _, tt := range tests {
 		site := interiorSite(t, pkg.Func(tt.fn))
