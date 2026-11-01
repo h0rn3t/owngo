@@ -677,3 +677,12 @@
 - Прийняття, `/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`: `basefind` — код 0 і під `-tags owngo`, і під `-O0 -asan`. `go test -count=1 ./cl/ -run OwnGo` — 16 `PASS`. `go test ./internal/build/ -run 'TestApplyOwngoTag|TestASan'` — `PASS`. ASan-фікстури — ті самі коди виходу, що в P8.0. Корпус: вивід побайтно як очікуваний, `freed` як у P8.0. `go vet` і `golangci-lint --new-from-rev` — чисто (у рантаймі лишились старі `possible misuse of unsafe.Pointer` в інших файлах).
 - Не перевірялось: TSan (пісочниця не вимикає ASLR); повні `go test ./cl/` і `./internal/build/`; macOS. На macOS фікстури `owngo/counted` і `owngo/runtimefree` (через `malloc_size`) під новим алокатором впадуть.
 - Лишилось: P8.4; трек — S1.
+
+## 2026-11-01 — P8.4 Статична база
+
+- `decSite` (`owngo/census/static.go`): `interiorPoints` замінено на `interiorEscapes`. Похідний вказівник не блокує місце, якщо його база — значення функції місця, що вказує лише на нього (саме місце чи читання захопленої змінної), і його лише читають, пишуть за ним, порівнюють, звужують далі, передають `len`/`cap`/`copy` чи параметру, що лише читається (`readOnlyArg`). `deaths` не змінено: `readers` уже містять вживання похідних, тож `Dec` стоїть після останнього `p`.
+- Знайдено і виправлено давню діру: `closure` у позначці ховає `return` і `panic`, і захоплене місце, яке функція повертає, отримувало `Dec`. Відкрилась на `flag.NewFlagSet` під `-asan` (корпус binarytrees). `exitSites` ставить таким місцям і їхньому вмісту `noDec`.
+- Тести спершу, окремими комітами (`8333aac39`, потім тест діри): `TestInteriorDec` у `owngo/census`, `TestOwnGoInteriorDec` у `cl`; обидва падали до реалізації.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./owngo/census/` і `go test -race` — зелені; `go test -count=1 ./cl/ -run OwnGo` — 17 `PASS`. `go vet`, `golangci-lint --new-from-rev` — чисто. `census.sh` — код 0. Місць з `Dec` у корпусі (усі пакети): 430/438/421 → 452/460/443, у пакетах програм без змін; таблиця — `owngo/REPORT-PHASE8.md`. ASan-фікстури — ті самі коди виходу, корпус під ASan — код 0. `owngo freed` корпусу — як у P8.0.
+- Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS.
+- Лишилось: P8.5; трек — S1.

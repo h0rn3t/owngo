@@ -78,3 +78,23 @@ ASan: `__sanitizer_get_allocated_begin` дає правильну базу в к
 **Регресії немає.** `go test -count=1 ./cl/ -run OwnGo` — 16 `PASS`, очікувані числа без змін. ASan (`-O0 -asan`, `detect_leaks=0`): `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo` — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`. Корпус під `-tags owngo` — вивід побайтно як очікуваний, `owngo freed` як у таблиці P8.0: binarytrees `10` 2 229 472, binarytreesarena `10` 3 354, fannkuchredux `7` 2 817; під ASan — код 0 без тексту ASan. fannkuchredux `7` без тега і з `nogc` — вивід як очікуваний.
 
 **Не зроблено.** Фікстури `owngo/counted` і `owngo/runtimefree` (P1.2, P3.1) перевіряють звільнення через `malloc_size` macOS. Під новим алокатором на macOS вони впадуть, бо блок уже не з `malloc`. На Linux вони не запускались і раніше. Злиття діапазонів пулу не зроблено: додати, якщо фрагментація регіону стане помітною.
+
+## P8.4 Статична база
+
+**Правило.** `decSite` (`owngo/census/static.go`) більше не відкидає місце за будь-який `FieldAddr`, `IndexAddr` чи `Slice` (`interiorPoints` видалено). Похідний вказівник блокує місце, лише якщо (`interiorEscapes`): його ланцюг адрес починається не зі значення функції місця, що вказує лише на це місце (`ownBase`), або його вживає щось крім читання, запису за ним, порівняння, наступного похідного, `len`, `cap`, `copy` і параметра, який лише читається (`readOnlyArg`: не `Unknown`, без `Side`, `Content` і ознаки запису P6.7). Тож запис самого вказівника, повернення, замикання, `go`, канал, phi, невідомий виклик і параметр з втечею чи записом місце блокують, як раніше. Базою вважається і читання змінної, захопленої замиканням: інакше rc-local місце з похідним вказівником не трапляється, бо rc-local дає саме замикання. `Dec` стоїть на самому місці, а `readers` уже містять вживання похідних, тож `deaths` (`cl/owngo_free.go`) не змінено. Пошуку бази в рантаймі немає.
+
+**Знайдена діра.** Позначка тримає лише найсильнішу причину, і `closure` сильніша за `return` і `panic`. Місце, яке функція і захоплює замиканням, і повертає, отримувало `Dec` — і до P8.4 (тест `capturedReturned`). У корпусі це `flag.NewFlagSet`: `f.Usage = f.defaultUsage; return f`. Раніше місце рятував лише `interiorPoints` через `f.Usage`. Після зміни правила binarytrees і binarytreesarena під `-asan` впали з `heap-use-after-free` у `flag`, а `freed` зріс на 112 байтів — це був звільнений `FlagSet`. Виправлення: `exitSites` додає до `noDec` кожне місце, яке віддають `return` чи `panic`, разом з його вмістом.
+
+**Тести.** Спершу, окремими комітами. `TestInteriorDec` (`owngo/census`): `Dec` є для `&s.f`, `&s.in.f`, `&s.f` у параметрі, що лише читається, зрізу `new([16]byte)` і зрізу результату `append`; немає для повернутого, записаного в глобальну і в локальну комірку, захопленого, переданого невідомому виклику і параметру з записом, phi; немає для захопленого місця, яке повертається чи йде в `panic`. `TestOwnGoInteriorDec` (`cl`): `DecAccounted` місця `S` стоїть у блоці виходу після останнього `load` через `p`, а не в блоці останнього `s`; повернутий `&s.f` `Dec` не отримує. До реалізації обидва падали.
+
+**Місця з `Dec` чи `free`.** `owngo/bench/census.sh` — код 0, категорії не змінились (позначок `decSite` не торкається). Число місць пораховано `census.Place` по кожному пакету програми (`go/packages`, `ssautil.AllPackages`), як `prepareOwnGoFree`: `free` — ключі `staticUses`, `Dec` — ключі `decUses`.
+
+| Програма | Пакет програми, `free` / `Dec` | Усі пакети, `free` | `Dec` до | `Dec` після | з них знято `exitSites` | додано P8.4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| binarytrees | 0 / 2 | 1 236 | 430 | 452 | 2 | 24 |
+| binarytreesarena | 1 / 10 | 1 237 | 438 | 460 | 2 | 24 |
+| fannkuchredux | 2 / 6 | 1 199 | 421 | 443 | 2 | 24 |
+
+Нові місця — у stdlib; у пакетах програм похідних вказівників на rc-local місця немає. Байтів P8.4 у корпусі не додає: `owngo freed` — як у P8.0 (binarytrees `10` 2 229 472, `14` 52 430 178, binarytreesarena `10` 3 354, fannkuchredux `7` 2 817). Байти — задача P8.6.
+
+**Безпека.** `-O0 -asan`, `detect_leaks=0`: `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo` і корпус — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`. Корпус під `-tags owngo` — вивід як очікуваний (binarytrees — як у `go`).
