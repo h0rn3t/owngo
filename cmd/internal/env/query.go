@@ -393,7 +393,7 @@ func joinIfSet(base string, elem ...string) string {
 
 func envAssignment(goos, name, value string) string {
 	value = sanitizeValue(value)
-	return name + "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+	return name + "='" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func sanitizeValue(value string) string {

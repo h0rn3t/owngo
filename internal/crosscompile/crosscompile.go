@@ -285,7 +285,15 @@ func driverDebugInfoPolicy() DebugInfoPolicy {
 }
 
 func nativeDebugInfoPolicy(toolchain NativeToolchain) DebugInfoPolicy {
-	return driverDebugInfoPolicy()
+	policy := driverDebugInfoPolicy()
+	switch toolchain.Linker {
+	case LinkerFlavorMachO, LinkerFlavorELFLLD:
+	default:
+		// Для невідомого лінкера (наприклад, freebsd) не передаємо -Wl,-S:
+		// його підтримку не перевірено.
+		policy.OmitLinkFlags = nil
+	}
+	return policy
 }
 
 func (p DebugInfoPolicy) CanRetain() bool {
