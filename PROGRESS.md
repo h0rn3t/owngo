@@ -884,3 +884,9 @@
 - `TestOwnGoPinnedBytes` (`cl/owngo_bytes_test.go`). Фікстури зелені одразу: поведінку дали P10.3 і правила кільця; реалізації задача не має.
 - Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./cl/ -run TestOwnGoPinnedBytes` — `PASS`; з зіпсованим очікуванням (`boxPins` freed 0) — `boxPins freed delta 8 want 0`, `FAIL`. `-O0 -asan`, `ASAN_OPTIONS=detect_leaks=0`: `pinnedlive` — код 0 без тексту ASan; усі 19 фікстур `owngo/asan` — 11 живих код 0, 8 UAF код 1 і `heap-use-after-free`.
 - Мутація (тимчасова, не в репозиторії): `PlaceAll` дає закріпленому свіжому результату слово і `DecAccounted` — `pinnedlive` код 1, `heap-use-after-free` на `main.go:71` (читання об'єкта `callerPins`). Перша спроба мутації — зняти `pinned` з мітки виклику — звільнення не дала: місце однаково має глобальну втечу через `uintptr`.
+
+## 2026-11-01 — P10.5 Безсмертні об'єкти — за розкладом P10.1
+
+- (а) Досяжне з глобальної змінної — 2 704 з 17 952 байтів live `pinned` + `rc-shared` корпусу (15.1%): `poolLocal` 1 024 (P10.1) і ініціалізація пакетів 560 × 3 (P9.1). (б) Тимчасовий лічильник (адреси місць `pinned`/`rc-shared`/`cyclic` без слова; 335 / 458 / 385 блоків) — 0 викликів `Inc`, `DecAccounted`, `DecCyclic`, `IncShared`, `DecShared` на них.
+- Рішення в `owngo/REPORT-PHASE10.md`: задачі немає. Рядок «Безсмертні об'єкти» в `INTENT.md` має цей факт.
+- Перша версія лічильника не збиралась: місце-зріз дає `Slice`, а не вказівник; адресу береться як у `FreeAccounted` (`ownGoFreePtr`). Патч повернуто.
