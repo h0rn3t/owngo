@@ -56,3 +56,14 @@ func TestOwnGoPinnedBytes(t *testing.T) {
 		t.Errorf("llgo run -tags owngo ./owngo/bytes/pinned error = %v, want exit 0\n%s", err, out)
 	}
 }
+
+// TestOwnGoPinnedMapKey — P11.0: присвоєння, читання і видалення в мапі з
+// рядковим ключем і ключем-вказівником не додають байтів до live pinned.
+func TestOwnGoPinnedMapKey(t *testing.T) {
+	conf := build.NewDefaultConf(build.ModeRun)
+	conf.Tags = "owngo"
+	out, err := cltest.RunAndCaptureWithConf("../owngo/bytes/mapkey", "", conf)
+	if err != nil {
+		t.Errorf("llgo run -tags owngo ./owngo/bytes/mapkey error = %v, want exit 0\n%s", err, out)
+	}
+}
