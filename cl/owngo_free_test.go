@@ -1,6 +1,7 @@
 package cl
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -703,5 +704,50 @@ func earlyReturn(ok bool) int {
 		if got := accountedFrees(mustNamedFunction(t, mod, name).String()); got != want {
 			t.Errorf("%s accounted frees = %d, want %d", name, got, want)
 		}
+	}
+}
+
+// TestOwnGoInteriorDec — P8.4: похідний вказівник, що лишається в функції
+// бази, місця не блокує, і Dec стоїть після останнього вживання p := &s.f,
+// а не після останнього s. Похідний вказівник, що повертається, Dec забирає.
+func TestOwnGoInteriorDec(t *testing.T) {
+	const src = `package foo
+
+type S struct{ a, f int }
+
+func interiorLast(n int) int {
+	s := &S{a: n}
+	get := func() int { return s.a }
+	p := &s.f
+	acc := get()
+	for i := 0; i < n; i++ {
+		*p += i
+	}
+	return acc + *p
+}
+
+func interiorReturned(n int) *int {
+	s := &S{a: n}
+	get := func() int { return s.a }
+	_ = get()
+	return &s.f
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	// S — 16 байтів; комірка змінної s — 8.
+	decS := regexp.MustCompile(`runtime\.DecAccounted"\(ptr %\d+, i64 16\)`)
+	body := mustNamedFunction(t, mod, "foo.interiorLast").String()
+	decs := decS.FindAllStringIndex(body, -1)
+	if len(decs) != 1 {
+		t.Fatalf("foo.interiorLast Dec of S count = %d, want 1\n%s", len(decs), body)
+	}
+	if load := strings.LastIndex(body, "load i64, ptr"); decs[0][0] < load {
+		t.Errorf("foo.interiorLast Dec of S at %d, want after the last load through p at %d\n%s", decs[0][0], load, body)
+	}
+	if body := mustNamedFunction(t, mod, "foo.interiorReturned").String(); decS.MatchString(body) {
+		t.Errorf("foo.interiorReturned has Dec of S, want it live in the caller\n%s", body)
 	}
 }
