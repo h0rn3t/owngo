@@ -85,7 +85,7 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 		linkCallAliases(instrs, pts, v1)
 		contents = v1.contents
 	}
-	pinned := pinnedSites(instrs, pts)
+	pinned := pinnedSites(instrs, pts, v1)
 	escape, notes := directEscape(instrs, pts, v1)
 	if v1 != nil {
 		markAppendAlias(instrs, pts, escape, notes, v1)
@@ -264,9 +264,30 @@ func builtinResult(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pt
 	return grow(call, pts[call.Call.Args[0]])
 }
 
-func pinnedSites(instrs []ssa.Instruction, pts map[ssa.Value]siteSet) map[ssa.Instruction]bool {
+func pinnedSites(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx) map[ssa.Instruction]bool {
 	pinned := map[ssa.Instruction]bool{}
 	for _, instr := range instrs {
+		// Аргумент параметра, який викликаний перетворює в unsafe.Pointer і
+		// зберігає в глобальну змінну чи канал. Перетворення без збереження
+		// (race.Acquire у WaitGroup) місце не закріплює: воно лише позичене.
+		// Місце з такою втечею й так не звільняється, тож змінюється лише ківш.
+		if call, ok := instr.(ssa.CallInstruction); ok && v1 != nil {
+			if callee := call.Common().StaticCallee(); callee != nil {
+				sum := summaryOf(v1, callee)
+				for i, arg := range call.Common().Args {
+					idx := summaryIndex(call.Common(), i)
+					if sum == nil || idx >= len(sum.Params) || !sum.Params[idx].Pinned {
+						continue
+					}
+					if side := escapeKind(sum.Params[idx].Side); side != escapeGlobal && side != escapeChannel {
+						continue
+					}
+					for site := range pts[arg] {
+						pinned[site] = true
+					}
+				}
+			}
+		}
 		conv, ok := instr.(*ssa.Convert)
 		if !ok {
 			continue
