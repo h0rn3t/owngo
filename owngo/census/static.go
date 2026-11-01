@@ -78,7 +78,10 @@ func Place(funcs []*ssa.Function) (
 				}
 				continue
 			}
-			if !countedAlloc(site, label) && !countedImplicit(site, label) {
+			// Внутрішній cyclic не входить у кільце: його вказівник не початок
+			// вузла. Dec на ньому — DecCyclic з дескриптором бази.
+			cyclicInterior := label == "cyclic" && interiorCall(site)
+			if !countedAlloc(site, label) && !countedImplicit(site, label) && !cyclicInterior {
 				continue
 			}
 			// Слово без Dec нічого не дає, а вказівник, що виходить із функції,
@@ -113,6 +116,12 @@ func Place(funcs []*ssa.Function) (
 		counted = nil
 	}
 	return cats, staticUses, decUses, counted, inc
+}
+
+// interiorCall: місце — виклик зі свіжим внутрішнім результатом.
+func interiorCall(site ssa.Instruction) bool {
+	call, ok := site.(*ssa.Call)
+	return ok && freshSite(site) && InteriorBase(call) != nil
 }
 
 func countedAlloc(site ssa.Instruction, label string) bool {
@@ -399,7 +408,7 @@ func cyclicSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 	cand := siteSet{}
 	for site, label := range msg {
 		alloc, ok := site.(*ssa.Alloc)
-		if (!ok || !alloc.Heap) && !freshSite(site) || label != "cyclic" {
+		if (!ok || !alloc.Heap) && !freshSite(site) || label != "cyclic" || interiorCall(site) {
 			continue
 		}
 		if len(CyclicFields(pointee(site.(ssa.Value).Type()))) > 0 {

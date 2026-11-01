@@ -819,13 +819,13 @@ func keepField() *int {
 	}
 	for _, tt := range tests {
 		body := mustNamedFunction(t, mod, tt.fn).String()
-		if got := strings.Count(body, `"runtime.Base"(`); got != 1 {
+		if got := strings.Count(body, `runtime.Base"(`); got != 1 {
 			t.Errorf("%s runtime.Base count = %d, want 1\n%s", tt.fn, got, body)
 		}
 		if got := len(tt.dec.FindAllString(body, -1)); got != 1 {
 			t.Errorf("%s Dec count = %d, want 1\n%s", tt.fn, got, body)
 		}
-		if base, dec := strings.Index(body, `"runtime.Base"(`), tt.dec.FindStringIndex(body); dec != nil && base > dec[0] {
+		if base, dec := strings.Index(body, `runtime.Base"(`), tt.dec.FindStringIndex(body); dec != nil && base > dec[0] {
 			t.Errorf("%s runtime.Base at %d after Dec at %d\n%s", tt.fn, base, dec[0], body)
 		}
 	}

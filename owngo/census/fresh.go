@@ -2,6 +2,7 @@ package census
 
 import (
 	"go/token"
+	"go/types"
 	"slices"
 	"strings"
 
@@ -57,7 +58,7 @@ func publishFresh(prog *ssa.Program, by map[*ssa.Function]bool) {
 }
 
 // freshCandidate: тіло є, функція не узагальнена і не з рантайму llgo,
-// результат один і це вказівник. MakeMap, MakeChan і подібні викликача
+// результат один і це вказівник чи зріз (зріз — лише внутрішній). MakeMap, MakeChan і подібні викликача
 // звільняються FreeAccounted з початку блока, тож рантайм слова не дає.
 func freshCandidate(fn *ssa.Function) bool {
 	if fn == nil || fn.Blocks == nil || fn.Pkg == nil || fn.TypeParams().Len() > 0 || fn.Origin() != nil {
@@ -68,16 +69,198 @@ func freshCandidate(fn *ssa.Function) bool {
 		return false
 	}
 	results := fn.Signature.Results()
-	return results.Len() == 1 && pointee(results.At(0).Type()) != nil
+	if results.Len() != 1 {
+		return false
+	}
+	_, slice := results.At(0).Type().Underlying().(*types.Slice)
+	return slice || pointee(results.At(0).Type()) != nil
 }
 
+// freshBody: кожен return віддає власний об'єкт. Внутрішній результат не
+// змішується з базовим, і всі його бази одного типу: викликач бере розмір
+// і дескриптор з цього типу.
 func freshBody(fn *ssa.Function, fresh map[*ssa.Function]bool) bool {
-	for _, block := range fn.Blocks {
-		for _, instr := range block.Instrs {
-			ret, ok := instr.(*ssa.Return)
-			if ok && !ownedResult(ret.Results[0], fresh, map[ssa.Value]bool{}) {
+	interior := returnsInterior(fn)
+	var base types.Type
+	for _, ret := range returns(fn) {
+		if !interior {
+			if !ownedResult(ret.Results[0], fresh, map[ssa.Value]bool{}) {
 				return false
 			}
+			continue
+		}
+		alloc := ownedInterior(ret.Results[0], fresh)
+		if alloc == nil || base != nil && !types.Identical(base, alloc.Type()) {
+			return false
+		}
+		base = alloc.Type()
+	}
+	return true
+}
+
+func returns(fn *ssa.Function) []*ssa.Return {
+	var out []*ssa.Return
+	for _, block := range fn.Blocks {
+		if ret, ok := block.Instrs[len(block.Instrs)-1].(*ssa.Return); ok {
+			out = append(out, ret)
+		}
+	}
+	return out
+}
+
+// returnsInterior: хоч один return віддає &x.f чи x[i:j].
+func returnsInterior(fn *ssa.Function) bool {
+	for _, ret := range returns(fn) {
+		if len(ret.Results) == 1 && interiorBase(ret.Results[0]) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// InteriorBase повертає тип об'єкта, на який вказує свіжий внутрішній
+// результат виклику call, або nil, якщо результат не внутрішній чи тіла
+// викликаної функції немає. Слово цього об'єкта знаходить runtime.Base.
+func InteriorBase(call *ssa.Call) types.Type {
+	callee := call.Call.StaticCallee()
+	if callee == nil || callee.Blocks == nil || !returnsInterior(callee) {
+		return nil
+	}
+	for _, ret := range returns(callee) {
+		if alloc := interiorBase(ret.Results[0]); alloc != nil {
+			return pointee(alloc.Type())
+		}
+	}
+	return nil
+}
+
+// interiorBase повертає Alloc в основі ланцюга FieldAddr і Slice з хоча б
+// одного кроку, або nil.
+func interiorBase(v ssa.Value) *ssa.Alloc {
+	steps := 0
+	for {
+		switch x := v.(type) {
+		case *ssa.FieldAddr:
+			v = x.X
+		case *ssa.Slice:
+			v = x.X
+		case *ssa.Alloc:
+			if steps == 0 {
+				return nil
+			}
+			return x
+		default:
+			return nil
+		}
+		steps++
+	}
+}
+
+// ownedInterior повертає купový Alloc x, якщо v — &x.f чи x[i:j] всередині
+// x, а x і похідні від нього лише повертаються, читаються, пишуться і
+// порівнюються. Поле обходу не повертається і не читається, як в ownedUses.
+func ownedInterior(v ssa.Value, fresh map[*ssa.Function]bool) *ssa.Alloc {
+	alloc := interiorBase(v)
+	if alloc == nil || !alloc.Heap || !insideBlock(v) || !derivedUses(alloc, alloc, fresh) {
+		return nil
+	}
+	return alloc
+}
+
+// insideBlock: вказівник ланцюга лежить усередині блока, а не на його кінці,
+// де runtime.Base знайшов би наступний блок. Поле нульового розміру і зріз
+// з невідомим чи крайнім low відкидаються.
+func insideBlock(v ssa.Value) bool {
+	low := int64(0)
+	for {
+		switch x := v.(type) {
+		case *ssa.FieldAddr:
+			if sizes.Sizeof(pointee(x.Type())) == 0 {
+				return false
+			}
+			low, v = 0, x.X
+			continue
+		case *ssa.Slice:
+			if x.Low != nil {
+				c, ok := x.Low.(*ssa.Const)
+				if !ok {
+					return false
+				}
+				low += c.Int64()
+			}
+			v = x.X
+			if _, ok := v.(*ssa.Slice); ok {
+				continue
+			}
+			arr, ok := pointee(v.Type()).Underlying().(*types.Array)
+			if !ok || low >= arr.Len() {
+				return false
+			}
+			low = 0
+			continue
+		}
+		return true
+	}
+}
+
+// sizes лише відрізняє нульовий розмір, а він від платформи не залежить.
+var sizes = types.SizesFor("gc", "amd64")
+
+// derivedUses: val — base чи похідний від нього вказівник, і кожне його
+// вживання тримає об'єкт у функції або повертає похідний вказівник.
+func derivedUses(val ssa.Value, base *ssa.Alloc, fresh map[*ssa.Function]bool) bool {
+	refs := val.Referrers()
+	if refs == nil {
+		return true
+	}
+	for _, ref := range *refs {
+		switch ref := ref.(type) {
+		case *ssa.DebugRef:
+		case *ssa.Return:
+			if val == base {
+				return false
+			}
+		case *ssa.BinOp:
+			if ref.Op != token.EQL && ref.Op != token.NEQ {
+				return false
+			}
+		case *ssa.UnOp:
+			if ref.Op != token.MUL {
+				return false
+			}
+		case *ssa.Store:
+			if ref.Addr != val {
+				return false
+			}
+			// Запис цілого об'єкта копіює й поля обходу, тож лише константа.
+			if _, ok := ref.Val.(*ssa.Const); val == base && !ok {
+				return false
+			}
+		case *ssa.FieldAddr:
+			if ringField(ref) {
+				if !ownedField(ref, true, fresh) {
+					return false
+				}
+				continue
+			}
+			if !derivedUses(ref, base, fresh) {
+				return false
+			}
+		case *ssa.IndexAddr:
+			if !derivedUses(ref, base, fresh) {
+				return false
+			}
+		case *ssa.Slice:
+			if !derivedUses(ref, base, fresh) {
+				return false
+			}
+		case *ssa.Call:
+			name, ok := builtinName(&ref.Call)
+			if !ok || name != "len" && name != "cap" && name != "copy" {
+				return false
+			}
+		default:
+			return false
 		}
 	}
 	return true
@@ -100,6 +283,10 @@ func freshAllocs(fn *ssa.Function) []*ssa.Alloc {
 			}
 		case *ssa.Alloc:
 			out = append(out, v)
+		case *ssa.FieldAddr, *ssa.Slice:
+			if alloc := interiorBase(v); alloc != nil {
+				out = append(out, alloc)
+			}
 		}
 	}
 	for _, block := range fn.Blocks {
@@ -138,7 +325,9 @@ func ownedResult(v ssa.Value, fresh map[*ssa.Function]bool, seen map[ssa.Value]b
 
 func freshCall(call *ssa.Call, fresh map[*ssa.Function]bool) bool {
 	callee := call.Call.StaticCallee()
-	if callee == nil {
+	// Внутрішній результат — не початок об'єкта: ні повернути його як свій,
+	// ні перемістити в поле обходу не можна.
+	if callee == nil || callee.Blocks != nil && returnsInterior(callee) {
 		return false
 	}
 	if fresh[callee] {
@@ -253,7 +442,8 @@ func (v1 *v1Ctx) freshSites(instrs []ssa.Instruction) map[ssa.Instruction]bool {
 		if !ok || call.Call.StaticCallee() == nil {
 			continue
 		}
-		if sum := summaryOf(v1, call.Call.StaticCallee()); sum == nil || !sum.Fresh {
+		sum := summaryOf(v1, call.Call.StaticCallee())
+		if sum == nil || !sum.Fresh || sum.Interior && InteriorBase(call) == nil {
 			continue
 		}
 		if out == nil {

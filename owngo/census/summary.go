@@ -129,6 +129,7 @@ func packageSummaries(pass *analysis.Pass, funcs []*ssa.Function) map[*ssa.Funct
 	for fn := range freshResults(funcs) {
 		if s := cur[fn]; s != nil {
 			s.Fresh = true
+			s.Interior = returnsInterior(fn)
 		}
 	}
 	for _, fn := range funcs {

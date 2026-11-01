@@ -345,7 +345,7 @@ func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 			continue
 		}
 		if instr, ok := site.(ssa.Instruction); ok && p.ownGoCat[instr] == ownGoCyclic {
-			p.callDecCyclic(b, ptr, site.Type().Underlying().(*types.Pointer).Elem())
+			p.callDecCyclic(b, ptr, ownGoElem(site))
 			continue
 		}
 		p.callOwnGoAccount(b, "DecAccounted", ptr, p.ownGoSizeExpr(b, site), 0)
@@ -457,12 +457,27 @@ func (p *context) ownGoSiteSize(site ssa.Value) (uint64, bool) {
 	if (!ok || !alloc.Heap) && !ownGoFreshCall(site) {
 		return 0, false
 	}
-	ptr, ok := types.Unalias(site.Type()).Underlying().(*types.Pointer)
-	if !ok {
+	elem := ownGoElem(site)
+	if elem == nil {
 		return 0, false
 	}
-	n := p.prog.SizeOf(p.type_(ptr.Elem(), llssa.GoDecl))
+	n := p.prog.SizeOf(p.type_(elem, llssa.GoDecl))
 	return n, n > 0
+}
+
+// ownGoElem повертає тип об'єкта місця: для свіжого внутрішнього результату —
+// тип бази у викликаній функції, інакше — тип за вказівником місця.
+func ownGoElem(site ssa.Value) types.Type {
+	if call, ok := site.(*ssa.Call); ok {
+		if base := census.InteriorBase(call); base != nil {
+			return base
+		}
+	}
+	ptr, ok := types.Unalias(site.Type()).Underlying().(*types.Pointer)
+	if !ok {
+		return nil
+	}
+	return ptr.Elem()
 }
 
 func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr, size llssa.Expr, cat uint64) {
@@ -551,6 +566,9 @@ func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
 		return llssa.Nil
 	}
 	if ownGoFreshCall(site) {
+		if census.InteriorBase(site.(*ssa.Call)) != nil {
+			return p.ownGoInteriorPtr(b, expr)
+		}
 		return expr
 	}
 	switch site.(type) {
@@ -577,6 +595,22 @@ func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
 		}
 		return llssa.Nil
 	}
+}
+
+// ownGoInteriorPtr повертає вказівник користувача блока AllocCounted, усередині
+// якого лежить expr: runtime.Base дає адресу слова, користувач — за словом.
+func (p *context) ownGoInteriorPtr(b llssa.Builder, expr llssa.Expr) llssa.Expr {
+	if _, ok := expr.Type.RawType().Underlying().(*types.Slice); ok {
+		expr = b.SliceData(expr)
+	}
+	unsafePtr := types.Typ[types.UnsafePointer]
+	sig := types.NewSignatureType(nil, nil, nil,
+		types.NewTuple(types.NewVar(token.NoPos, nil, "ptr", unsafePtr)),
+		types.NewTuple(types.NewVar(token.NoPos, nil, "base", unsafePtr)),
+		false)
+	dst := p.type_(unsafePtr, llssa.GoDecl)
+	word := b.Call(p.runtimeFunc("Base", sig), b.PtrCast(dst, expr))
+	return b.Advance(word, p.prog.IntVal(p.prog.SizeOf(p.prog.Uintptr()), p.prog.Int()))
 }
 
 func (p *context) ownGoWillFree(v ssa.Value) bool {

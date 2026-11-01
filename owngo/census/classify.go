@@ -421,7 +421,14 @@ func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned boo
 	if note.kind == k && note.word != "" {
 		reason = note.word
 	}
-	if cyclic(instr.(ssa.Value).Type(), mode, universe) {
+	typ := instr.(ssa.Value).Type()
+	if call, ok := instr.(*ssa.Call); ok {
+		// Свіжий внутрішній результат звільняється як об'єкт, на який вказує.
+		if base := InteriorBase(call); base != nil {
+			typ = types.NewPointer(base)
+		}
+	}
+	if cyclic(typ, mode, universe) {
 		if k == escapeNone {
 			return "cyclic"
 		}
