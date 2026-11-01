@@ -67,3 +67,15 @@ func TestOwnGoPinnedMapKey(t *testing.T) {
 		t.Errorf("llgo run -tags owngo ./owngo/bytes/mapkey error = %v, want exit 0\n%s", err, out)
 	}
 }
+
+// TestOwnGoPinnedTypePun — P11.0.1: type-pun у межах функції (math.Float64bits,
+// strconv, код модуля) не додає байтів до live pinned; адреса, що втікає в
+// глобальну змінну, лишається pinned.
+func TestOwnGoPinnedTypePun(t *testing.T) {
+	conf := build.NewDefaultConf(build.ModeRun)
+	conf.Tags = "owngo"
+	out, err := cltest.RunAndCaptureWithConf("../owngo/bytes/typepun", "", conf)
+	if err != nil {
+		t.Errorf("llgo run -tags owngo ./owngo/bytes/typepun error = %v, want exit 0\n%s", err, out)
+	}
+}
