@@ -838,3 +838,10 @@
 - Тести: рядки darwin/amd64 з таблиць `cl`, `ssa`, `internal/build`, `crosscompile`, `xtool/llvm`, `plan9asm`, `test/goroot` і три таймаути в `xfail.yaml`; `ptrbytes` без `darwin/amd64`. Перевірки об'єктного формату Mach-O x86_64 (`dwarfcompress`, `binaryfixture`) лишено, як і PE після Windows.
 - Перевірено: `go build ./...`, `go vet` по зачеплених пакетах, цільові `go test` зелені; `test_ci_workflows.py` — ті самі 8 локальних падінь `test_go_suite_scheduling…`, що й до змін.
 - Лишилось: `dev/mise.lock` містить записи `macos-x64` — це лок-файл mise, не чіпали.
+
+## 2026-11-01 — mandelbrot: порт Rust #4 на Go, Rust #4 у порівнянні
+
+- На прохання розробника. `owngo/bench/mandelbrot` — порт Rust #4 (Matt Watson та ін.), Revised BSD у `LICENSE`: `[8]float64` замість `F64x8`, ті самі 12×4+1 ітерацій і ранній вихід, рядки — пул робітників на атомарному лічильнику. Добутки в `float64(…)`, щоб не злилися в FMA. `owngo/bench/mandelbrotrust` — Rust #4 без змін.
+- Тести: `200` і `203` побайтно як `testdata/expected-200.pbm`, SHA-256 виводу `16000` як `expected-16000.sha256` (обидва — вивід Rust #4), `0` і `7` — `P4\n0 0\n`. `go test -race`, `go vet`, `golangci-lint` — чисто. `-O0 -asan` на `200` — код 0, вивід як очікуваний, тексту ASan немає.
+- `owngo/bench/compare-mandelbrot.sh 16000 3` (і крок у `owngo-binarytrees.yml`), найкращий із трьох: owngo `-Os` 1.13 с, owngo `-O2 -lto full` 0.69 с, llgo 0.97 с, `GOAMD64=v2 go` 1.57 с, Rust #4 0.57 с; RSS 32–37 МБ, вивід збігається. Таблиця — `owngo/REPORT-BENCH.md`, рядок — у README.
+- Знайдено: `append(out, make([]byte, n)...)` у llgo виділяє тимчасовий буфер (RSS 66 МБ проти 33 у `go`); порт переписано на одну алокацію, компілятор не чіпали.

@@ -54,8 +54,9 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 | [binary-trees 21](owngo/REPORT-BINARYTREES.md) | 5.61 с | 56.36 с | 0.67 с (#5: арена bumpalo + rayon) | 571 / 688 / 322 МБ |
 | binary-trees 21, Go з ручною ареною ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.47 с | 0.43 с | 0.67 с (той самий #5) | 227 / 358 / 322 МБ |
 | [fannkuch-redux 12](owngo/REPORT-BENCH.md) | 3.11 с | 6.17 с; 2.48 с з `-O2 -lto full` | 2.18 с (#6: rayon, SSE4) | 11 / 11 / 11 МБ |
+| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.57 с | 1.13 с; 0.69 с з `-O2 -lto full` | 0.57 с (#4: rayon, AVX) | 33 / 36 / 32 МБ |
 
-Вивід усіх програм побайтно збігається з очікуваним. Rust #5 для binary-trees кладе дерева в арену, тож з Go #2 без змін (рядок 1) це не порівняння звільнення по одному вузлу. Рядок 2 — той самий алгоритм, де Go-код сам тримає вузли в арені, як Rust: так `owngo` швидший за Rust. `fannkuch-redux` — порт Rust #6 на Go. Команди: `owngo/bench/compare-fannkuchredux.sh 12 3` і збірки зі звіту binary-trees.
+Вивід усіх програм побайтно збігається з очікуваним. Rust #5 для binary-trees кладе дерева в арену, тож з Go #2 без змін (рядок 1) це не порівняння звільнення по одному вузлу. Рядок 2 — той самий алгоритм, де Go-код сам тримає вузли в арені, як Rust: так `owngo` швидший за Rust. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4 (2026-11-01). Команди: `owngo/bench/compare-fannkuchredux.sh 12 3`, `owngo/bench/compare-mandelbrot.sh 16000 3` і збірки зі звіту binary-trees.
 
 ## Збірка і запуск
 
