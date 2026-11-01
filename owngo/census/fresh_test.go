@@ -2,6 +2,7 @@ package census
 
 import (
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -121,10 +122,13 @@ func buildOnePackage(t *testing.T, path, src string, mode ssa.BuilderMode) *ssa.
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
 	tpkg := types.NewPackage(path, "p")
-	if err := types.NewChecker(&types.Config{}, fset, tpkg, info).Files([]*ast.File{file}); err != nil {
+	if err := types.NewChecker(&types.Config{Importer: importer.Default()}, fset, tpkg, info).Files([]*ast.File{file}); err != nil {
 		t.Fatal(err)
 	}
 	prog := ssa.NewProgram(fset, mode)
+	for _, imp := range tpkg.Imports() {
+		prog.CreatePackage(imp, nil, nil, true)
+	}
 	pkg := prog.CreatePackage(tpkg, []*ast.File{file}, info, true)
 	prog.Build()
 	return pkg
