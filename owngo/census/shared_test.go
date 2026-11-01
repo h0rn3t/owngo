@@ -79,6 +79,19 @@ func treeLeak() {
 	gtree = t
 }
 
+func closureArgs() {
+	var c Counter
+	go func(d int) { c.Add(d) }(1)
+}
+
+func mixed() {
+	var c Counter
+	go func() { c.Add(1) }()
+	f := func() { c.Add(2) }
+	go f()
+	f()
+}
+
 func treeParam(p *Tree) int {
 	var t *Tree
 	go func() { t = p }()
@@ -122,6 +135,8 @@ func TestSharedGo(t *testing.T) {
 		{fn: "treeLeak", local: "t", shared: true},
 		{fn: "treeGoLeak", local: "t", shared: true},
 		{fn: "treeParam", local: "t", shared: true},
+		{fn: "closureArgs", local: "c", shared: true},
+		{fn: "mixed", local: "c"},
 	}
 	for _, tt := range tests {
 		fn := pkg.Func(tt.fn)

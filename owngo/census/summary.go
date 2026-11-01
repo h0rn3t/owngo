@@ -4,6 +4,7 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
+	"strings"
 	"sync"
 
 	"golang.org/x/tools/go/analysis"
@@ -290,10 +291,73 @@ func unknownSummary(fn *ssa.Function) *Summary {
 		}
 	}
 	s := &Summary{Params: make([]Param, n)}
+	borrow := fn != nil && fn.Blocks == nil && runtimeBorrow(fn.String())
 	for i := range s.Params {
+		if borrow && i == 0 {
+			s.Params[i].Writes = true
+			continue
+		}
 		s.Params[i].Unknown = true
 	}
 	return s
+}
+
+// escapeHint: fn — internal/abi.Escape, підказка escape-аналізу gc.
+// Запис у глобальну змінну під alwaysFalse не виконується ніколи, тож
+// вказівник іде лише в результат.
+func escapeHint(fn *ssa.Function) bool {
+	origin := fn.Origin()
+	if origin == nil {
+		origin = fn
+	}
+	if origin.Pkg == nil || origin.Name() != "Escape" || len(fn.Params) != 1 {
+		return false
+	}
+	path := origin.Pkg.Pkg.Path()
+	return path == "internal/abi" || strings.HasSuffix(path, "/internal/lib/internal/abi")
+}
+
+// runtimeBorrows — функції stdlib без тіла, які рантайм llgo реалізує через
+// linkname і які перший параметр-вказівник лише позичають на час виклику.
+// Семафор ключує свій стан адресою як uintptr. synctest.associate кладе
+// вказівник у мапу лише ключем і лише всередині бульбашки synctest.
+var runtimeBorrows = map[string]bool{
+	"sync.runtime_Semacquire":               true,
+	"sync.runtime_SemacquireWaitGroup":      true,
+	"sync.runtime_SemacquireMutex":          true,
+	"sync.runtime_SemacquireRWMutex":        true,
+	"sync.runtime_SemacquireRWMutexR":       true,
+	"sync.runtime_Semrelease":               true,
+	"internal/sync.runtime_SemacquireMutex": true,
+	"internal/sync.runtime_Semrelease":      true,
+	"internal/synctest.associate":           true,
+	"internal/synctest.disassociate":        true,
+	"internal/synctest.isAssociated":        true,
+}
+
+// runtimeBorrow: перший параметр функції name лише позичається — список
+// runtimeBorrows або атомарна операція sync/atomic: її адресу llgo
+// перетворює на інструкцію LLVM. Значення StorePointer і подібних
+// лишається невідомим.
+func runtimeBorrow(name string) bool {
+	if runtimeBorrows[name] {
+		return true
+	}
+	op, ok := strings.CutPrefix(name, "sync/atomic.")
+	if !ok {
+		return false
+	}
+	for _, prefix := range []string{"CompareAndSwap", "Add", "Load", "Store", "Swap", "And", "Or"} {
+		typ, ok := strings.CutPrefix(op, prefix)
+		if !ok {
+			continue
+		}
+		switch typ {
+		case "Int32", "Int64", "Uint32", "Uint64", "Uintptr", "Pointer":
+			return true
+		}
+	}
+	return false
 }
 
 func paramsEqual(a, b []Param) bool {
@@ -383,6 +447,10 @@ func summarize(fn *ssa.Function, lookup func(*ssa.Function) *Summary, cache map[
 	sum := &Summary{Params: make([]Param, len(fn.Params))}
 	if fn.Blocks == nil {
 		return unknownSummary(fn)
+	}
+	if escapeHint(fn) {
+		sum.Params[0].Alias = []int{0}
+		return sum
 	}
 	instrs := instructions(fn)
 	var concrete map[ssa.Value][]types.Type

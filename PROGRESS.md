@@ -796,3 +796,15 @@
 - Рішення в `owngo/REPORT-PHASE9.md`: не розписується. `channel` — 0 байтів, `global`, недосяжне на виході, — 0 у кожній програмі корпусу; 584 байти `global` (ініціалізація `ffi`, `internal/cpu`, `unicode`, `syscall`) досяжні з глобальних змінних і в `gc` теж живі.
 - Код не змінювався; тести не проганялись.
 - Лишилось: P9.7; трек — S1.
+
+## 2026-11-01 — P9.7 binary-trees
+
+- binarytrees без змін: `longLivedTree` (каскад `DecShared` → `DecCyclic`), `WaitGroup`, комірка `outBuff`, параметр `maxDepth` і замикання go звільняються. `live cyclic` — 24 на `10`, `14` і `21` (було 32 784 / 524 304 / 67 108 880), `live rc-shared` — 560 (ініціалізація пакетів). Вивід `10`, `14` — як у `go run`, `21` — побайтно як `expected-21.txt`. Таблиця live корпусу поруч із P8.8 — `owngo/REPORT-PHASE9.md`.
+- Census: функції stdlib без тіла, які llgo реалізує в рантаймі і які адресу лише позичають (семафори `sync`, `internal/sync`, `internal/synctest.associate`…, атомарні `sync/atomic`), — перший параметр позичений (`runtimeBorrow`); `abi.Escape` — тотожність (`escapeHint`). Без цього отримувач `WaitGroup.Add`/`Done`/`Wait` мав `Unknown`, а потім `Side: global`. Тест `TestRuntimeBorrow`.
+- Census: діра P9.3 — go замикання з аргументами не був прямою передачею, а зв'язки неявного go не блокувались. З `WaitGroup`, що став спільним, `wg` binarytrees отримав би `IncShared` лише на двох go з трьох. Випадки `closureArgs` і `mixed` у `TestSharedGo`; без блокування `mixed` червоний.
+- `cl`: замикання, яке вживає лише go (`census.GoOwnsClosure`), рутина звільняє після повернення функції горутини, `FreeAccounted` з розміром 0, як `static` замикання. `TestOwnGoShared` перевіряє три такі рутини.
+- Фікстури P9.4 оновлено: `WaitGroup` тепер у `freed`, а не в `live rc-shared`.
+- Заміри (`owngo/REPORT-BINARYTREES.md`): `18` під `taskset -c 0` — 4.04 → 4.03 с; `21` на 8 ядрах — 50.56 → 49.38 с, RSS 479 056 → 459 900 КіБ. «До» — `c76ac2632` у тимчасовому worktree. `perf` недоступний (`perf_event_paranoid=4`); атомарні операції binarytrees — лише на go, близько десятка, тож рядка для biased RC немає.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./owngo/census/` і `-race` — зелені; `go test -count=1 ./cl/ -run OwnGo` — 21 `PASS`. ASan-фікстури — ті самі коди (10 живих — 0, 8 UAF — 1 і `heap-use-after-free`); binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan. `atomicrc`, `cyclicdeep` — код 0. `go vet`, `golangci-lint --new-from-rev` — чисто.
+- Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS; TSan; профіль `perf`.
+- Лишилось: P9.8 (гейт фази 9); трек — S1.

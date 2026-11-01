@@ -132,6 +132,14 @@ func goPasses(fn *ssa.Function, pts map[ssa.Value]siteSet, contents map[ssa.Inst
 					block(pts[arg])
 				}
 				block(pts[g.Call.Value])
+				// Зв'язки замикання горутина бачить, хоч pts замикання їх не містить.
+				for site := range pts[g.Call.Value] {
+					if mc, ok := site.(*ssa.MakeClosure); ok {
+						for _, binding := range mc.Bindings {
+							block(pts[binding])
+						}
+					}
+				}
 				continue
 			}
 			for i, v := range outer {
@@ -152,24 +160,23 @@ func goPasses(fn *ssa.Function, pts map[ssa.Value]siteSet, contents map[ssa.Inst
 }
 
 // goOperands повертає значення, які go передає, і те, чим їх бачить тіло
-// горутини: зв'язки замикання, яке вживає лише цей go, і FreeVars, або
-// аргументи статичного виклику і параметри. Інше дає nil.
+// горутини: зв'язки замикання, яке вживає лише цей go, і FreeVars, далі
+// аргументи і параметри статичної функції чи цього замикання. Інше дає nil.
 func goOperands(g *ssa.Go) (outer, inner []ssa.Value) {
 	if g.Call.IsInvoke() {
 		return nil, nil
 	}
-	if mc, ok := g.Call.Value.(*ssa.MakeClosure); ok {
-		fn, ok := mc.Fn.(*ssa.Function)
-		if !ok || fn.Blocks == nil || len(g.Call.Args) != 0 || !onlyUser(mc, g) {
+	fn, ok := g.Call.Value.(*ssa.Function)
+	if mc, isClosure := g.Call.Value.(*ssa.MakeClosure); isClosure {
+		fn, ok = mc.Fn.(*ssa.Function)
+		if !ok || !onlyUser(mc, g) {
 			return nil, nil
 		}
 		for i, binding := range mc.Bindings {
 			outer = append(outer, binding)
 			inner = append(inner, fn.FreeVars[i])
 		}
-		return outer, inner
 	}
-	fn, ok := g.Call.Value.(*ssa.Function)
 	if !ok || fn.Blocks == nil || len(fn.Params) != len(g.Call.Args) {
 		return nil, nil
 	}
@@ -178,6 +185,18 @@ func goOperands(g *ssa.Go) (outer, inner []ssa.Value) {
 		inner = append(inner, fn.Params[i])
 	}
 	return outer, inner
+}
+
+// GoOwnsClosure: go запускає замикання зі зв'язками, яке більше ніде не
+// вживається. Після повернення функції горутини контекст замикання
+// недосяжний, і рутина може його звільнити.
+func GoOwnsClosure(g *ssa.Go) bool {
+	mc, ok := g.Call.Value.(*ssa.MakeClosure)
+	if !ok || len(mc.Bindings) == 0 {
+		return false
+	}
+	fn, ok := mc.Fn.(*ssa.Function)
+	return ok && fn.Blocks != nil && onlyUser(mc, g)
 }
 
 func onlyUser(v ssa.Value, user ssa.Instruction) bool {

@@ -88,3 +88,24 @@ P8.8: 840 + 24 = 864.
 | fannkuchredux 7 | 864 | 0 | 584 | 0 |
 
 Усі 584 байти `global` — шість блоків ініціалізації `ffi`, `internal/cpu`, `unicode` і `syscall`, які глобальні змінні тримають до виходу; у `gc` вони теж живі. Причини `channel` і `global` лишаються живими, позначки блоків алокатором фаза не вводить.
+
+## P9.7 binary-trees
+
+**Що звільняється.** `longLivedTree` — комірка `cyclic: go` отримує атомарне слово (P9.3), горутина пише в неї свіжий результат `NewTree` без `Inc`, і останній `DecShared` каскадом віддає дерево `DecCyclic`. `WaitGroup`, `outBuff` (комірка), параметр `maxDepth` — спільні місця з `DecShared` у `Run` і в горутинах. Замикання, які вживає лише `go`, рутина звільняє після повернення функції горутини (`census.GoOwnsClosure`); байти контексту замикання не обліковуються, як у `static` замикання. Масив `outBuff` (`make([]string, …)`) — не `Alloc`, лишається без слова, як і раніше.
+
+**Що довелось змінити.**
+- `WaitGroup` не ставав спільним: зведення отримувача `Add`, `Done`, `Wait` мало `Unknown`, а потім `Side: global`. Причини — функції без тіла, які llgo реалізує в рантаймі (`sync.runtime_Semrelease`, `runtime_SemacquireWaitGroup`, атомарні операції `sync/atomic` — інтринсики), і `abi.Escape` у `synctest.Associate`: підказка для escape-аналізу `gc`, запис у глобальну змінну під `alwaysFalse` не виконується. Census тепер вважає перший параметр таких функцій позиченим (`runtimeBorrow`), а `abi.Escape` — тотожністю (`escapeHint`). Тест — `TestRuntimeBorrow`.
+- Знайдено й закрито діру P9.3: `go` замикання з аргументами (`go func(depth, …) {…}(…)`) не вважався прямою передачею, а зв'язки такого замикання не блокувались. Поки `WaitGroup` не проходив, це нічого не ламало; з ним `wg` отримав би `IncShared` лише на двох `go` з трьох. Тепер аргументи замикання — прямі передачі, а в неявному go блокуються зв'язки кожного `MakeClosure` значення. Тест — випадки `closureArgs` і `mixed` у `TestSharedGo`; без блокування `mixed` червоний.
+
+**Live корпусу поруч із P8.8.** Ревізія P9.7, `llgo run -tags owngo`, вивід побайтно як у `go run`.
+
+| Програма | Аргумент | `freed` | `rc-local` | `rc-shared` | `cyclic` | `pinned` | live разом | live P8.8 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| binarytrees | 10 | 2 175 176 | 3 961 | 560 | 24 | 5 736 | 10 281 | 43 089 |
+| binarytrees | 14 | 51 556 682 | 4 652 | 560 | 24 | 5 992 | 11 228 | 535 556 |
+| binarytreesarena | 10 | 3 514 | 3 472 | 736 | 24 | 5 096 | 9 328 | 9 488 |
+| fannkuchredux | 7 | 2 945 | 3 016 | 728 | 24 | 5 096 | 8 864 | 8 992 |
+
+`live cyclic` binarytrees не росте з `n`: 24 байти — `ffi.typeEmpty`, досяжний з глобальної змінної. `live rc-shared` binarytrees — 560 байтів ініціалізації пакетів (P9.1, `global`). `freed` нижчий, ніж у P8.8: таблиця `DecCyclic` більше не йде в купу (P9.4). У binarytreesarena і fannkuchredux 16 байтів `WaitGroup` перейшли з `rc-local` у `rc-shared`: зведення `WaitGroup.Go` тепер точне, і `wg` справді йде в горутину через `wg.Go` (причина `move`, P9.3 її не бере).
+
+Час і RSS — `owngo/REPORT-BINARYTREES.md`, «Атомарний `rc-shared` (P9.7)».

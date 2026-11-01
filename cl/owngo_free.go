@@ -391,7 +391,7 @@ func (p *context) emitOwnGoIncShared(b llssa.Builder, g *ssa.Go) []ssa.Value {
 
 // ownGoRoutineDec дописує вказівники місць p.ownGoGoSites у стартовий запис
 // горутини, а рутина після повернення функції горутини ставить на кожне
-// DecShared.
+// DecShared і, якщо p.ownGoGoFreeCtx, звільняє контекст замикання.
 func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, args []llssa.Expr) (func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, []llssa.Expr) {
 	n := len(args)
 	descs := make([]llssa.Expr, 0, len(p.ownGoGoSites))
@@ -400,10 +400,15 @@ func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder,
 		full = append(full, p.ownGoFreePtr(b, site))
 		descs = append(descs, p.sharedDesc(site.(ssa.Instruction)))
 	}
+	freeCtx := p.ownGoGoFreeCtx
 	wrapped := func(b llssa.Builder, fn llssa.Expr, all ...llssa.Expr) llssa.Expr {
 		ret := buildCall(b, fn, all[:n]...)
 		for i, ptr := range all[n:] {
 			p.callDecShared(b, ptr, descs[i])
+		}
+		if freeCtx {
+			// Байти контексту не обліковуються, як у static замикання.
+			p.callOwnGoAccount(b, "FreeAccounted", b.Field(fn, 1), p.prog.IntVal(0, p.prog.Uintptr()), ownGoStatic)
 		}
 		return ret
 	}

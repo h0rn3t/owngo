@@ -261,6 +261,8 @@ type context struct {
 	ownGoSharedDescs     map[ssa.Instruction]llssa.Expr
 	// ownGoGoSites — місця, яким рутина поточного go ставить DecShared.
 	ownGoGoSites []ssa.Value
+	// ownGoGoFreeCtx — рутина поточного go звільняє контекст замикання.
+	ownGoGoFreeCtx bool
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -2517,8 +2519,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	case *ssa.Go:
 		p.checkMethodCallReceiver(b, &v.Call)
 		p.ownGoGoSites = p.emitOwnGoIncShared(b, v)
+		p.ownGoGoFreeCtx = p.options.OwnGoFree && census.GoOwnsClosure(v)
 		p.call(b, llssa.Go, &v.Call)
-		p.ownGoGoSites = nil
+		p.ownGoGoSites, p.ownGoGoFreeCtx = nil, false
 	case *ssa.RunDefers:
 		p.recordPanicLocation(b, p.deferRunPos(v.Pos()))
 		p.emitPCLineLabel(b, p.deferRunPos(v.Pos()))

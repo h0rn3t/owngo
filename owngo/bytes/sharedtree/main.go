@@ -2,7 +2,7 @@
 
 // Програма прийняття P9.4: горутина пише свіжий результат NewTree у
 // захоплену змінну, як longLivedTree binarytrees. Каскад DecShared
-// комірки звільняє і комірку, і дерево. WaitGroup лишається серед живих.
+// комірки звільняє і комірку, і дерево; WaitGroup теж звільнено.
 package main
 
 import (
@@ -59,9 +59,9 @@ func main() {
 	if longLived() != nodes {
 		os.Exit(2)
 	}
-	// Вузли і комірка змінної tree.
+	// Вузли, комірка змінної tree і WaitGroup.
 	var cell *Tree
-	want := uint64(uintptr(nodes)*unsafe.Sizeof(Tree{}) + unsafe.Sizeof(cell))
+	want := uint64(uintptr(nodes)*unsafe.Sizeof(Tree{}) + unsafe.Sizeof(cell) + unsafe.Sizeof(sync.WaitGroup{}))
 	for i := 0; i < 5000 && ownGoFreed()-beforeFreed < want; i++ {
 		time.Sleep(time.Millisecond)
 	}
@@ -69,8 +69,8 @@ func main() {
 		println("freed delta", got, "want", want)
 		os.Exit(3)
 	}
-	if got, want := ownGoLive(catRCShared), beforeShared+uint64(unsafe.Sizeof(sync.WaitGroup{})); got != want {
-		println("live rc-shared", got, "want", want)
+	if got := ownGoLive(catRCShared); got != beforeShared {
+		println("live rc-shared", got, "want", beforeShared)
 		os.Exit(4)
 	}
 	if got := ownGoLive(catCyclic); got != beforeCyclic {

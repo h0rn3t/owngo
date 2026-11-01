@@ -74,14 +74,24 @@ func global() {
 			t.Errorf("%s order AllocCounted %d, IncShared %d, NewProc %d, DecShared %d, want increasing\n%s", name, alloc, inc, proc, dec, body)
 		}
 	}
-	routines := 0
+	routines, freed := 0, 0
 	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
-		if strings.HasPrefix(fn.Name(), "foo._llgo_routine$") && strings.Contains(fn.String(), "runtime.DecShared") {
+		if !strings.HasPrefix(fn.Name(), "foo._llgo_routine$") {
+			continue
+		}
+		if strings.Contains(fn.String(), "runtime.DecShared") {
 			routines++
+		}
+		if strings.Contains(fn.String(), "runtime.FreeAccounted") {
+			freed++
 		}
 	}
 	if routines != 2 {
 		t.Errorf("goroutine routines with DecShared = %d, want 2 (capture, tree)", routines)
+	}
+	// P9.7: замикання, яке вживає лише go, рутина звільняє після виклику.
+	if freed != 3 {
+		t.Errorf("goroutine routines freeing the closure context = %d, want 3", freed)
 	}
 	body := mustNamedFunction(t, mod, "foo.tree$1").String()
 	if strings.Contains(body, "runtime.Inc") {

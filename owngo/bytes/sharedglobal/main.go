@@ -1,8 +1,8 @@
 //go:build owngo
 
 // Програма прийняття P9.4: змінна, захоплена замиканням go, ще йде
-// в глобальну змінну. Її байти лишаються серед живих, як і WaitGroup;
-// звільняється лише комірка параметра n.
+// в глобальну змінну. Її байти лишаються серед живих; звільняються комірка
+// параметра n і WaitGroup.
 package main
 
 import (
@@ -43,7 +43,7 @@ func main() {
 	if spawn(3) != 3 {
 		os.Exit(2)
 	}
-	want := uint64(unsafe.Sizeof(0))
+	want := uint64(unsafe.Sizeof(0) + unsafe.Sizeof(sync.WaitGroup{}))
 	for i := 0; i < 5000 && ownGoFreed()-beforeFreed < want; i++ {
 		time.Sleep(time.Millisecond)
 	}
@@ -53,7 +53,7 @@ func main() {
 		println("freed delta", got, "want", want)
 		os.Exit(3)
 	}
-	if got, want := ownGoLive(catRCShared), beforeLive+uint64(unsafe.Sizeof(S{})+unsafe.Sizeof(sync.WaitGroup{})); got != want {
+	if got, want := ownGoLive(catRCShared), beforeLive+uint64(unsafe.Sizeof(S{})); got != want {
 		println("live rc-shared", got, "want", want)
 		os.Exit(4)
 	}

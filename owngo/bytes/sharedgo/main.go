@@ -1,8 +1,8 @@
 //go:build owngo
 
-// Програма прийняття P9.4: змінна s і параметр n, захоплені замиканням go,
-// звільняються, коли і функція, і горутина віддали свої посилання.
-// WaitGroup лишається серед живих: Wait за зведенням не лише позичає.
+// Програма прийняття P9.4: змінна s, параметр n і WaitGroup, захоплені
+// замиканням go, звільняються, коли і функція, і горутина віддали свої
+// посилання.
 package main
 
 import (
@@ -42,7 +42,7 @@ func main() {
 		os.Exit(2)
 	}
 	// DecShared горутини йде після wg.Done, тож чекаємо до 5 с.
-	want := uint64(unsafe.Sizeof(S{}) + unsafe.Sizeof(0))
+	want := uint64(unsafe.Sizeof(S{}) + unsafe.Sizeof(0) + unsafe.Sizeof(sync.WaitGroup{}))
 	for i := 0; i < 5000 && ownGoFreed()-beforeFreed < want; i++ {
 		time.Sleep(time.Millisecond)
 	}
@@ -50,8 +50,8 @@ func main() {
 		println("freed delta", got, "want", want)
 		os.Exit(3)
 	}
-	if got, want := ownGoLive(catRCShared), beforeLive+uint64(unsafe.Sizeof(sync.WaitGroup{})); got != want {
-		println("live rc-shared", got, "want", want)
+	if got := ownGoLive(catRCShared); got != beforeLive {
+		println("live rc-shared", got, "want", beforeLive)
 		os.Exit(4)
 	}
 	os.Exit(0)
