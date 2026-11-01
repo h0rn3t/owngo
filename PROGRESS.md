@@ -778,3 +778,15 @@
 - Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./cl/ -run OwnGo` — 21 `PASS`. `atomicrc`, `cyclic` — код 0. Корпус: вивід як у `go run`; binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan. `golangci-lint --new-from-rev` (`cl`, `runtime` з тегами `owngo,nogc`) — чисто.
 - Не перевірялось: швидкодія `DecCyclic` з таблицею за значенням (замір — у P9.7); macOS; TSan.
 - Лишилось: P9.5; трек — S1.
+
+## 2026-11-01 — P9.5 ASan і гонка на спільному місці
+
+- Нові фікстури `owngo/asan`:
+  - `shareduaf` (тег `owngo`, прямі виклики рантайму): `AllocCounted`, `IncShared`, горутина віддає своє посилання `DecShared`, `main` — останнє, далі читання — код 1, `heap-use-after-free`.
+  - `sharedlive`: `spawn` захоплює `x [4]int` замиканням go і повертається (його `DecShared` уже стоїть), горутина читає `x` після `close(start)` — код 0, тексту ASan немає.
+  - `sharedeight`: те саме для восьми горутин, що захоплюють одну змінну (і змінну циклу `i`) — код 0, тексту ASan немає.
+- Живі фікстури без тегу, з `race_test.go`: `go test -count=1 -race ./owngo/asan/sharedlive ./owngo/asan/sharedeight` — `PASS`, звіту гонки немає.
+- Перевірка, що живі фікстури йдуть через новий шлях: компілятор без `IncShared` перед go — обидві дають код 1 і `heap-use-after-free`. Після цього кеш перебудовано правильним компілятором (`-a`).
+- Прогін (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`, `ASAN_OPTIONS=detect_leaks=0`, `llgo run -tags owngo -O0 -asan`). Код компілятора й рантайму не змінювався.
+- Не перевірялось: TSan у збірці llgo (пісочниця не вимикає ASLR).
+- Лишилось: P9.6; трек — S1.
