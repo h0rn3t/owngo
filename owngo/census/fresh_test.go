@@ -139,3 +139,154 @@ func ssaFuncs(pkg *ssa.Package) []*ssa.Function {
 	}
 	return funcs
 }
+
+const freshInteriorSrc = `package p
+
+type S struct{ a, f int }
+
+type Node struct {
+	Next *Node
+	Val  int
+}
+
+var (
+	g  S
+	gp *S
+)
+
+func field() *int {
+	x := &S{a: 1}
+	return &x.f
+}
+
+func bytes(n int) []byte {
+	buf := make([]byte, 64)
+	buf[0] = 1
+	return buf[:n]
+}
+
+func nodeVal() *int {
+	x := new(Node)
+	return &x.Val
+}
+
+func param(p *S) *int { return &p.f }
+
+func global() *int { return &g.f }
+
+func stored() *int {
+	x := new(S)
+	gp = x
+	return &x.f
+}
+
+func ring() **Node {
+	x := new(Node)
+	return &x.Next
+}
+
+func viaCall() *int { return field() }
+
+func mixed(c bool) *int {
+	if c {
+		return &new(S).f
+	}
+	return new(int)
+}
+
+func shifted(i int) []byte {
+	buf := make([]byte, 64)
+	return buf[i:]
+}
+
+func end() []byte {
+	buf := make([]byte, 64)
+	return buf[64:]
+}
+
+func useField() int {
+	p := field()
+	return *p
+}
+
+func useBytes(n int) int {
+	b := bytes(n)
+	return len(b)
+}
+
+func keepField() *int {
+	p := field()
+	return p
+}
+`
+
+// TestFreshInterior — P8.5: свіжий результат — внутрішній вказівник
+// власного купового Alloc; викликач отримує на ньому Dec.
+func TestFreshInterior(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", freshInteriorSrc, ssa.SanityCheckFunctions|ssa.GlobalDebug)
+	funcs := ssaFuncs(pkg)
+	sums := packageSummaries(nil, funcs)
+	tests := []struct {
+		fn       string
+		fresh    bool
+		interior bool
+	}{
+		{"field", true, true},
+		{"bytes", true, true},
+		{"nodeVal", true, true},
+		{"param", false, false},
+		{"global", false, false},
+		{"stored", false, false},
+		{"ring", false, false},
+		{"viaCall", false, false},
+		{"mixed", false, false},
+		{"shifted", false, false},
+		{"end", false, false},
+	}
+	for _, tt := range tests {
+		sum := sums[pkg.Func(tt.fn)]
+		if sum.Fresh != tt.fresh || sum.Interior != tt.interior {
+			t.Errorf("packageSummaries(%s) Fresh, Interior = %v, %v, want %v, %v", tt.fn, sum.Fresh, sum.Interior, tt.fresh, tt.interior)
+		}
+	}
+
+	_, _, decUses, counted, _ := Place(funcs)
+	for _, name := range []string{"field", "bytes", "nodeVal"} {
+		for _, block := range pkg.Func(name).Blocks {
+			for _, instr := range block.Instrs {
+				if alloc, ok := instr.(*ssa.Alloc); ok && alloc.Heap {
+					if _, ok := counted[alloc]; !ok {
+						t.Errorf("Place(%s) %v not counted, want AllocCounted for a fresh interior result", name, alloc)
+					}
+				}
+			}
+		}
+	}
+	callers := []struct {
+		fn   string
+		want bool
+	}{
+		{"useField", true},
+		{"useBytes", true},
+		{"keepField", false},
+	}
+	for _, tt := range callers {
+		call := firstCall(t, pkg.Func(tt.fn))
+		if _, got := decUses[call]; got != tt.want {
+			t.Errorf("Place(%s) Dec on %v = %v, want %v", tt.fn, call, got, tt.want)
+		}
+	}
+}
+
+func firstCall(t *testing.T, fn *ssa.Function) *ssa.Call {
+	t.Helper()
+	for _, block := range fn.Blocks {
+		for _, instr := range block.Instrs {
+			if call, ok := instr.(*ssa.Call); ok {
+				return call
+			}
+		}
+	}
+	t.Fatalf("%s: no call", fn.Name())
+	return nil
+}

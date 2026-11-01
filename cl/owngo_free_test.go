@@ -751,3 +751,86 @@ func interiorReturned(n int) *int {
 		t.Errorf("foo.interiorReturned has Dec of S, want it live in the caller\n%s", body)
 	}
 }
+
+// TestOwnGoFreshInterior — P8.5: викликач свіжого внутрішнього результату
+// знаходить слово через Base і ставить один Dec на останньому живому шляху.
+func TestOwnGoFreshInterior(t *testing.T) {
+	const src = `package foo
+
+type S struct{ a, f int }
+
+type Node struct {
+	Next *Node
+	Val  int
+}
+
+func field() *int {
+	x := &S{a: 1}
+	return &x.f
+}
+
+func bytes(n int) []byte {
+	buf := make([]byte, 64)
+	buf[0] = 1
+	return buf[:n]
+}
+
+func nodeVal() *int {
+	x := new(Node)
+	return &x.Val
+}
+
+func useField() int {
+	p := field()
+	return *p + 1
+}
+
+func useBytes(n int) int {
+	b := bytes(n)
+	return len(b) + cap(b)
+}
+
+func useNode() int {
+	p := nodeVal()
+	return *p
+}
+
+func keepField() *int {
+	return field()
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.field", "foo.bytes", "foo.nodeVal"} {
+		if !strings.Contains(mustNamedFunction(t, mod, name).String(), "runtime.AllocCounted") {
+			t.Errorf("%s has no runtime.AllocCounted", name)
+		}
+	}
+	tests := []struct {
+		fn  string
+		dec *regexp.Regexp
+	}{
+		// S — 16 байтів, масив буфера — 64.
+		{"foo.useField", regexp.MustCompile(`runtime\.DecAccounted"\(ptr %\d+, i64 16\)`)},
+		{"foo.useBytes", regexp.MustCompile(`runtime\.DecAccounted"\(ptr %\d+, i64 64\)`)},
+		{"foo.useNode", regexp.MustCompile(`runtime\.DecCyclic"\(`)},
+	}
+	for _, tt := range tests {
+		body := mustNamedFunction(t, mod, tt.fn).String()
+		if got := strings.Count(body, `"runtime.Base"(`); got != 1 {
+			t.Errorf("%s runtime.Base count = %d, want 1\n%s", tt.fn, got, body)
+		}
+		if got := len(tt.dec.FindAllString(body, -1)); got != 1 {
+			t.Errorf("%s Dec count = %d, want 1\n%s", tt.fn, got, body)
+		}
+		if base, dec := strings.Index(body, `"runtime.Base"(`), tt.dec.FindStringIndex(body); dec != nil && base > dec[0] {
+			t.Errorf("%s runtime.Base at %d after Dec at %d\n%s", tt.fn, base, dec[0], body)
+		}
+	}
+	body := mustNamedFunction(t, mod, "foo.keepField").String()
+	if strings.Contains(body, "runtime.Base") || strings.Contains(body, "runtime.Dec") {
+		t.Errorf("foo.keepField has Base or Dec, want the result live in its caller\n%s", body)
+	}
+}
