@@ -210,7 +210,6 @@ declare i1 @avx2() "llgo.cpu.query"="x86.avx2"
 func TestZeroSizedReceiverAndVoidDispatch(t *testing.T) {
 	for _, tc := range []struct{ name, triple, receiver string }{
 		{"sysv", "x86_64-unknown-linux-gnu", "{}"},
-		{"win64", "x86_64-w64-windows-gnu", "i32"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := `

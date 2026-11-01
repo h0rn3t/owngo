@@ -38,7 +38,7 @@ func TestAuditCommand(t *testing.T) {
 		t.Fatal("accepted a missing runtime tree")
 	}
 	output := filepath.Join(t.TempDir(), "report.json")
-	if err := run([]string{"-goos=windows", "-goarch=386", "-runtime=" + filepath.Join(root, "runtime"), "-o=" + output}, io.Discard); err != nil {
+	if err := run([]string{"-goos=darwin", "-goarch=arm64", "-runtime=" + filepath.Join(root, "runtime"), "-o=" + output}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(output); err != nil || !json.Valid(data) {

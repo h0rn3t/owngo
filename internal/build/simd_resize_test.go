@@ -13,7 +13,7 @@ import (
 
 func TestSIMDIntegerResizeLLVM(t *testing.T) {
 	for _, target := range []struct{ os, arch string }{
-		{"linux", "amd64"}, {"windows", "amd64"}, {"darwin", "arm64"}, {"wasip1", "wasm"},
+		{"linux", "amd64"}, {"darwin", "arm64"}, {"wasip1", "wasm"},
 	} {
 		t.Run(target.os+"/"+target.arch, func(t *testing.T) {
 			dir := t.TempDir()

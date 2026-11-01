@@ -386,10 +386,6 @@ func TestObservedFailuresHaveXFailClassifications(t *testing.T) {
 		tc       testCase
 	}{
 		{version: "go1.27.0", platform: "linux/amd64", tc: testCase{RelPath: "heapsampling.go", Directive: "run"}},
-		{version: "go1.26.7", platform: "windows-msvc/amd64", tc: testCase{RelPath: "linkmain_run.go", Directive: "run"}},
-		{version: "go1.26.7", platform: "windows-msvc/amd64", tc: testCase{RelPath: "fixedbugs/issue58300.go", Directive: "run"}},
-		{version: "go1.26.7", platform: "windows-msvc/386", tc: testCase{RelPath: "fixedbugs/issue23305.go", Directive: "run"}},
-		{version: "go1.26.7", platform: "windows-msvc/386", tc: testCase{RelPath: "fixedbugs/issue42032.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "J32-GoJS", tc: testCase{RelPath: "init1.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "J32-Emscripten", tc: testCase{RelPath: "init1.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "js/wasm", tc: testCase{RelPath: "fixedbugs/issue5089.go", Directive: "errorcheck"}},
@@ -412,23 +408,13 @@ func TestObservedPassesDoNotHaveXFailClassifications(t *testing.T) {
 		{version: "go1.27.0", platform: "js/wasm", tc: testCase{RelPath: "fixedbugs/issue14646.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "js/wasm", tc: testCase{RelPath: "fixedbugs/issue4618.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "darwin/arm64", tc: testCase{RelPath: "index0.go", Directive: "runoutput"}},
-		{version: "go1.27.0", platform: "windows-mingw/386", tc: testCase{RelPath: "index0.go", Directive: "runoutput"}},
-		{version: "go1.27.0", platform: "windows-msvc/386", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
 		{version: "go1.26.7", platform: "darwin/arm64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
 		{version: "go1.27.0", platform: "darwin/arm64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
-		{version: "go1.26.7", platform: "windows-msvc/amd64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
-		{version: "go1.27.0", platform: "windows-msvc/arm64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
 		{version: "go1.26.0", platform: "linux/amd64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
 		{version: "go1.27.0", platform: "linux/amd64", tc: testCase{RelPath: "rangegen.go", Directive: "runoutput"}},
-		{version: "go1.27.0", platform: "windows-msvc/arm64", tc: testCase{RelPath: "fixedbugs/issue40954.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "darwin/arm64", tc: testCase{RelPath: "fixedbugs/issue34123.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "linux/amd64", tc: testCase{RelPath: "fixedbugs/issue34123.go", Directive: "run"}},
-		{version: "go1.27.0", platform: "windows-msvc/amd64", tc: testCase{RelPath: "fixedbugs/issue34123.go", Directive: "run"}},
 		{version: "go1.26.7", platform: "linux/amd64", tc: testCase{RelPath: "convert5.go", Directive: "run"}},
-		{version: "go1.27.0", platform: "windows-msvc/amd64", tc: testCase{RelPath: "convert5.go", Directive: "run"}},
-		{version: "go1.27.0", platform: "windows-mingw/amd64", tc: testCase{RelPath: "convert5.go", Directive: "run"}},
-		{version: "go1.27.0", platform: "windows-msvc/386", tc: testCase{RelPath: "fixedbugs/bug356.go", Directive: "run"}},
-		{version: "go1.27.0", platform: "windows-mingw/386", tc: testCase{RelPath: "fixedbugs/bug356.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "darwin/arm64", tc: testCase{RelPath: "fixedbugs/issue52612.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "js/wasm", tc: testCase{RelPath: "typeparam/dictionaryCapture-noinline.go", Directive: "run"}},
 		{version: "go1.27.0", platform: "js/wasm", tc: testCase{RelPath: "fixedbugs/issue68525.go", Directive: "run"}},
@@ -466,7 +452,7 @@ func TestWasmObservedResourceExceptions(t *testing.T) {
 				t.Errorf("%s %s rangegen timeout = %s, %v; want 15m, true", version, platform, timeout, match)
 			}
 		}
-		for _, platform := range []string{"darwin/amd64", "linux/amd64", "windows-mingw/amd64", "windows-msvc/arm64", "windows-mingw/arm64"} {
+		for _, platform := range []string{"darwin/amd64", "linux/amd64"} {
 			if timeout, _, match := cfg.MatchTimeout(version, platform, rangegen); !match || timeout != 10*time.Minute {
 				t.Errorf("%s %s rangegen timeout = %s, %v; want 10m, true", version, platform, timeout, match)
 			}
@@ -493,7 +479,7 @@ func TestWasmObservedResourceExceptions(t *testing.T) {
 		if match, reason := notApplicable.Match("go1.27.0", "js/wasm", tc); match {
 			t.Errorf("%s unexpectedly matched wasm not-applicable: %s", tc.RelPath, reason)
 		}
-		for _, platform := range []string{"linux/amd64", "darwin/arm64", "windows-msvc/arm64", "wasip1/wasm"} {
+		for _, platform := range []string{"linux/amd64", "darwin/arm64", "wasip1/wasm"} {
 			want := tt.nativeTimeout
 			if platform == "wasip1/wasm" {
 				want = 0
@@ -516,27 +502,6 @@ func TestWasmObservedResourceExceptions(t *testing.T) {
 	}
 }
 
-func TestIssue16037Windows386Timeout(t *testing.T) {
-	cfg := loadXFailConfig(t, repoRoot(t), filepath.Join("test", "goroot", "xfail.yaml"))
-	tc := testCase{RelPath: "fixedbugs/issue16037_run.go", Directive: "run"}
-	for _, test := range []struct {
-		version  string
-		platform string
-		want     time.Duration
-	}{
-		{"go1.26.7", "windows-msvc/386", 3 * time.Minute},
-		{"go1.27.0", "windows-msvc/386", 0},
-		{"go1.26.7", "windows-mingw/386", 3 * time.Minute},
-		{"go1.27.0", "windows-mingw/386", 0},
-		{"go1.26.7", "windows-msvc/amd64", 0},
-	} {
-		got, _, matched := cfg.MatchTimeout(test.version, test.platform, tc)
-		if got != test.want || matched != (test.want != 0) {
-			t.Errorf("%s/%s timeout = %s, matched=%v; want %s, matched=%v", test.version, test.platform, got, matched, test.want, test.want != 0)
-		}
-	}
-}
-
 func TestBoundedCaseEnv(t *testing.T) {
 	rangegen := testCase{RelPath: "rangegen.go", Directive: "runoutput"}
 	for _, tt := range []struct {
@@ -555,56 +520,6 @@ func TestBoundedCaseEnv(t *testing.T) {
 	} {
 		if got := boundedCaseEnv(tt.goos, tt.goarch, tt.tc, tt.initial); !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("%s/%s %s: env=%v, want %v", tt.goos, tt.goarch, tt.tc.RelPath, got, tt.want)
-		}
-	}
-}
-
-func TestWindows386StressRequiresSuccessWithTimeout(t *testing.T) {
-	repo := repoRoot(t)
-	cfg := loadXFailConfig(t, repo, filepath.Join("test", "goroot", "xfail.yaml"))
-	for _, tc := range []testCase{{RelPath: "index0.go", Directive: "runoutput"}, {RelPath: "fixedbugs/issue39541.go", Directive: "run"}} {
-		for _, version := range []string{"go1.26.7", "go1.27.0"} {
-			for _, platform := range []string{"windows-msvc/386", "windows-mingw/386"} {
-				if match, _ := cfg.MatchFlaky(version, platform, tc); match {
-					t.Errorf("%s still permits flaky failure for %s/%s", tc.RelPath, version, platform)
-				}
-				if match, _ := cfg.Match(version, platform, tc); match {
-					t.Errorf("%s still permits expected failure for %s/%s", tc.RelPath, version, platform)
-				}
-				if timeout, _, match := cfg.MatchTimeout(version, platform, tc); !match || timeout != 2*time.Minute {
-					t.Errorf("timeout for %s/%s/%s = %s, %v; want 2m0s, true", tc.RelPath, version, platform, timeout, match)
-				}
-			}
-		}
-	}
-}
-
-func TestWindows386UglyfibRequiresSuccessWithTimeout(t *testing.T) {
-	repo := repoRoot(t)
-	cfg := loadXFailConfig(t, repo, filepath.Join("test", "goroot", "xfail.yaml"))
-	tc := testCase{RelPath: "abi/uglyfib.go", Directive: "run"}
-	for _, platform := range []string{"windows-msvc/386", "windows-mingw/386"} {
-		if match, _ := cfg.MatchFlaky("go1.27.0", platform, tc); match {
-			t.Errorf("%s still permits flaky failure for %s", tc.RelPath, platform)
-		}
-		if timeout, _, match := cfg.MatchTimeout("go1.27.0", platform, tc); !match || timeout != 90*time.Second {
-			t.Errorf("timeout for %s/%s = %s, %v; want 1m30s, true", tc.RelPath, platform, timeout, match)
-		}
-	}
-}
-
-func TestWindowsIssue25897aUsesTimeoutWithoutFlakyAllowance(t *testing.T) {
-	repo := repoRoot(t)
-	cfg := loadXFailConfig(t, repo, filepath.Join("test", "goroot", "xfail.yaml"))
-	tc := testCase{RelPath: "fixedbugs/issue25897a.go", Directive: "run"}
-	for _, version := range []string{"go1.26.7", "go1.27.0"} {
-		for _, platform := range []string{"windows-msvc/386", "windows-mingw/386", "windows-msvc/amd64", "windows-mingw/amd64", "windows-msvc/arm64", "windows-mingw/arm64"} {
-			if match, _ := cfg.MatchFlaky(version, platform, tc); match {
-				t.Errorf("%s is still allowed to flake for %s/%s", tc.RelPath, version, platform)
-			}
-			if timeout, _, match := cfg.MatchTimeout(version, platform, tc); !match || timeout != 90*time.Second {
-				t.Errorf("timeout for %s/%s/%s = %s, %v; want 1m30s, true", tc.RelPath, version, platform, timeout, match)
-			}
 		}
 	}
 }

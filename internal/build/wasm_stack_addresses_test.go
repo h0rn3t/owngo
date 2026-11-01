@@ -18,11 +18,13 @@ func TestWasmStackAddressesCodegen(t *testing.T) {
 		t.Run(fmt.Sprint(bits), func(t *testing.T) {
 			var counts [2]int
 			for mode := range counts {
+				// LLVM 23 вимагає +exception-handling в атрибуті самої функції:
+				// прапорці драйвера його не підміняють (див. applyWasmEHFeature).
 				mod := parseWasmAggregateIR(t, `
 declare i32 @setjmp(ptr) returns_twice
 declare void @consume(ptr)
 declare i1 @again()
-define i32 @roots(ptr %data, ptr %jmp, i1 %register) null_pointer_is_valid optsize {
+define i32 @roots(ptr %data, ptr %jmp, i1 %register) null_pointer_is_valid optsize "target-features"="+exception-handling" {
 entry:
   call void @consume(ptr %data)
   br i1 %register, label %setup, label %body

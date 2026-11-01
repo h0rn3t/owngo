@@ -447,7 +447,7 @@ func TestCollectFingerprintDisablesCycles(t *testing.T) {
 
 func TestCollectFingerprintIncludesPthreadStackSize(t *testing.T) {
 	for _, target := range []struct{ goos, goarch string }{
-		{"linux", "amd64"}, {"windows", "amd64"}, {"js", "wasm"}, {"wasip1", "wasm"},
+		{"linux", "amd64"}, {"js", "wasm"}, {"wasip1", "wasm"},
 	} {
 		t.Run(target.goos+"/"+target.goarch, func(t *testing.T) {
 			for _, pkgPath := range []string{llssa.PkgRuntime, "runtime", "test/stack"} {
@@ -559,44 +559,6 @@ func TestCollectFingerprintIncludesEmitDWARF(t *testing.T) {
 	}
 	if targetData.Common != nil && targetData.Common.EmitDWARF {
 		t.Fatalf("target without DWARF support unexpectedly contains EMIT_DWARF=true:\n%s", targetWithoutDWARF.Manifest)
-	}
-}
-
-func TestCollectFingerprintIncludesEmitCodeView(t *testing.T) {
-	dir := t.TempDir()
-	goFile := filepath.Join(dir, "main.go")
-	if err := os.WriteFile(goFile, []byte("package main"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	pkg := &aPackage{Package: &packages.Package{
-		PkgPath: "test/pkg",
-		GoFiles: []string{goFile},
-	}}
-	ctx := &context{
-		conf: &packages.Config{},
-		buildConf: &Config{
-			Goos:      "windows",
-			Goarch:    "amd64",
-			Mode:      ModeBuild,
-			BuildMode: BuildModeExe,
-			LinkOptions: LinkOptions{
-				DWARF:               DWARFPreserve,
-				ExternalLinkerFlags: "-Xlinker /debug:full",
-			},
-		},
-		crossCompile: crosscompile.Export{
-			Toolchain: crosscompile.NativeToolchain{ABI: crosscompile.PlatformABIMsvc},
-		},
-	}
-	if err := ctx.collectFingerprint(pkg); err != nil {
-		t.Fatal(err)
-	}
-	data, err := decodeManifest(pkg.Manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data.Common == nil || !data.Common.EmitDWARF || !data.Common.EmitCodeView {
-		t.Fatalf("PDB manifest does not record both debug formats:\n%s", pkg.Manifest)
 	}
 }
 

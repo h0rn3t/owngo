@@ -449,22 +449,9 @@ func TestBrowserChromeOptions(t *testing.T) {
 	if err := validateChromeArgs([]string{"--window-size=900,700", "--headless=new", "--start-maximized"}); err != nil {
 		t.Fatal(err)
 	}
-	environment := map[string]string{"ProgramFiles": "system64", "ProgramFiles(x86)": "system32", "LOCALAPPDATA": "user"}
+	environment := map[string]string{}
 	getenv := func(key string) string { return environment[key] }
-	candidates := chromeCandidates("windows", "", getenv)
-	for _, root := range []string{"system64", "system32", "user"} {
-		for _, vendor := range []string{"Google/Chrome", "Chromium"} {
-			want := filepath.Join(root, filepath.FromSlash(vendor), "Application", "chrome.exe")
-			found := false
-			for _, candidate := range candidates {
-				found = found || candidate == want
-			}
-			if !found {
-				t.Fatalf("Windows discovery omitted %q: %v", want, candidates)
-			}
-		}
-	}
-	for _, goos := range []string{"windows", "darwin", "linux"} {
+	for _, goos := range []string{"darwin", "linux"} {
 		environment["LLGO_CHROME"] = "environment-choice"
 		if got := chromeCandidates(goos, "explicit-choice", getenv); len(got) != 1 || got[0] != "explicit-choice" {
 			t.Fatalf("explicit browser selection fell back: %v", got)

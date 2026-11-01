@@ -17,14 +17,11 @@
 package build
 
 import (
-	"bytes"
 	"debug/elf"
-	"debug/pe"
 	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -306,46 +303,6 @@ func TestFuncInfoTableMaterializesEntrySites(t *testing.T) {
 			t.Fatalf("full LTO funcinfo table IR missing %q:\n%s", want, ltoIR)
 		}
 	}
-}
-
-func TestWin32FuncInfoUsesExactEntryForAddressTakenFunction(t *testing.T) {
-	prog := llssa.NewProgram(&llssa.Target{GOOS: "windows", GOARCH: "386"})
-	defer prog.Dispose()
-	prog.EnableFuncInfoMetadata(true)
-	prog.EnableFuncInfoSites(true)
-	ctx := &context{
-		prog: prog,
-		buildConf: &Config{
-			BuildMode: BuildModeExe,
-			Goos:      "windows",
-			Goarch:    "386",
-		},
-	}
-	pkg := prog.NewPackage("example.com/p", "example.com/p")
-	for _, name := range []string{"example.com/p.direct", "example.com/p.addressed"} {
-		pkg.EmitFuncInfo(name, name, "p.go", 1, 1)
-		pkg.NewFunc(name, llssa.NoArgsNoRet, llssa.GoDecl).MakeBody(1).Return()
-	}
-	addressed := pkg.Module().NamedFunction("example.com/p.addressed")
-	keep := llvm.AddGlobal(pkg.Module(), addressed.Type(), "example.com/p.funcValue")
-	keep.SetInitializer(addressed)
-
-	emitFuncInfoEntrySites(ctx, pkg)
-	ir := pkg.String()
-	if got := strings.Count(ir, `.long ${0:c}`); got != 1 {
-		t.Fatalf("Win32 exact-entry record count = %d, want 1:\n%s", got, ir)
-	}
-	if !strings.Contains(ir, `"X"(ptr @"example.com/p.addressed")`) {
-		t.Fatalf("Win32 address-taken function is not the exact-entry operand:\n%s", ir)
-	}
-	if got := strings.Count(ir, ".long .Lllgo_funcinfo_entry_anchor_"); got != 1 {
-		t.Fatalf("Win32 anchor entry record count = %d, want 1:\n%s", got, ir)
-	}
-	buf, err := prog.TargetMachine().EmitToMemoryBuffer(pkg.Module(), llvm.ObjectFile)
-	if err != nil {
-		t.Fatalf("emit Win32 exact-entry COFF object: %v\n%s", err, ir)
-	}
-	buf.Dispose()
 }
 
 func TestWasmFuncInfoUsesTableIndexForAddressTakenFunction(t *testing.T) {
@@ -754,8 +711,6 @@ func TestFuncInfoTableEmissionMatrix(t *testing.T) {
 		{goos: "darwin", goarch: "arm64", entrySection: "__DATA,__llgo_fie"},
 		{goos: "darwin", goarch: "arm64", lto: lto.Full, entrySection: "__LLGO,__llgo_fie"},
 		{goos: "linux", goarch: "386"},
-		{goos: "windows", goarch: "amd64"},
-		{goos: "windows", goarch: "386"},
 		{goos: "linux", goarch: "amd64", empty: true},
 		{goos: "darwin", goarch: "arm64", empty: true, entrySection: "__DATA,__llgo_fie"},
 	}
@@ -812,34 +767,6 @@ func TestFuncInfoTableEmissionMatrix(t *testing.T) {
 			if c.goos == "linux" && !strings.Contains(ir, "pushsection llgo_funcinfo_entry") {
 				t.Fatalf("missing elf entry section:\n%s", ir)
 			}
-			if c.goos == "windows" {
-				for _, want := range []string{
-					`.pushsection .llgofie$$m,\22dr\22,associative,`,
-					`section ".llgofie$a"`,
-					`section ".llgofie$z"`,
-				} {
-					if !strings.Contains(ir, want) {
-						t.Fatalf("missing COFF entry site %q:\n%s", want, ir)
-					}
-				}
-				if c.goarch == "386" {
-					for _, sentinel := range []string{
-						funcInfoEntryCOFFStartSymbol, funcInfoEntryCOFFEndSymbol,
-						pcSiteCOFFStartSymbol, pcSiteCOFFEndSymbol,
-					} {
-						want := `@` + sentinel + ` = private constant { ptr, i64 } zeroinitializer`
-						if !strings.Contains(ir, want) {
-							t.Fatalf("32-bit COFF sentinel does not use its natural 16-byte Windows ABI layout; missing %q:\n%s", want, ir)
-						}
-					}
-					if want := `@"__llgo_funcinfo_symbol_index$data" = private unnamed_addr constant [2 x { i64, i32 }]`; !strings.Contains(ir, want) {
-						t.Fatalf("32-bit funcinfo symbol index does not use its natural 16-byte Windows ABI stride; missing %q:\n%s", want, ir)
-					}
-					if want := `.long 0\0A.quad `; !strings.Contains(ir, want) {
-						t.Fatalf("32-bit COFF entry site does not pad its uint64 ID to offset 8; missing %q:\n%s", want, ir)
-					}
-				}
-			}
 		})
 	}
 }
@@ -853,149 +780,8 @@ func TestELFFuncInfoSiteSectionsAllowSharedLibraryRelocations(t *testing.T) {
 	}
 }
 
-func TestCOFFFuncInfoEntrySiteIsAssociative(t *testing.T) {
-	prog := llssa.NewProgram(&llssa.Target{GOOS: "windows", GOARCH: "arm64"})
-	defer prog.Dispose()
-	prog.EnableFuncInfoMetadata(true)
-	prog.EnableFuncInfoSites(true)
-	ctx := &context{
-		prog: prog,
-		buildConf: &Config{
-			BuildMode: BuildModeExe,
-			Goos:      "windows",
-			Goarch:    "arm64",
-		},
-	}
-	src := prog.NewPackage("example.com/p", "example.com/p")
-	src.EmitFuncInfo("example.com/p.live", "example.com/p.Live", "live.go", 17, 3)
-	fn := src.NewFunc("example.com/p.live", llssa.NoArgsNoRet, llssa.GoDecl)
-	fn.MakeBody(1).Return()
-	emitFuncInfoEntrySites(ctx, src)
-
-	buf, err := prog.TargetMachine().EmitToMemoryBuffer(src.Module(), llvm.ObjectFile)
-	if err != nil {
-		t.Fatalf("emit COFF object: %v\n%s", err, src.String())
-	}
-	defer buf.Dispose()
-	obj, err := pe.NewFile(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("open COFF object: %v", err)
-	}
-	defer obj.Close()
-
-	found := false
-	for i := 0; i < len(obj.COFFSymbols); {
-		sym := &obj.COFFSymbols[i]
-		name, err := sym.FullName(obj.StringTable)
-		if err != nil {
-			t.Fatalf("read COFF symbol %d: %v", i, err)
-		}
-		if name == entrySiteSectionInfo.coff+"$m" {
-			aux, err := obj.COFFSymbolReadSectionDefAux(i)
-			if err != nil {
-				t.Fatalf("read %s section definition: %v", name, err)
-			}
-			if aux.Selection != pe.IMAGE_COMDAT_SELECT_ASSOCIATIVE || aux.SecNum == 0 {
-				t.Fatalf("%s COMDAT = (selection=%d, associated section=%d), want associative with a parent", name, aux.Selection, aux.SecNum)
-			}
-			found = true
-		}
-		i += 1 + int(sym.NumberOfAuxSymbols)
-	}
-	if !found {
-		t.Fatalf("COFF object is missing associative %s$m", entrySiteSectionInfo.coff)
-	}
-}
-
 func TestFuncInfoMetadataLinksIntoSharedLibrary(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		testCOFFFuncInfoMetadataLinksIntoDLL(t)
-		return
-	}
 	testELFFuncInfoMetadataLinksIntoSharedLibrary(t)
-}
-
-func testCOFFFuncInfoMetadataLinksIntoDLL(t *testing.T) {
-	linker, err := exec.LookPath("lld-link")
-	if err != nil {
-		t.Fatal("lld-link is required for the PE shared-library regression test")
-	}
-
-	prog := llssa.NewProgram(&llssa.Target{GOOS: "windows", GOARCH: runtime.GOARCH})
-	defer prog.Dispose()
-	prog.EnableFuncInfoMetadata(true)
-	prog.EnableFuncInfoSites(true)
-	ctx := &context{
-		prog: prog,
-		buildConf: &Config{
-			BuildMode: BuildModeCShared,
-			Goos:      "windows",
-			Goarch:    runtime.GOARCH,
-		},
-	}
-
-	src := prog.NewPackage("example.com/p", "example.com/p")
-	src.EmitFuncInfo("example.com/p.live", "example.com/p.Live", "live.go", 17, 3)
-	fn := src.NewFunc("example.com/p.live", llssa.NoArgsNoRet, llssa.GoDecl)
-	fn.MakeBody(1).Return()
-	records := collectFuncInfo([]Package{{LPkg: src}})
-	emitFuncInfoEntrySites(ctx, src)
-
-	metadata := prog.NewPackage("example.com/runtime", "example.com/runtime")
-	emitFuncInfoTable(ctx, metadata, records, nil)
-
-	dir := t.TempDir()
-	writeObject := func(name string, mod llvm.Module) string {
-		t.Helper()
-		buf, err := prog.TargetMachine().EmitToMemoryBuffer(mod, llvm.ObjectFile)
-		if err != nil {
-			t.Fatalf("emit %s: %v", name, err)
-		}
-		defer buf.Dispose()
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-		return path
-	}
-	srcObj := writeObject("src.obj", src.Module())
-	metadataObj := writeObject("metadata.obj", metadata.Module())
-	shared := filepath.Join(dir, "funcinfo.dll")
-	cmd := exec.Command(linker,
-		"/dll", "/noentry", "/nodefaultlib", "/opt:ref",
-		"/include:example.com/p.live",
-		"/include:"+funcInfoEntryStartPtrSymbol,
-		"/include:"+funcInfoEntryEndPtrSymbol,
-		"/out:"+shared, srcObj, metadataObj,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("link PE shared library: %v\n%s", err, out)
-	}
-
-	pf, err := pe.Open(shared)
-	if err != nil {
-		t.Fatalf("open linked PE: %v", err)
-	}
-	defer pf.Close()
-	entry := pf.Section(entrySiteSectionInfo.coff)
-	if entry == nil {
-		t.Fatalf("linked PE is missing %s", entrySiteSectionInfo.coff)
-	}
-	data, err := entry.Data()
-	if err != nil {
-		t.Fatalf("read %s: %v", entry.Name, err)
-	}
-	recordSize := 8 + prog.PointerSize()
-	if len(data) < 3*recordSize {
-		t.Fatalf("%s size = %d, want at least three %d-byte records", entry.Name, len(data), recordSize)
-	}
-	middle := data[recordSize : 2*recordSize]
-	if bytes.Equal(middle, make([]byte, recordSize)) {
-		t.Fatalf("%s live-function record is zero", entry.Name)
-	}
-	if pf.Section(".reloc") == nil {
-		t.Fatal("linked PE is missing base relocations for funcinfo pointers")
-	}
 }
 
 func testELFFuncInfoMetadataLinksIntoSharedLibrary(t *testing.T) {

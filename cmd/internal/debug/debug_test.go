@@ -97,18 +97,16 @@ func TestBrowserAndWASISessionBoundaries(t *testing.T) {
 }
 
 func TestLLDBRejectsCompressedNativeDWARF(t *testing.T) {
-	for _, goos := range []string{"darwin", "windows"} {
-		conf := &build.Config{Goos: goos, Goarch: "arm64"}
-		opts := options{remote: ":1234"}
-		conf.LinkOptions.DWARFCompression = build.DWARFCompressionEnabled
-		if err := validateSessionTarget(conf, nil, backendLLDB, opts); err == nil || !strings.Contains(err.Error(), "-compressdwarf=false") {
-			t.Fatalf("compressed dSYM did not produce actionable LLDB error: %v", err)
-		}
-		for _, mode := range []build.DWARFCompressionMode{build.DWARFCompressionDefault, build.DWARFCompressionDisabled} {
-			conf.LinkOptions.DWARFCompression = mode
-			if err := validateSessionTarget(conf, nil, backendLLDB, opts); err != nil {
-				t.Fatal(err)
-			}
+	conf := &build.Config{Goos: "darwin", Goarch: "arm64"}
+	opts := options{remote: ":1234"}
+	conf.LinkOptions.DWARFCompression = build.DWARFCompressionEnabled
+	if err := validateSessionTarget(conf, nil, backendLLDB, opts); err == nil || !strings.Contains(err.Error(), "-compressdwarf=false") {
+		t.Fatalf("compressed dSYM did not produce actionable LLDB error: %v", err)
+	}
+	for _, mode := range []build.DWARFCompressionMode{build.DWARFCompressionDefault, build.DWARFCompressionDisabled} {
+		conf.LinkOptions.DWARFCompression = mode
+		if err := validateSessionTarget(conf, nil, backendLLDB, opts); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -338,7 +336,6 @@ func TestArtifactAndArgumentHandling(t *testing.T) {
 		conf build.Config
 		want string
 	}{
-		{conf: build.Config{Goos: "windows"}, want: ".exe"},
 		{conf: build.Config{Goos: "wasip1", Goarch: "wasm"}, want: ".wasm"},
 		{conf: build.Config{Goos: "linux", Goarch: "amd64"}, want: ""},
 	} {

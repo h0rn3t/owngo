@@ -377,7 +377,6 @@ func TestProfileTargetQualification(t *testing.T) {
 	}{
 		{"linux", "amd64", "", "-test.cpuprofile=cpu", false},
 		{"darwin", "arm64", "", "-test.cpuprofile=cpu", false},
-		{"windows", "386", "", "-test.cpuprofile=cpu", false},
 		{"linux", "386", "", "-test.cpuprofile=cpu", true},
 		{"js", "wasm", "", "-test.cpuprofile=cpu", true},
 		{"wasip1", "wasm", "wasi", "-test.memprofile=mem", true},

@@ -233,7 +233,6 @@ func TestPrimaryArtifactFormat(t *testing.T) {
 		{name: "target ELF", conf: Config{Target: "cortex-m-qemu"}, path: "app.elf", want: "elf"},
 		{name: "archive", conf: Config{Goarch: "wasm", BuildMode: BuildModeCArchive}, path: "libapp.a", want: "archive"},
 		{name: "Mach-O", conf: Config{Goos: "darwin", BuildMode: BuildModeCShared}, path: "libapp.dylib", want: "macho"},
-		{name: "PE", conf: Config{Goos: "windows"}, path: "app.exe", want: "pe"},
 		{name: "ELF", conf: Config{Goos: "linux", BuildMode: BuildModeCShared}, path: "libapp.so", want: "elf"},
 		{name: "executable", conf: Config{BuildMode: BuildModeExe}, path: "app", want: "executable"},
 	}

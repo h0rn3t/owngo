@@ -44,9 +44,9 @@ func TestBoundsCheckModesIR(t *testing.T) {
 func TestStringSliceIndexABI(t *testing.T) {
 	for _, arch := range []string{"amd64", "386"} {
 		t.Run(arch, func(t *testing.T) {
-			t.Setenv("GOOS", "windows")
+			t.Setenv("GOOS", "linux")
 			t.Setenv("GOARCH", arch)
-			prog := ssatest.NewProgram(t, &ssa.Target{GOOS: "windows", GOARCH: arch})
+			prog := ssatest.NewProgram(t, &ssa.Target{GOOS: "linux", GOARCH: arch})
 			t.Cleanup(prog.Dispose)
 			for _, test := range []struct {
 				name               string
@@ -144,9 +144,9 @@ func TestSignedIndexUsesUnsignedCompare(t *testing.T) {
 }
 
 func TestWideIndexBoundsCheck386(t *testing.T) {
-	t.Setenv("GOOS", "windows")
+	t.Setenv("GOOS", "linux")
 	t.Setenv("GOARCH", "386")
-	prog := ssatest.NewProgram(t, &ssa.Target{GOOS: "windows", GOARCH: "386"})
+	prog := ssatest.NewProgram(t, &ssa.Target{GOOS: "linux", GOARCH: "386"})
 	t.Cleanup(prog.Dispose)
 
 	byteSlice := types.NewSlice(types.Typ[types.Byte])

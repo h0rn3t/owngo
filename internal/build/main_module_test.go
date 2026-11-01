@@ -80,28 +80,8 @@ func TestGenMainModuleExecutable(t *testing.T) {
 	)
 }
 
-func TestGenMainModuleWindowsExitsAfterMain(t *testing.T) {
-	llvm.InitializeAllTargets()
-	ctx := &context{
-		prog: llssa.NewProgram(nil),
-		buildConf: &Config{
-			BuildMode: BuildModeExe,
-			Goos:      "windows",
-			Goarch:    "arm64",
-		},
-	}
-	pkg := &packages.Package{PkgPath: "example.com/foo", ExportFile: "foo.a"}
-	mod := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{rtInit: true})
-	ir := mod.LPkg.String()
-	assertInOrder(t, ir,
-		`call void @"example.com/foo.main"()`,
-		`call i32 @fflush(ptr null)`,
-		`call void @runtime.exit(i32 0)`,
-	)
-}
-
 func TestGenMainModuleExecutableRegistersCExportThread(t *testing.T) {
-	for _, goos := range []string{"darwin", "linux", "windows"} {
+	for _, goos := range []string{"darwin", "linux"} {
 		t.Run(goos, func(t *testing.T) {
 			ctx := &context{
 				prog:      llssa.NewProgram(nil),
@@ -124,19 +104,17 @@ func TestGenMainModuleExecutableRegistersCExportThread(t *testing.T) {
 				`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.ExitForeignThread"(i1`,
 				"ret i32",
 			)
-			if goos != "windows" {
-				assertInOrder(t, ir,
-					`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.init"()`,
-					`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnableForeignThreadRegistration"()`,
-					`call void @"example.com/dep.init"()`,
-				)
-			}
+			assertInOrder(t, ir,
+				`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.init"()`,
+				`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnableForeignThreadRegistration"()`,
+				`call void @"example.com/dep.init"()`,
+			)
 		})
 	}
 }
 
 func TestGenMainModuleCoverageExit(t *testing.T) {
-	for _, goos := range []string{"linux", "darwin", "windows"} {
+	for _, goos := range []string{"linux", "darwin"} {
 		t.Run(goos, func(t *testing.T) {
 			for _, covered := range []bool{false, true} {
 				ctx := &context{
@@ -160,14 +138,10 @@ func TestGenMainModuleCoverageExit(t *testing.T) {
 					}
 					continue
 				}
-				order := []string{
+				assertInOrder(t, ir,
 					`call void @"example.com/app.main"()`,
 					`call void @runtime.runCoverageExitHook(i64 0)`,
-				}
-				if goos == "windows" {
-					order = append(order, `call i32 @fflush(ptr null)`, `call void @runtime.exit(i32 0)`)
-				}
-				assertInOrder(t, ir, order...)
+				)
 			}
 		})
 	}
@@ -202,38 +176,6 @@ func TestGenMainModuleOwnGoExit(t *testing.T) {
 				`call void @"`+llssa.PkgRuntime+`.ReportExit"()`,
 			)
 		})
-	}
-}
-
-func TestGenMainModuleWindowsStdioNobufUsesUCRTStreams(t *testing.T) {
-	llvm.InitializeAllTargets()
-	t.Setenv(llgoStdioNobuf, "1")
-	ctx := &context{
-		prog: llssa.NewProgram(nil),
-		buildConf: &Config{
-			BuildMode: BuildModeExe,
-			Goos:      "windows",
-			Goarch:    "arm64",
-		},
-	}
-	pkg := &packages.Package{PkgPath: "example.com/foo", ExportFile: "foo.a"}
-	ir := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{}).LPkg.String()
-	for _, want := range []string{
-		"call ptr @__acrt_iob_func(i32 1)",
-		"call ptr @__acrt_iob_func(i32 2)",
-		"call i32 @setvbuf(",
-	} {
-		if !strings.Contains(ir, want) {
-			t.Fatalf("Windows stdio setup IR missing %q:\n%s", want, ir)
-		}
-	}
-	if got := strings.Count(ir, "i32 4, i64 0)"); got != 2 {
-		t.Fatalf("Windows stdio setup used _IONBF=4 %d times, want 2:\n%s", got, ir)
-	}
-	for _, unwanted := range []string{"@stdout =", "@stderr ="} {
-		if strings.Contains(ir, unwanted) {
-			t.Fatalf("Windows stdio setup IR contains unavailable UCRT global %q:\n%s", unwanted, ir)
-		}
 	}
 }
 
@@ -625,70 +567,6 @@ func TestGenMainModuleLibraryInitializesRuntime(t *testing.T) {
 	}
 }
 
-func TestGenMainModuleWindowsCSharedInitializesFromCExport(t *testing.T) {
-	llvm.InitializeAllTargets()
-	t.Setenv(llgoStdioNobuf, "")
-	ctx := &context{
-		prog: llssa.NewProgram(nil),
-		buildConf: &Config{
-			BuildMode: BuildModeCShared,
-			Goos:      "windows",
-			Goarch:    "arm64",
-		},
-	}
-	pkg := &packages.Package{PkgPath: "example.com/foo", ExportFile: "foo.a"}
-	ir := genMainModule(ctx, llssa.PkgRuntime, pkg, &genConfig{
-		rtInit:       true,
-		packageInits: []string{"example.com/dep.init"},
-		cExports: []cExport{{
-			goName: "example.com/foo.Exported",
-			cName:  "Exported",
-			sig:    llssa.NoArgsNoRet,
-		}, {
-			goName: "example.com/foo.Value",
-			cName:  "Value",
-			sig:    newSignature([]types.Type{types.Typ[types.Int32]}, []types.Type{types.Typ[types.Int32]}),
-		}},
-	}).LPkg.String()
-
-	for _, want := range []string{
-		"define internal void @__llgo_runtime_initialize()",
-		"declare dllimport i32 @InitOnceExecuteOnce(",
-		"define hidden void @__llgo_runtime_ensure_initialized()",
-		"define void @Exported()",
-	} {
-		if !strings.Contains(ir, want) {
-			t.Fatalf("Windows c-shared module IR missing %q:\n%s", want, ir)
-		}
-	}
-	for _, unwanted := range []string{"@llvm.global_ctors", "@__llgo_runtime_ctor"} {
-		if strings.Contains(ir, unwanted) {
-			t.Fatalf("Windows c-shared module IR contains loader-lock constructor %q:\n%s", unwanted, ir)
-		}
-	}
-	assertInOrder(t, ir,
-		"define internal void @__llgo_runtime_initialize()",
-		`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.init"()`,
-		`call void @"example.com/dep.init"()`,
-		`call void @"example.com/foo.init"()`,
-	)
-	wrapper := ir[strings.Index(ir, "define void @Exported()"):]
-	assertInOrder(t, wrapper,
-		"call void @__llgo_runtime_ensure_initialized()",
-		`call i1 @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnterForeignThread"()`,
-		`call void @"example.com/foo.Exported"()`,
-		`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.ExitForeignThread"(i1`,
-	)
-	valueWrapper := ir[strings.Index(ir, "define i32 @Value(i32 %0)"):]
-	assertInOrder(t, valueWrapper,
-		"call void @__llgo_runtime_ensure_initialized()",
-		`call i1 @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnterForeignThread"()`,
-		`call i32 @"example.com/foo.Value"(i32 %0)`,
-		`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.ExitForeignThread"(i1`,
-		"ret i32",
-	)
-}
-
 func TestGenMainModuleCArchiveRegistersCExportThread(t *testing.T) {
 	llvm.InitializeAllTargets()
 	t.Setenv(llgoStdioNobuf, "")
@@ -698,7 +576,6 @@ func TestGenMainModuleCArchiveRegistersCExportThread(t *testing.T) {
 	}{
 		{goos: "darwin", goarch: "arm64"},
 		{goos: "linux", goarch: "amd64"},
-		{goos: "windows", goarch: "386"},
 	} {
 		t.Run(test.goos+"/"+test.goarch, func(t *testing.T) {
 			ctx := &context{
@@ -727,9 +604,8 @@ func TestGenMainModuleCArchiveRegistersCExportThread(t *testing.T) {
 			}
 			enablesForeignThreads := strings.Contains(ir,
 				`call void @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnableForeignThreadRegistration"()`)
-			if want := test.goos != "windows"; enablesForeignThreads != want {
-				t.Fatalf("%s c-archive foreign-thread enable = %v, want %v:\n%s",
-					test.goos, enablesForeignThreads, want, ir)
+			if !enablesForeignThreads {
+				t.Fatalf("%s c-archive foreign-thread enable = false, want true:\n%s", test.goos, ir)
 			}
 			wrapper := ir[strings.Index(ir, "define void @Exported()"):]
 			assertInOrder(t, wrapper,

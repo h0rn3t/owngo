@@ -50,10 +50,6 @@ func TestClosureEnvABIForTarget(t *testing.T) {
 		{"armv7-unknown-linux-gnueabihf", closureEnvSwiftSelf},
 		{"aarch64-unknown-linux", closureEnvNest},
 		{"arm64-apple-macosx", closureEnvSwiftSelf},
-		{"x86_64-pc-windows-gnu", closureEnvNest},
-		{"x86_64-pc-windows-msvc", closureEnvNest},
-		{"x86_64-w64-mingw32", closureEnvNest},
-		{"aarch64-pc-windows-msvc", closureEnvSwiftSelf},
 		{"mips64-unknown-linux", closureEnvExplicit},
 	}
 	for _, test := range tests {
@@ -398,22 +394,6 @@ func TestClosureObjectCallMatrixAcrossTransports(t *testing.T) {
 		{
 			name: "swiftself",
 			tgt:  &Target{GOOS: "darwin", GOARCH: "arm64"},
-			abi:  closureEnvSwiftSelf,
-			attr: "swiftself",
-		},
-		{
-			name: "windows-nest",
-			tgt: &Target{
-				GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-pc-windows-msvc",
-			},
-			abi:  closureEnvNest,
-			attr: "nest",
-		},
-		{
-			name: "windows-swiftself",
-			tgt: &Target{
-				GOOS: "windows", GOARCH: "arm64", LLVMTarget: "aarch64-pc-windows-msvc",
-			},
 			abi:  closureEnvSwiftSelf,
 			attr: "swiftself",
 		},

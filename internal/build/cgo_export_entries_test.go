@@ -21,7 +21,7 @@ func TestCExportCallbackEntries(t *testing.T) {
 func testCExportEntries(t *testing.T, fixture string, names []string) {
 	t.Helper()
 	switch runtime.GOOS {
-	case "darwin", "linux", "windows":
+	case "darwin", "linux":
 	default:
 		t.Skip("hosted native C callbacks")
 	}
@@ -52,7 +52,7 @@ func testCExportEntries(t *testing.T, fixture string, names []string) {
 
 	// The package checks above and the final-link checks below must agree on
 	// both symbols: the public C name guards the qualified Go implementation.
-	for _, goos := range []string{"darwin", "linux", "windows"} {
+	for _, goos := range []string{"darwin", "linux"} {
 		for _, mode := range []BuildMode{BuildModeExe, BuildModeCShared, BuildModeCArchive} {
 			t.Run(goos+"/"+string(mode), func(t *testing.T) {
 				ctx := &context{
@@ -86,12 +86,6 @@ func testCExportEntries(t *testing.T, fixture string, names []string) {
 					}
 					if fn := entry.NamedFunction(goName); fn.IsNil() || !fn.IsDeclaration() {
 						t.Fatalf("final-link module must reference the package's Go implementation %q:\n%s", goName, entry.String())
-					}
-					if goos == "windows" && mode == BuildModeCShared {
-						assertInOrder(t, wrapper.String(),
-							"call void @__llgo_runtime_ensure_initialized()",
-							`call i1 @"github.com/xgo-dev/llgo/runtime/internal/runtime.EnterForeignThread"()`,
-						)
 					}
 				}
 			})

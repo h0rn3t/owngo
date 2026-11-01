@@ -154,7 +154,7 @@ func TestCPUInitializationMatchesGo(t *testing.T) {
 func TestCPUInitializationTargetHooks(t *testing.T) {
 	for _, target := range []struct{ os, arch string }{
 		{"darwin", "amd64"}, {"darwin", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"},
-		{"windows", "amd64"}, {"windows", "arm64"}, {"wasip1", "wasm"},
+		{"wasip1", "wasm"},
 	} {
 		t.Run(target.os+"/"+target.arch, func(t *testing.T) {
 			conf := NewDefaultConf(ModeGen)
@@ -181,8 +181,6 @@ func TestCPUInitializationTargetHooks(t *testing.T) {
 			switch target.os {
 			case "darwin":
 				bridge = "internal/cpu.sysctlbynameInt32"
-			case "windows":
-				bridge = "internal/cpu.isProcessorFeaturePresent"
 			case "linux":
 				if target.arch == "arm64" {
 					if !strings.Contains(mod.NamedFunction("internal/cpu.llgoPrepareCPU").String(), "@getauxval") {

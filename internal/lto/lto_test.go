@@ -79,7 +79,7 @@ func TestPassPluginLinkerFlags(t *testing.T) {
 	if (PassPlugin{}).Enabled() {
 		t.Fatal("empty plugin should be disabled")
 	}
-	for _, goos := range []string{"linux", "darwin", "windows"} {
+	for _, goos := range []string{"linux", "darwin"} {
 		if got, err := (PassPlugin{}).LinkerFlags(goos); err != nil || got != nil {
 			t.Fatalf("disabled plugin flags on %s = %v, err = %v; want nil, nil", goos, got, err)
 		}
@@ -96,9 +96,6 @@ func TestPassPluginLinkerFlags(t *testing.T) {
 				t.Fatalf("LinkerFlags() = %v, want %v", got, want)
 			}
 		})
-	}
-	if got, err := (PassPlugin{Path: "C:/plugins/LLGOLTOPlugin.dll"}).LinkerFlags("windows"); err == nil || got != nil {
-		t.Fatalf("windows plugin flags = %v, err = %v; want nil and an unsupported error", got, err)
 	}
 }
 

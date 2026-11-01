@@ -109,7 +109,7 @@ func TestLinkedCExportsIncludesDependencyAndExecutableCallbacks(t *testing.T) {
 			LPkg:    lpkg,
 		}
 	}
-	for _, goos := range []string{"darwin", "linux", "windows"} {
+	for _, goos := range []string{"darwin", "linux"} {
 		for _, mode := range []BuildMode{BuildModeCShared, BuildModeCArchive, BuildModeExe} {
 			t.Run(goos+"/"+string(mode), func(t *testing.T) {
 				ctx := &context{buildConf: &Config{

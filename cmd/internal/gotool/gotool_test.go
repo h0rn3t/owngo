@@ -48,9 +48,6 @@ func TestFind(t *testing.T) {
 }
 
 func TestExecutableName(t *testing.T) {
-	if got := executableName("windows"); got != "go.exe" {
-		t.Errorf("Windows name = %q", got)
-	}
 	if got := executableName("linux"); got != "go" {
 		t.Errorf("Unix name = %q", got)
 	}

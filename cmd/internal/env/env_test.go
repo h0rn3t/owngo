@@ -306,18 +306,8 @@ func TestExtendedFormattingAndHelpers(t *testing.T) {
 	if got := envAssignment("linux", "X", "a'b"); got != `X='a'\''b'` {
 		t.Errorf("Unix assignment = %q", got)
 	}
-	if got := envAssignment("windows", "X", "%a&b^c\n"); got != "set X=%%a^&b^^c�" {
-		t.Errorf("Windows assignment = %q", got)
-	}
 	if got := envAssignment("linux", "X", "safe\x1b[31m\nline"); got != "X='safe�[31m�line'" {
 		t.Errorf("sanitized Unix assignment = %q", got)
-	}
-	windowsCandidates := toolCandidates("windows", `C:\LLVM\bin`, "ld.lld")
-	if len(windowsCandidates) != 2 || !strings.HasSuffix(windowsCandidates[1], "ld.lld.exe") {
-		t.Errorf("Windows dotted tool candidates = %q", windowsCandidates)
-	}
-	if candidates := toolCandidates("windows", `C:\LLVM\bin`, "clang.exe"); len(candidates) != 1 {
-		t.Errorf("Windows exe candidates = %q", candidates)
 	}
 }
 

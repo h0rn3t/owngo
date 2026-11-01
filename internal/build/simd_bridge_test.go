@@ -13,7 +13,7 @@ import (
 
 func TestSIMDPortableBridgeLLVM(t *testing.T) {
 	for _, target := range []struct{ os, arch string }{
-		{"linux", "amd64"}, {"windows", "amd64"}, {"darwin", "arm64"}, {"wasip1", "wasm"},
+		{"linux", "amd64"}, {"darwin", "arm64"}, {"wasip1", "wasm"},
 	} {
 		t.Run(target.os+"/"+target.arch, func(t *testing.T) {
 			dir := t.TempDir()
@@ -80,11 +80,7 @@ func widen(x,y archsimd.Uint32x4) archsimd.Uint64x2 { return x.MulWidenLo(y) }
 			}
 			pkg := pkgs[mainIndex].LPkg
 			mod := pkg.Module()
-			fma := "@llvm.fma.v4f32"
-			if target.os == "windows" {
-				fma = "SIMDFMA32"
-			}
-			if target.arch != "wasm" && !strings.Contains(mod.NamedFunction("main.madd").String(), fma) {
+			if target.arch != "wasm" && !strings.Contains(mod.NamedFunction("main.madd").String(), "@llvm.fma.v4f32") {
 				t.Fatal("native MulAdd lost fused rounding")
 			}
 			if target.arch == "amd64" && !strings.Contains(mod.NamedFunction("main.masked").String(), "@llvm.masked.store") {

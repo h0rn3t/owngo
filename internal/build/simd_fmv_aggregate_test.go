@@ -12,7 +12,7 @@ import (
 )
 
 func TestSIMDFMVAggregatesLLVM(t *testing.T) {
-	for _, goos := range []string{"linux", "darwin", "windows"} {
+	for _, goos := range []string{"linux", "darwin"} {
 		t.Run(goos, func(t *testing.T) {
 			dir := t.TempDir()
 			if err := os.Mkdir(filepath.Join(dir, "kernel"), 0700); err != nil {

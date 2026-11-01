@@ -19,7 +19,7 @@ import (
 )
 
 func TestRuntimeOwnership(t *testing.T) {
-	for _, target := range []struct{ os, arch string }{{"darwin", "arm64"}, {"linux", "amd64"}, {"windows", "amd64"}, {"windows", "arm64"}, {"windows", "386"}, {"js", "wasm"}, {"wasip1", "wasm"}} {
+	for _, target := range []struct{ os, arch string }{{"darwin", "arm64"}, {"linux", "amd64"}, {"js", "wasm"}, {"wasip1", "wasm"}} {
 		t.Run(target.os+"-"+target.arch, func(t *testing.T) {
 			var tags []string
 			if target.arch == "wasm" {

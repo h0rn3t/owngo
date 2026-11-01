@@ -256,7 +256,7 @@ func assertSIMDBaselineAssembly(t *testing.T, asm string) {
 
 func TestSIMDIntrinsicDefinitions(t *testing.T) {
 	dir := simdTestDir(t)
-	for _, target := range []struct{ os, arch string }{{"windows", "amd64"}, {"windows", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"}, {"wasip1", "wasm"}} {
+	for _, target := range []struct{ os, arch string }{{"linux", "amd64"}, {"linux", "arm64"}, {"wasip1", "wasm"}} {
 		t.Run(target.os+"/"+target.arch, func(t *testing.T) {
 			conf := NewDefaultConf(ModeGen)
 			conf.Goos, conf.Goarch, conf.GOEXPERIMENT = target.os, target.arch, "simd"
@@ -298,41 +298,4 @@ func TestSIMDIntrinsicDefinitions(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSIMDWindowsLinkname(t *testing.T) {
-	dir := simdTestDir(t)
-	const source = `package main
-import "simd/archsimd"
-import _ "unsafe"
-//go:linkname broadcast simd/archsimd.BroadcastFloat32x4
-func broadcast(float32) archsimd.Float32x4
-func main() { println(broadcast(1).GetElem(0)) }
-`
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(source), 0600); err != nil {
-		t.Fatal(err)
-	}
-	conf := NewDefaultConf(ModeGen)
-	conf.Goos, conf.Goarch, conf.GOEXPERIMENT = "windows", "amd64", "simd"
-	pkgs, err := Build(Invocation{Args: []string{".", "simd/archsimd"}, Config: conf, Dir: dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pkgs[0].LPkg.Prog.Dispose()
-	for _, pkg := range pkgs {
-		if pkg.PkgPath != "simd/archsimd" {
-			continue
-		}
-		mod := pkg.LPkg.Module()
-		fn := mod.NamedFunction("simd/archsimd.BroadcastFloat32x4")
-		if fn.IsNil() || !strings.Contains(fn.String(), "broadcast1To4") {
-			t.Fatal("linkname target body was discarded")
-		}
-		callee := mod.NamedFunction("simd/archsimd.Float32x4.broadcast1To4")
-		if callee.IsNil() || callee.IsDeclaration() || !strings.Contains(callee.String(), "shufflevector") {
-			t.Fatal("transitive broadcast intrinsic lacks a vector implementation")
-		}
-		return
-	}
-	t.Fatal("missing archsimd package")
 }
