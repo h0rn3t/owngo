@@ -123,10 +123,6 @@ static void *dynunw_make_ctx(void *uctx)
      * there vs cpsr here — zero it (no PAC signing state carried over). */
     memcpy(dynunw_ctx, &uc->uc_mcontext->__ss, 33 * sizeof(uint64_t));
     dynunw_ctx[33] = 0;
-#elif defined(__APPLE__) && defined(__x86_64__)
-    /* __darwin_x86_thread_state64 is exactly LLVM's GPR order for the first
-     * 17 words (rax..r15, rip). */
-    memcpy(dynunw_ctx, &uc->uc_mcontext->__ss, 17 * sizeof(uint64_t));
 #elif defined(__linux__) && defined(__x86_64__)
     {
         /* linux gregs order: R8 R9 R10 R11 R12 R13 R14 R15 RDI RSI RBP RBX

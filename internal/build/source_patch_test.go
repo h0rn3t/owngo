@@ -292,7 +292,6 @@ func TestSyscallSourcePatchPreservesTargetImplementations(t *testing.T) {
 		goarch string
 		asm    []string
 	}{
-		{goos: "darwin", goarch: "amd64", asm: []string{"asm_darwin_amd64.s", "zsyscall_darwin_amd64.s"}},
 		{goos: "darwin", goarch: "arm64", asm: []string{"asm_darwin_arm64.s", "zsyscall_darwin_arm64.s"}},
 		{goos: "linux", goarch: "amd64", asm: []string{"asm_linux_amd64.s"}},
 		{goos: "linux", goarch: "arm64", asm: []string{"asm_linux_arm64.s"}},

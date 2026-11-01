@@ -150,7 +150,7 @@ func TestForeignARM64SelectionAndErrors(t *testing.T) {
 // Native assembly shares the ordinary Plan 9 .ll output and object compiler.
 // Check saved IR, DATA binding and target relocations on every LLVM host.
 func TestForeignNativeCrossCompileObject(t *testing.T) {
-	for _, target := range []struct{ goos, goarch, triple string }{{"darwin", "amd64", "x86_64-apple-darwin"}, {"darwin", "arm64", "arm64-apple-darwin"}, {"linux", "amd64", "x86_64-unknown-linux-gnu"}, {"linux", "arm64", "aarch64-unknown-linux-gnu"}} {
+	for _, target := range []struct{ goos, goarch, triple string }{{"darwin", "arm64", "arm64-apple-darwin"}, {"linux", "amd64", "x86_64-unknown-linux-gnu"}, {"linux", "arm64", "aarch64-unknown-linux-gnu"}} {
 		t.Run(target.goos+"/"+target.goarch, func(t *testing.T) {
 			for _, size := range []int{8, 16} {
 				t.Run(fmt.Sprint(size), func(t *testing.T) {

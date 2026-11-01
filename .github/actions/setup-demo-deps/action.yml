@@ -15,9 +15,6 @@ runs:
             ;;
           macOS)
             case "$(uname -m)" in
-              x86_64)
-                demo_pkg="cargs_darwin_amd64.zip"
-                ;;
               arm64)
                 demo_pkg="cargs_darwin_arm64.zip"
                 ;;

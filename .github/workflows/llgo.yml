@@ -327,7 +327,7 @@ jobs:
         run: bash test/debug/native/runtest.sh
 
       - name: Native debug metadata tests
-        if: ${{ startsWith(matrix.os, 'macos') && matrix.os != 'macos-15-intel' }}
+        if: ${{ startsWith(matrix.os, 'macos') }}
         run: go test -timeout 15m ./internal/build -run '^TestStandardDWARF$' -count=1 -v
 
   runtime-arm64:
@@ -375,69 +375,6 @@ jobs:
             -run '^(TestNarrowC|TestLinknameNarrowC)' ./test/llgoext
       - name: Run caller regressions in C shared libraries and archives
         run: dev/test_std_buildmodes.sh ./test/std/runtime
-
-  native-debuggers-intel:
-    name: Native debuggers (macOS Intel, GDB values and registry)
-    needs: prepare
-    if: needs.prepare.outputs.run_code_ci == 'true'
-    permissions:
-      contents: read
-    runs-on: macos-15-intel
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-      # Intel runners retain bottled versions from their image; Homebrew no
-      # longer ships Intel bottles for LLVM, and the image predates the
-      # versioned llvm@23 formula, so the brew-based setup-deps cannot
-      # install LLVM 23 here. Use the locked mise development environment
-      # instead: its conda-forge llvmdev/clangxx/lld 23.1.4 toolchain is
-      # bottled for osx-64 and already qualified by the Mise lane.
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-        with:
-          version: 2026.10.7
-          install_args: --locked
-          working_directory: dev
-          env: true
-          export_path: true
-      - name: Build LLGo
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/llgo-bin"
-          go build -o "$RUNNER_TEMP/llgo-bin/llgo" ./cmd/llgo
-          echo "$RUNNER_TEMP/llgo-bin" >> "$GITHUB_PATH"
-          echo "LLGO_ROOT=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
-      - name: Run narrow C ABI regressions
-        run: |
-          llgo test -v -count=1 -timeout=2m \
-            -run '^(TestNarrowC|TestLinknameNarrowC)' ./test/cgo ./test/llgoext
-      - name: Install GDB
-        uses: ./.github/actions/setup-gdb
-      - name: Enable native GDB on the ephemeral Intel runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          # GDB's Darwin fork/exec can block in wait4 at _dyld_start. Spawn
-          # suspended, then use native attach with the same test assertions.
-          # Elevate only GDB to obtain task ports on the ephemeral runner.
-          wrapper="$RUNNER_TEMP/llgo-gdb-native"
-          printf '#!/bin/bash\nexec python3 %q %q "$@"\n' \
-            "$GITHUB_WORKSPACE/test/debug/runtime/gdb_darwin.py" "$LLGO_GDB" > "$wrapper"
-          chmod +x "$wrapper"
-          "$wrapper" --batch --nx -ex 'python import gdb; print(gdb.VERSION)'
-          echo "LLGO_GDB=$wrapper" >> "$GITHUB_ENV"
-      - name: LLDB runtime adapter integration tests
-        env:
-          LLGO_LLDB: /usr/bin/lldb
-        run: bash test/debug/runtime/runtest.sh -v
-      # GDB 17/18 cannot load dyld 17 shared libraries or unwind blocked
-      # system frames here; a plain pthread C control reproduces the failure.
-      # Keep TestGDBCompleteWorkerUnwind strict and separately runnable.
-      - name: GDB native values and registry (Intel, worker unwind unavailable)
-        timeout-minutes: 15
-        env:
-          LLGO_GDB_INTEGRATION: "1"
-        run: go test ./cmd/internal/gdb -run '^TestGDBIntegration$' -count=1 -v
 
   cross-compile:
     if: needs.prepare.outputs.run_code_ci == 'true'

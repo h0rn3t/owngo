@@ -58,17 +58,15 @@ case "$PLATFORM" in
       "317f6e0fd1dba0886d8110709823d909593ef29438822a14f81ebe19d72ce7cd"
     )
     ;;
-  x86_64-apple-darwin)
-    SHA256S=(
-      "820028ee7cd2dd8fe8cd8ca5519ab6e792d15fea9367c4525cf63c0f707c0b1f"
-      "00b9dbc2124cf7633cb86f264fbc524226ad4001bce68bbdba43c9bdc4eb026e"
-    )
-    ;;
   x86_64-linux-gnu)
     SHA256S=(
       "373b37a68bae3ef441ead24a7bfc950fcbfc274cbdd2b628fc6915f179eb1d8e"
       "588bfaccd0f929650655d10a580f020c6ba9c131712d8fa519280081b8d126eb"
     )
+    ;;
+  *)
+    echo "Unsupported platform: $PLATFORM"
+    exit 1
     ;;
 esac
 

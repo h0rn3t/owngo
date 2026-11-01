@@ -13,7 +13,6 @@ get_esp_clang_platform() {
     case "${os}" in
         "darwin")
             case "${arch}" in
-                "amd64") echo "x86_64-apple-darwin" ;;
                 "arm64") echo "aarch64-apple-darwin" ;;
                 *) echo "Error: Unsupported darwin architecture: ${arch}" >&2; exit 1 ;;
             esac
@@ -71,7 +70,7 @@ if [[ ! -f "${LLVM_LICENSE}" ]]; then
     exit 1
 fi
 
-for platform in "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64"; do
+for platform in "darwin-arm64" "linux-amd64" "linux-arm64"; do
     download_and_extract "${platform}"
 done
 

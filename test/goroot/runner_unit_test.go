@@ -452,7 +452,7 @@ func TestWasmObservedResourceExceptions(t *testing.T) {
 				t.Errorf("%s %s rangegen timeout = %s, %v; want 15m, true", version, platform, timeout, match)
 			}
 		}
-		for _, platform := range []string{"darwin/amd64", "linux/amd64"} {
+		for _, platform := range []string{"linux/amd64"} {
 			if timeout, _, match := cfg.MatchTimeout(version, platform, rangegen); !match || timeout != 10*time.Minute {
 				t.Errorf("%s %s rangegen timeout = %s, %v; want 10m, true", version, platform, timeout, match)
 			}
@@ -669,12 +669,10 @@ func TestHostedThreadResourceSkip(t *testing.T) {
 		want                                        bool
 	}{
 		{"hosted ARM64", "darwin/arm64", "darwin/arm64", "github-hosted", "run", "gcgort.go", true},
-		{"hosted Intel", "darwin/amd64", "darwin/amd64", "github-hosted", "run", "gcgort.go", true},
 		{"local", "darwin/arm64", "darwin/arm64", "", "run", "gcgort.go", false},
 		{"self-hosted", "darwin/arm64", "darwin/arm64", "self-hosted", "run", "gcgort.go", false},
 		{"Linux", "linux/amd64", "linux/amd64", "github-hosted", "run", "gcgort.go", false},
 		{"Windows", "windows-msvc/amd64", "windows-msvc/amd64", "github-hosted", "run", "gcgort.go", false},
-		{"cross architecture", "darwin/arm64", "darwin/amd64", "github-hosted", "run", "gcgort.go", false},
 		{"cross OS", "linux/amd64", "darwin/arm64", "github-hosted", "run", "gcgort.go", false},
 		{"GoJS", "darwin/arm64", "J32-GoJS", "github-hosted", "run", "gcgort.go", false},
 		{"Emscripten32", "darwin/arm64", "J32-Emscripten", "github-hosted", "run", "gcgort.go", false},

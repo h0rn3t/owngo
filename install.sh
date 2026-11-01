@@ -518,6 +518,7 @@ main() {
     local arch
     arch="$(normalize_arch "$(uname -m)")" || die "unsupported architecture: $(uname -m)"
     [[ "$arch" == amd64 || "$arch" == arm64 ]] || die "LLGo does not publish $os/$arch host archives"
+    [[ "$os/$arch" != darwin/amd64 ]] || die "LLGo does not publish $os/$arch host archives"
 
     mkdir -p "$LLGO_INSTALL_ROOT/bin"
     if [[ "$LLGO_INSTALL_DEPS" == 1 ]]; then

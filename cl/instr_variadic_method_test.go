@@ -68,7 +68,6 @@ func TestCVariadicMethodWrapperForwarding(t *testing.T) {
 		{GOOS: "linux", GOARCH: "386"},
 		{GOOS: "linux", GOARCH: "arm"},
 		{GOOS: "linux", GOARCH: "riscv64"},
-		{GOOS: "darwin", GOARCH: "amd64"},
 		{GOOS: "darwin", GOARCH: "arm64"},
 		{GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-pc-windows-msvc"},
 		{GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-w64-windows-gnu"},

@@ -96,38 +96,6 @@ func TestTypeSizes(t *testing.T) {
 		if jmpBufSizeLinuxArm64 != jmpBufSizeReal {
 			t.Fatalf("jmpBufSizeLinuxArm64 mismatch: %d != %d", jmpBufSizeLinuxArm64, jmpBufSizeReal)
 		}
-	case runtime.GOOS == "darwin" && runtime.GOARCH == "amd64":
-		// macOS amd64 specific tests
-		if pthreadOnceSizeDarwinAmd64 != pthreadOnceSizeReal {
-			t.Fatalf("pthreadOnceSizeDarwinAmd64 mismatch: %d != %d", pthreadOnceSizeDarwinAmd64, pthreadOnceSizeReal)
-		}
-		if pthreadMutexSizeDarwinAmd64 != pthreadMutexSizeReal {
-			t.Fatalf("pthreadMutexSizeDarwinAmd64 mismatch: %d != %d", pthreadMutexSizeDarwinAmd64, pthreadMutexSizeReal)
-		}
-		if pthreadMutexAttrSizeDarwinAmd64 != pthreadMutexAttrSizeReal {
-			t.Fatalf("pthreadMutexAttrSizeDarwinAmd64 mismatch: %d != %d", pthreadMutexAttrSizeDarwinAmd64, pthreadMutexAttrSizeReal)
-		}
-		if pthreadCondSizeDarwinAmd64 != pthreadCondSizeReal {
-			t.Fatalf("pthreadCondSizeDarwinAmd64 mismatch: %d != %d", pthreadCondSizeDarwinAmd64, pthreadCondSizeReal)
-		}
-		if pthreadCondAttrSizeDarwinAmd64 != pthreadCondAttrSizeReal {
-			t.Fatalf("pthreadCondAttrSizeDarwinAmd64 mismatch: %d != %d", pthreadCondAttrSizeDarwinAmd64, pthreadCondAttrSizeReal)
-		}
-		if pthreadRWLockSizeDarwinAmd64 != pthreadRWLockSizeReal {
-			t.Fatalf("pthreadRWLockSizeDarwinAmd64 mismatch: %d != %d", pthreadRWLockSizeDarwinAmd64, pthreadRWLockSizeReal)
-		}
-		if pthreadRWLockAttrSizeDarwinAmd64 != pthreadRWLockAttrSizeReal {
-			t.Fatalf("pthreadRWLockAttrSizeDarwinAmd64 mismatch: %d != %d", pthreadRWLockAttrSizeDarwinAmd64, pthreadRWLockAttrSizeReal)
-		}
-		if clockSizeDarwinAmd64 != clockSizeReal {
-			t.Fatalf("clockSizeDarwinAmd64 mismatch: %d != %d", clockSizeDarwinAmd64, clockSizeReal)
-		}
-		if sigjmpBufSizeDarwinAmd64 != sigjmpBufSizeReal {
-			t.Fatalf("sigjmpBufSizeDarwinAmd64 mismatch: %d != %d", sigjmpBufSizeDarwinAmd64, sigjmpBufSizeReal)
-		}
-		if jmpBufSizeDarwinAmd64 != jmpBufSizeReal {
-			t.Fatalf("jmpBufSizeDarwinAmd64 mismatch: %d != %d", jmpBufSizeDarwinAmd64, jmpBufSizeReal)
-		}
 	case runtime.GOOS == "darwin" && runtime.GOARCH == "arm64":
 		// macOS arm64 specific tests
 		if pthreadOnceSizeDarwinArm64 != pthreadOnceSizeReal {

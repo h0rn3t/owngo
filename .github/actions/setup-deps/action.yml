@@ -13,8 +13,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Refresh Homebrew metadata on Apple Silicon
-      if: runner.os == 'macOS' && runner.arch == 'ARM64'
+    - name: Refresh Homebrew metadata
+      if: runner.os == 'macOS'
       shell: bash
       env:
         HOMEBREW_NO_AUTO_UPDATE: 1
@@ -27,9 +27,6 @@ runs:
         HOMEBREW_NO_AUTO_UPDATE: 1
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
       run: |
-        # Intel macOS is a Homebrew Tier 3 configuration and newly published
-        # formulae may have no Intel bottle. Keep its runner-image metadata and
-        # installed formulae; Apple Silicon refreshes metadata in the step above.
         brew_install_missing() {
           local formula
           local missing=()

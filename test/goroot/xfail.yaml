@@ -19,21 +19,11 @@ host_skips:
     case: fixedbugs/bug449.go
     reason: go1.26 bug449 generated build exceeds the linux/amd64 hosted runner memory budget
 timeouts:
-  - platform: darwin/amd64
-    directive: run
-    case: recover.go
-    timeout: 10m
-    reason: the complete panic/recover compiler stress exceeded the 3m build budget on paired Intel macOS
   - platform: wasip1/wasm
     directive: run
     case: cmplxdivide.go
     timeout: 10m
     reason: the complete complex division table passed in 249s with time spent in LLVM WebAssembly register stackification
-  - platform: darwin/amd64
-    directive: run
-    case: abi/uglyfib.go
-    timeout: 90s
-    reason: the full recursive ABI stress passed in 35-46s but exceeded 60s on a hosted Intel runner where adjacent cases also took twice as long
   - platform: js/wasm
     directive: run
     case: winbatch.go
@@ -81,11 +71,6 @@ timeouts:
     case: abi/uglyfib.go
     timeout: 1m
     reason: uglyfib runs close to the default timeout on loaded linux/amd64 runners
-  - platform: darwin/amd64
-    directive: runoutput
-    case: rangegen.go
-    timeout: 10m
-    reason: both paired Go versions exceeded the default 3m generated-build timeout for the 6.4 MB compiler torture test on Intel macOS
   - platform: js/wasm
     directive: runoutput
     case: rangegen.go

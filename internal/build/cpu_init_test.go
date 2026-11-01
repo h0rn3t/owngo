@@ -153,7 +153,7 @@ func TestCPUInitializationMatchesGo(t *testing.T) {
 
 func TestCPUInitializationTargetHooks(t *testing.T) {
 	for _, target := range []struct{ os, arch string }{
-		{"darwin", "amd64"}, {"darwin", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"},
+		{"darwin", "arm64"}, {"linux", "amd64"}, {"linux", "arm64"},
 		{"wasip1", "wasm"},
 	} {
 		t.Run(target.os+"/"+target.arch, func(t *testing.T) {

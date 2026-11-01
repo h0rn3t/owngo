@@ -21,7 +21,6 @@ var nativeIntegerABITests = func() []struct {
 		attrs  []string
 	}{
 		{Target{GOOS: "darwin", GOARCH: "arm64"}, narrow},
-		{Target{GOOS: "darwin", GOARCH: "amd64"}, narrow},
 		{Target{GOOS: "linux", GOARCH: "amd64"}, narrow},
 		{Target{GOOS: "linux", GOARCH: "386"}, narrow},
 		{Target{GOOS: "linux", GOARCH: "arm", GOARM: "7"}, narrow},

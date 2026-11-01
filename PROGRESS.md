@@ -829,3 +829,12 @@
 - Попередній висновок «~15% дає фаза 9» хибний. Коміти фази 9 (`82d360126`, `8c2f092c4`, `1f389ddf4`, `f95bb2189`) у своїх worktree — 42.8–44.0 с CPU, як `c76ac2632`; `c76ac2632`, зібраний у `/home/coder/owngo`, — 43.1–43.6 с. Повільний лише `390a86878`/`f95bb2189`, зібраний у `/home/coder/owngo`: 51.4–52.0 с.
 - Машинний код гарячих функцій однаковий; під `-Os` функції не вирівнюються, тож адреси залежать від розміру всього коду перед ними і від шляху збірки. У повільному бінарнику злита пара `test`+`jne` швидкого шляху `runtime.AssertNegativeShift` (5 викликів на перестановку) перетинає 32-байтову межу — умова JCC erratum на Xeon Gold 6240R (Cascade Lake). В інших бінарниках збігів JCC на гарячому шляху немає. Висновок і таблиця — `owngo/REPORT-BENCH.md`.
 - Не зроблено: вбудована перевірка зсуву замість виклику `AssertNegativeShift` або `-x86-branches-within-32B-boundaries`. Профіль `perf` не знято (немає прав), тож лічильників DSB/MITE немає — висновок спирається на розміщення коду і на те, що це єдина відмінність, яка є лише в повільному бінарнику.
+
+## 2026-11-01 — видалення підтримки macOS Intel (поза PLAN.md)
+
+- За рішенням власника прибрано darwin/amd64: лишаються macOS arm64 і Linux amd64/arm64 (плюс WASM/embedded цілі).
+- Код: видалено `*_darwin_amd64*` (clite `os`/`setjmp`/`syscall`, `sync`, конфіги `xtool/env/llvm`, демо `asmfullcall`, символи `test/std/syscall`), обхід `$INODE64` у `cl/instr.go`, тулчейн ESP Clang `x86_64-apple-darwin`, гілки `__APPLE__ && __x86_64__` у C-обгортках рантайму, розміри darwin/amd64 у `runtime/internal/test`.
+- CI: прибрано job «Native debuggers (macOS Intel)» і `test/debug/runtime/gdb_darwin.py`, `macos-15-intel` з матриць `mise`/`pixi`/`release-build`, darwin-amd64 з `.goreleaser.yaml`, завантаження ESP Clang/QEMU і `setup-demo-deps`; `install.sh` відмовляє на darwin/amd64.
+- Тести: рядки darwin/amd64 з таблиць `cl`, `ssa`, `internal/build`, `crosscompile`, `xtool/llvm`, `plan9asm`, `test/goroot` і три таймаути в `xfail.yaml`; `ptrbytes` без `darwin/amd64`. Перевірки об'єктного формату Mach-O x86_64 (`dwarfcompress`, `binaryfixture`) лишено, як і PE після Windows.
+- Перевірено: `go build ./...`, `go vet` по зачеплених пакетах, цільові `go test` зелені; `test_ci_workflows.py` — ті самі 8 локальних падінь `test_go_suite_scheduling…`, що й до змін.
+- Лишилось: `dev/mise.lock` містить записи `macos-x64` — це лок-файл mise, не чіпали.

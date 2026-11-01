@@ -119,8 +119,6 @@ static size_t frame_chain(void *raw, uintptr_t *pcs, size_t cap,
     uintptr_t pc = 0, fp = 0;
 #if defined(__APPLE__) && defined(__aarch64__)
     pc = uc->uc_mcontext->__ss.__pc; fp = uc->uc_mcontext->__ss.__fp;
-#elif defined(__APPLE__) && defined(__x86_64__)
-    pc = uc->uc_mcontext->__ss.__rip; fp = uc->uc_mcontext->__ss.__rbp;
 #elif defined(__linux__) && defined(__aarch64__)
     pc = uc->uc_mcontext.pc; fp = uc->uc_mcontext.regs[29];
 #elif defined(__linux__) && defined(__x86_64__)

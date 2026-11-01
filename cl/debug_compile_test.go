@@ -168,7 +168,6 @@ func capture(seed int) func() int {
 		for _, target := range []llssa.Target{
 			{GOOS: "linux", GOARCH: "amd64"},
 			{GOOS: "linux", GOARCH: "arm64"},
-			{GOOS: "darwin", GOARCH: "amd64"},
 			{GOOS: "darwin", GOARCH: "arm64"},
 			{GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-pc-windows-msvc"},
 			{GOOS: "windows", GOARCH: "amd64", LLVMTarget: "x86_64-w64-windows-gnu"},

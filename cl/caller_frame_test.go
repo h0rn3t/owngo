@@ -536,7 +536,6 @@ func branchStorePanicLeaf(p *int, branch bool) {
 		{goos: "linux", goarch: "amd64"},
 		{goos: "linux", goarch: "arm64"},
 		{goos: "linux", goarch: "386"},
-		{goos: "darwin", goarch: "amd64"},
 		{goos: "darwin", goarch: "arm64"},
 	} {
 		t.Run(test.goos+"/"+test.goarch, func(t *testing.T) {

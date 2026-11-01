@@ -1,4 +1,4 @@
-//go:build !byollvm && darwin && !amd64 && llvm18
+//go:build !byollvm && darwin && llvm18
 
 /*
  * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.

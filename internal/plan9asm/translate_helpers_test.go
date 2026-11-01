@@ -261,9 +261,6 @@ func TestTranslateHelperFunctions(t *testing.T) {
 	if !shouldKeepResolvedFunc("syscall", "darwin", "arm64", "syscall.RawSyscall") {
 		t.Fatal("darwin RawSyscall should be kept")
 	}
-	if !shouldKeepResolvedFunc("syscall", "darwin", "amd64", "syscall.RawSyscall6") {
-		t.Fatal("darwin RawSyscall6 should be kept")
-	}
 
 	if got := FilterFuncs("syscall", "linux", "amd64", nil, resolvePkg); got != nil {
 		t.Fatalf("FilterFuncs(nil) = %#v, want nil", got)

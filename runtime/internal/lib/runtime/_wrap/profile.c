@@ -235,9 +235,6 @@ static void llgo_prof_signal(int sig, siginfo_t *info, void *uctx)
 #if defined(__APPLE__) && defined(__aarch64__)
     pc = (uintptr_t)uc->uc_mcontext->__ss.__pc;
     fp = (uintptr_t)uc->uc_mcontext->__ss.__fp;
-#elif defined(__APPLE__) && defined(__x86_64__)
-    pc = (uintptr_t)uc->uc_mcontext->__ss.__rip;
-    fp = (uintptr_t)uc->uc_mcontext->__ss.__rbp;
 #elif defined(__linux__) && defined(__aarch64__)
     pc = (uintptr_t)uc->uc_mcontext.pc;
     fp = (uintptr_t)uc->uc_mcontext.regs[29];

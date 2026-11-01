@@ -1,6 +1,5 @@
-//go:build !windows && !(darwin && amd64)
+//go:build !windows
 // +build !windows
-// +build !darwin !amd64
 
 package os
 

@@ -30,7 +30,6 @@ func TestESPClangHostDownload(t *testing.T) {
 		wantPlatform string
 	}{
 		{"darwin", "arm64", "aarch64-apple-darwin"},
-		{"darwin", "amd64", "x86_64-apple-darwin"},
 		{"linux", "arm64", "aarch64-linux-gnu"},
 		{"linux", "amd64", "x86_64-linux-gnu"},
 	}

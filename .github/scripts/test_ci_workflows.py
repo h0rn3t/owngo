@@ -19,9 +19,9 @@ import ci_policy
 WORKFLOWS = Path(__file__).resolve().parents[1] / "workflows"
 PREPARE = "./.github/workflows/ci-prepare.yml"
 CODE_WORKFLOWS = {
-    "llgo.yml": 11, "go.yml": 4, "targets.yml": 3, "build-cache.yml": 2,
-    "benchmark.yml": 3, "release-build.yml": 8, "doc.yml": 4, "fmt.yml": 1,
-    "mise.yml": 4, "pixi.yml": 4,
+    "llgo.yml": 10, "go.yml": 4, "targets.yml": 3, "build-cache.yml": 2,
+    "benchmark.yml": 3, "release-build.yml": 7, "doc.yml": 4, "fmt.yml": 1,
+    "mise.yml": 3, "pixi.yml": 3,
 }
 BOOTSTRAP_RUNNER_JOBS = {
     ("ci-prepare.yml", "prepare"), ("ci-policy.yml", "policy"),
@@ -130,22 +130,6 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(step["env"]["LLGO_TEST_EXTENDED_ABI"],
                          "${{ runner.os == 'Linux' && '1' || '0' }}")
 
-
-    def test_intel_macos_runs_both_native_debuggers(self):
-        job = load("llgo.yml")["jobs"]["native-debuggers-intel"]
-        self.assertEqual(job["runs-on"], "macos-15-intel")
-        commands = "\n".join(step.get("run", "") for step in job["steps"])
-        self.assertIn("test/debug/runtime/runtest.sh -v", commands)
-        self.assertIn("^TestGDBIntegration$", commands)
-        self.assertNotIn("^TestGDBCompleteWorkerUnwind$", commands)
-        self.assertIn("test/debug/runtime/gdb_darwin.py", commands)
-        self.assertNotIn("sudo", commands)
-        helper = runpy.run_path(str(WORKFLOWS.parents[1] / "test/debug/runtime/gdb_darwin.py"))
-        with mock.patch("os.execvp", side_effect=SystemExit) as execute, self.assertRaises(SystemExit):
-            helper["main"]("/native/gdb", ["--version"])
-        execute.assert_called_once_with("sudo", ["sudo", "-n", "/native/gdb", "--version"])
-        self.assertNotIn("continue-on-error", job)
-        self.assertTrue(all("continue-on-error" not in step for step in job["steps"]))
 
     def test_traceback_coverage_uses_bash_on_every_host(self):
         steps = load("go.yml")["jobs"]["test"]["steps"]
@@ -525,7 +509,7 @@ sys.exit(subprocess.call(command + ['./internal/build']))
                 self.assertEqual(job["runs-on"],
                                  "${{ matrix.os == 'ubuntu-24.04' && fromJSON(needs.prepare.outputs.linux_large_runner) || matrix.os }}")
                 self.assertCountEqual(job["strategy"]["matrix"]["os"],
-                                      ["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel"])
+                                      ["ubuntu-24.04", "ubuntu-24.04-arm", "macos-15"])
 
     def test_release_artifact_runner_migration_keeps_native_architectures(self):
         jobs = load("release-build.yml")["jobs"]

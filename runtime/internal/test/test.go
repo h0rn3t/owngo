@@ -49,9 +49,6 @@ var linuxAmd64 = runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
 // Linux arm64 specific sizes
 var linuxArm64 = runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
 
-// macOS amd64 specific sizes
-var darwinAmd64 = runtime.GOOS == "darwin" && runtime.GOARCH == "amd64"
-
 // macOS arm64 specific sizes
 var darwinArm64 = runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 
@@ -80,18 +77,6 @@ const (
 	sigjmpBufSizeLinuxArm64         = 312
 	jmpBufSizeLinuxArm64            = 312
 
-	// macOS amd64 pthread sizes
-	pthreadOnceSizeDarwinAmd64       = 16
-	pthreadMutexSizeDarwinAmd64      = 56
-	pthreadMutexAttrSizeDarwinAmd64  = 8
-	pthreadCondSizeDarwinAmd64       = 40
-	pthreadCondAttrSizeDarwinAmd64   = 8
-	pthreadRWLockSizeDarwinAmd64     = 192
-	pthreadRWLockAttrSizeDarwinAmd64 = 16
-	clockSizeDarwinAmd64             = 8
-	sigjmpBufSizeDarwinAmd64         = 196
-	jmpBufSizeDarwinAmd64            = 196
-
 	// macOS arm64 pthread sizes
 	pthreadOnceSizeDarwinArm64       = 16
 	pthreadMutexSizeDarwinArm64      = 64
@@ -114,9 +99,6 @@ func getPlatformPthreadSizes() (onceSize, mutexSize, mutexAttrSize, condSize, co
 	case linuxArm64:
 		return pthreadOnceSizeLinuxArm64, pthreadMutexSizeLinuxArm64, pthreadMutexAttrSizeLinuxArm64,
 			pthreadCondSizeLinuxArm64, pthreadCondAttrSizeLinuxArm64, pthreadRWLockSizeLinuxArm64, pthreadRWLockAttrSizeLinuxArm64
-	case darwinAmd64:
-		return pthreadOnceSizeDarwinAmd64, pthreadMutexSizeDarwinAmd64, pthreadMutexAttrSizeDarwinAmd64,
-			pthreadCondSizeDarwinAmd64, pthreadCondAttrSizeDarwinAmd64, pthreadRWLockSizeDarwinAmd64, pthreadRWLockAttrSizeDarwinAmd64
 	case darwinArm64:
 		return pthreadOnceSizeDarwinArm64, pthreadMutexSizeDarwinArm64, pthreadMutexAttrSizeDarwinArm64,
 			pthreadCondSizeDarwinArm64, pthreadCondAttrSizeDarwinArm64, pthreadRWLockSizeDarwinArm64, pthreadRWLockAttrSizeDarwinArm64
@@ -131,8 +113,6 @@ func getPlatformClockSizes() (clockSize int) {
 		return clockSizeLinuxAmd64
 	case linuxArm64:
 		return clockSizeLinuxArm64
-	case darwinAmd64:
-		return clockSizeDarwinAmd64
 	case darwinArm64:
 		return clockSizeDarwinArm64
 	default:
@@ -146,8 +126,6 @@ func getPlatformJmpBufSizes() (sigjmpBufSize, jmpBufSize int) {
 		return sigjmpBufSizeLinuxAmd64, jmpBufSizeLinuxAmd64
 	case linuxArm64:
 		return sigjmpBufSizeLinuxArm64, jmpBufSizeLinuxArm64
-	case darwinAmd64:
-		return sigjmpBufSizeDarwinAmd64, jmpBufSizeDarwinAmd64
 	case darwinArm64:
 		return sigjmpBufSizeDarwinArm64, jmpBufSizeDarwinArm64
 	default:
@@ -166,14 +144,14 @@ func max(a int, others ...int) int {
 }
 
 var (
-	pthreadOnceSize       = max(pthreadOnceSizeLinuxAmd64, pthreadOnceSizeDarwinAmd64, pthreadOnceSizeLinuxArm64, pthreadOnceSizeDarwinArm64)
-	pthreadMutexSize      = max(pthreadMutexSizeLinuxAmd64, pthreadMutexSizeLinuxArm64, pthreadMutexSizeDarwinAmd64, pthreadMutexSizeDarwinArm64)
-	pthreadMutexAttrSize  = max(pthreadMutexAttrSizeLinuxAmd64, pthreadMutexAttrSizeLinuxArm64, pthreadMutexAttrSizeDarwinAmd64, pthreadMutexAttrSizeDarwinArm64)
-	pthreadCondSize       = max(pthreadCondSizeLinuxAmd64, pthreadCondSizeLinuxArm64, pthreadCondSizeDarwinAmd64, pthreadCondSizeDarwinArm64)
-	pthreadCondAttrSize   = max(pthreadCondAttrSizeLinuxAmd64, pthreadCondAttrSizeLinuxArm64, pthreadCondAttrSizeDarwinAmd64, pthreadCondAttrSizeDarwinArm64)
-	pthreadRWLockSize     = max(pthreadRWLockSizeLinuxAmd64, pthreadRWLockSizeLinuxArm64, pthreadRWLockSizeDarwinAmd64, pthreadRWLockSizeDarwinArm64)
-	pthreadRWLockAttrSize = max(pthreadRWLockAttrSizeLinuxAmd64, pthreadRWLockAttrSizeLinuxArm64, pthreadRWLockAttrSizeDarwinAmd64, pthreadRWLockAttrSizeDarwinArm64)
-	clockSize             = max(clockSizeLinuxAmd64, clockSizeLinuxArm64, clockSizeDarwinAmd64, clockSizeDarwinArm64)
-	sigjmpBufSize         = max(sigjmpBufSizeLinuxAmd64, sigjmpBufSizeLinuxArm64, sigjmpBufSizeDarwinAmd64, sigjmpBufSizeDarwinArm64)
-	jmpBufSize            = max(jmpBufSizeLinuxAmd64, jmpBufSizeLinuxArm64, jmpBufSizeDarwinAmd64, jmpBufSizeDarwinArm64)
+	pthreadOnceSize       = max(pthreadOnceSizeLinuxAmd64, pthreadOnceSizeLinuxArm64, pthreadOnceSizeDarwinArm64)
+	pthreadMutexSize      = max(pthreadMutexSizeLinuxAmd64, pthreadMutexSizeLinuxArm64, pthreadMutexSizeDarwinArm64)
+	pthreadMutexAttrSize  = max(pthreadMutexAttrSizeLinuxAmd64, pthreadMutexAttrSizeLinuxArm64, pthreadMutexAttrSizeDarwinArm64)
+	pthreadCondSize       = max(pthreadCondSizeLinuxAmd64, pthreadCondSizeLinuxArm64, pthreadCondSizeDarwinArm64)
+	pthreadCondAttrSize   = max(pthreadCondAttrSizeLinuxAmd64, pthreadCondAttrSizeLinuxArm64, pthreadCondAttrSizeDarwinArm64)
+	pthreadRWLockSize     = max(pthreadRWLockSizeLinuxAmd64, pthreadRWLockSizeLinuxArm64, pthreadRWLockSizeDarwinArm64)
+	pthreadRWLockAttrSize = max(pthreadRWLockAttrSizeLinuxAmd64, pthreadRWLockAttrSizeLinuxArm64, pthreadRWLockAttrSizeDarwinArm64)
+	clockSize             = max(clockSizeLinuxAmd64, clockSizeLinuxArm64, clockSizeDarwinArm64)
+	sigjmpBufSize         = max(sigjmpBufSizeLinuxAmd64, sigjmpBufSizeLinuxArm64, sigjmpBufSizeDarwinArm64)
+	jmpBufSize            = max(jmpBufSizeLinuxAmd64, jmpBufSizeLinuxArm64, jmpBufSizeDarwinArm64)
 )

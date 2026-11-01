@@ -504,7 +504,6 @@ func (p *context) syscallIntrinsic(b llssa.Builder, args []ssa.Value, results *t
 
 // Darwin syscall trampoline remap rationale:
 // - open/openat/fcntl/ioctl: avoid varargs/ABI width mismatches when calling through llgo.syscall.
-// - fdopendir/readdir_r (plus closedir for call-chain consistency): avoid darwin/amd64 INODE64 symbol-name mismatches.
 // These are routed to llgo_* wrappers in runtime/internal/clite/os/_os/os_darwin.c.
 var darwinTrampolineCNameMap = map[string]string{
 	"open":   "llgo_open",
@@ -513,21 +512,10 @@ var darwinTrampolineCNameMap = map[string]string{
 	"ioctl":  "llgo_ioctl",
 }
 
-var darwinTrampolineCNameAmd64Map = map[string]string{
-	"fdopendir": "fdopendir$INODE64",
-	"readdir_r": "readdir_r$INODE64",
-	"getfsstat": "getfsstat$INODE64",
-}
-
 func (p *context) remapTrampolineCName(name string) string {
 	if p.prog.Target().GOOS == "darwin" {
 		if v, ok := darwinTrampolineCNameMap[name]; ok {
 			return v
-		}
-		if p.prog.Target().GOARCH == "amd64" {
-			if v, ok := darwinTrampolineCNameAmd64Map[name]; ok {
-				return v
-			}
 		}
 	}
 	return name

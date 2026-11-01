@@ -1,4 +1,4 @@
-// LITTEST linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 linux/386
+// LITTEST linux/amd64 linux/arm64 darwin/arm64 linux/386
 package main
 
 import "reflect"

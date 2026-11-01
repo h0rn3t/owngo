@@ -29,15 +29,10 @@ expected-failure conversion.
 | Linux ARM64 | Locally exercised in a native container | Locally exercised in a native container | Not part of this CI matrix |
 | Windows amd64 / 386, GNU and MSVC | Required CI gate | Required CI gate | Required CI gate |
 | Windows ARM64, GNU and MSVC | Required CI gate | Unavailable with stock GDB 18: native target omits PAC masks | Required CI gate |
-| macOS Intel | Required CI gate | Unavailable with stock GDB 17/18: dyld 17 shared libraries are not loaded | Required CI gate |
 | macOS Apple Silicon | Native process target unavailable; remote sessions remain usable | Native process target unavailable | Required CI gate |
 
 The unavailable entries are toolchain limitations, not successful full-unwind
-coverage. Intel macOS also reproduces the truncated system frames with a plain
-C pthread condition-variable fixture. GDB's
-[Darwin shared-library reader](https://github.com/RTEMS/sourceware-mirror-binutils-gdb/blob/gdb-18-branch/gdb/solib-darwin.c)
-accepts dyld versions only through 15; the tested host uses version 17. On
-Windows ARM64 the blocked stack contains an authenticated return address that
+coverage. On Windows ARM64 the blocked stack contains an authenticated return address that
 GDB leaves signed. Its native target lacks the
 [pointer-authentication mask feature](https://sourceware.org/gdb/current/onlinedocs/gdb.html/AArch64-Features.html)
 required by GDB's unwinder. LLGo does not rewrite inferior registers or stack
@@ -47,14 +42,6 @@ worker-stack inspection on these hosts.
 Darwin GDB uses debugger-local Mach ports in its native thread identifiers.
 The adapter asks the host kernel for each port's system thread ID so that it
 can match the runtime registry. Remote target identifiers are not passed to
-host Mach APIs. Intel macOS native launch additionally needs a debugger with
-permission to obtain task ports. The dedicated Intel CI job launches the executable
-suspended with Darwin's `posix_spawn`, then uses GDB's native attach path. This
-avoids GDB 17's fork/exec hang in `decode_message`/`wait4` before `_dyld_start`
-executes. The helper preserves GDB's normal disabled-ASLR layout and all
-acceptance assertions, and reaps the inferior after GDB finishes. Only GDB runs
-through `sudo -n` on the ephemeral runner; compilation and Go test orchestration
-remain unprivileged. It also runs the full native LLDB
-suite using Apple's signed `/usr/bin/lldb`. Apple Silicon GDB native process
+host Mach APIs. Apple Silicon GDB native process
 debugging is not supported; the native acceptance command reports that limitation directly.
 `llgo gdb` still supports cross-target/remote sessions on Apple Silicon.
