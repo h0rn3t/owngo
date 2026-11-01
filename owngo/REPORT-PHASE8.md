@@ -98,3 +98,18 @@ ASan: `__sanitizer_get_allocated_begin` дає правильну базу в к
 Нові місця — у stdlib; у пакетах програм похідних вказівників на rc-local місця немає. Байтів P8.4 у корпусі не додає: `owngo freed` — як у P8.0 (binarytrees `10` 2 229 472, `14` 52 430 178, binarytreesarena `10` 3 354, fannkuchredux `7` 2 817). Байти — задача P8.6.
 
 **Безпека.** `-O0 -asan`, `detect_leaks=0`: `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo` і корпус — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf` — код 1 і `heap-use-after-free`. Корпус під `-tags owngo` — вивід як очікуваний (binarytrees — як у `go`).
+
+## P8.8 Гейт фази 8
+
+**Замір.** Ревізія `93ca0c165`, Debian 13 amd64, `/usr/lib/llvm-23/bin` першим у `PATH`, `llgo run -tags owngo`. Вивід кожної програми побайтно як у `go run`.
+
+| Програма | Аргумент | `freed` | `rc-local` | `rc-shared` | `cyclic` | `pinned` | live разом |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| binarytrees | 10 | 2 229 472 | 3 961 | 608 | 32 784 | 5 736 | 43 089 |
+| binarytrees | 14 | 52 430 178 | 4 652 | 608 | 524 304 | 5 992 | 535 556 |
+| binarytreesarena | 10 | 3 354 | 3 488 | 880 | 24 | 5 096 | 9 488 |
+| fannkuchredux | 7 | 2 817 | 3 032 | 840 | 24 | 5 096 | 8 992 |
+
+`live static` — 0 у кожній програмі. Числа побайтно як у таблиці P8.0 «після»: P8.3–P8.7 байтів корпусу не змінили. `live cyclic` binarytrees — `longLivedTree` (`cyclic: go`, P6.9): 2^(n+1)−1 вузлів по 16 байтів плюс 32.
+
+**Рішення** — `INTENT.md`, «Рішення гейта фази 8»: наступна фаза бере `rc-shared`.
