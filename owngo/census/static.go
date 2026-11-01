@@ -43,6 +43,7 @@ func Place(funcs []*ssa.Function) (
 			continue
 		}
 		msg, pts, contents := messages(fn, ifaceStrict, nil, ctx)
+		ctx.blockDec(exitSites(fn, pts, contents))
 		// Свіжий результат: одиниця слова переходить до викликача.
 		if sum := ctx.sums[fn]; sum != nil && sum.Fresh {
 			for _, alloc := range freshAllocs(fn) {
@@ -134,6 +135,32 @@ func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, v1 *
 	default:
 		return true
 	}
+}
+
+// exitSites повертає місця, які return чи panic віддають за межі функції,
+// разом з їхнім вмістом. У позначці closure сильніша за return і panic,
+// тож decSite за нею цих місць не бачить.
+func exitSites(fn *ssa.Function, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet) siteSet {
+	out := siteSet{}
+	var add func(siteSet)
+	add = func(sites siteSet) {
+		for site := range sites {
+			if out.add(site) {
+				add(contents[site])
+			}
+		}
+	}
+	for _, block := range fn.Blocks {
+		switch instr := block.Instrs[len(block.Instrs)-1].(type) {
+		case *ssa.Return:
+			for _, result := range instr.Results {
+				add(pts[result])
+			}
+		case *ssa.Panic:
+			add(pts[instr.X])
+		}
+	}
+	return out
 }
 
 func countedImplicit(site ssa.Instruction, label string) bool {
