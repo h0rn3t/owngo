@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/xgo-dev/llgo/runtime/abi"
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
 	"github.com/xgo-dev/llgo/runtime/internal/runtime/goarch"
 )
 
@@ -407,32 +408,41 @@ func arrayequal(p, q unsafe.Pointer) bool {
 	return true
 }
 
-// Testing adapters for hash quality tests (see hash_test.go)
+// Testing adapters for hash quality tests (see hash_test.go).
+// As in hashMapKey64, they hash a stack copy: LLGo's SSA builder treats an
+// address-taken parameter as a heap object.
 func stringHash(s string, seed uintptr) uintptr {
-	return strhash(noescape(unsafe.Pointer(&s)), seed)
+	return memhash(unsafe.Pointer(unsafe.StringData(s)), seed, uintptr(len(s)))
 }
 
 func bytesHash(b []byte, seed uintptr) uintptr {
-	s := (*slice)(unsafe.Pointer(&b))
-	return memhash(s.array, seed, uintptr(s.len))
+	return memhash(unsafe.Pointer(unsafe.SliceData(b)), seed, uintptr(len(b)))
 }
 
 func int32Hash(i uint32, seed uintptr) uintptr {
-	return memhash32(noescape(unsafe.Pointer(&i)), seed)
+	p := c.Alloca(unsafe.Sizeof(i))
+	*(*uint32)(p) = i
+	return memhash32(p, seed)
 }
 
 func int64Hash(i uint64, seed uintptr) uintptr {
-	return memhash64(noescape(unsafe.Pointer(&i)), seed)
+	p := c.Alloca(unsafe.Sizeof(i))
+	*(*uint64)(p) = i
+	return memhash64(p, seed)
 }
 
 func efaceHash(i any, seed uintptr) uintptr {
-	return nilinterhash(noescape(unsafe.Pointer(&i)), seed)
+	p := c.Alloca(unsafe.Sizeof(i))
+	*(*any)(p) = i
+	return nilinterhash(p, seed)
 }
 
 func ifaceHash(i interface {
 	F()
 }, seed uintptr) uintptr {
-	return interhash(noescape(unsafe.Pointer(&i)), seed)
+	p := c.Alloca(unsafe.Sizeof(i))
+	*(*interface{ F() })(p) = i
+	return interhash(p, seed)
 }
 
 var hashkey [4]uintptr

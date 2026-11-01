@@ -292,7 +292,13 @@ func TestRuntimeSourceToolchains(t *testing.T) {
 				t.Fatal(err)
 			}
 			fset := token.NewFileSet()
-			var files []*ast.File
+			// float_llgo.go defines the two bit casts cut from float.go; its
+			// clite import is not available to the gc importer.
+			bitcasts, err := parser.ParseFile(fset, "float_llgo.go", "package runtime\nfunc float64bits(float64) uint64\nfunc float64frombits(uint64) float64\n", 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := []*ast.File{bitcasts}
 			for path, data := range overlay {
 				if filepath.Dir(path) != filepath.Join(root, "internal", "runtime") {
 					continue

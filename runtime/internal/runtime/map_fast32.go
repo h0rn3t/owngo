@@ -213,7 +213,7 @@ func mapassign_fast32ptr(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer
 	if h.flags&hashWriting != 0 {
 		fatal("concurrent map writes")
 	}
-	hash := t.Hasher(noescape(unsafe.Pointer(&key)), uintptr(h.hash0))
+	hash := hashMapKey32(t, uint32(uintptr(key)), uintptr(h.hash0))
 
 	// Set hashWriting after calling t.hasher for consistency with mapassign.
 	h.flags ^= hashWriting

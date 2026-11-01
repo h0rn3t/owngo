@@ -98,5 +98,12 @@ func runtimeFloatingPointSources(read func(string) ([]byte, error), goroot strin
 	if _, err := config.Check("runtime", fset, files, nil); err != nil {
 		return nil, fmt.Errorf("reuse GOROOT runtime floating-point helpers: %w", err)
 	}
+	// LLGo's SSA builder puts an address-taken parameter on the heap, so the
+	// runtime defines these two bit casts itself with a stack slot (float_llgo.go).
+	float, _, err := filterSourcePatchFile(out["float"], map[string]struct{}{"float64bits": {}, "float64frombits": {}})
+	if err != nil {
+		return nil, fmt.Errorf("reuse GOROOT runtime/float.go: %w", err)
+	}
+	out["float"] = float
 	return out, nil
 }

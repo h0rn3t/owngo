@@ -4,7 +4,11 @@
 
 package math
 
-import "unsafe"
+import (
+	"unsafe"
+
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
+)
 
 // Adapted from Go 1.27 math.FMA for targets whose C library
 // does not provide correctly rounded fused multiply-add.
@@ -15,8 +19,19 @@ const (
 	fmaFracMask = uint64(1<<52 - 1)
 )
 
-func fmaFloat64bits(x float64) uint64     { return *(*uint64)(unsafe.Pointer(&x)) }
-func fmaFloat64frombits(x uint64) float64 { return *(*float64)(unsafe.Pointer(&x)) }
+// The bit casts use a stack slot: LLGo's SSA builder puts an address-taken
+// parameter on the heap.
+func fmaFloat64bits(x float64) uint64 {
+	p := c.Alloca(unsafe.Sizeof(x))
+	*(*float64)(p) = x
+	return *(*uint64)(p)
+}
+
+func fmaFloat64frombits(x uint64) float64 {
+	p := c.Alloca(unsafe.Sizeof(x))
+	*(*uint64)(p) = x
+	return *(*float64)(p)
+}
 
 func fmaZero(x uint64) uint64 {
 	if x == 0 {
