@@ -1,0 +1,27 @@
+package cl_test
+
+import (
+	"testing"
+
+	"github.com/xgo-dev/llgo/cl/cltest"
+	"github.com/xgo-dev/llgo/internal/build"
+)
+
+// TestOwnGoInteriorBytes — P8.6: фікстура сама звіряє зміну owngo freed і
+// owngo live rc-local за P3.5 і виходить з кодом 0, лише якщо обидва збіглися.
+func TestOwnGoInteriorBytes(t *testing.T) {
+	for _, fixture := range []string{
+		"interior",      // локальний &s.f (P8.4): 16 байтів звільнено
+		"freshinterior", // свіжий внутрішній результат (P8.5): звільняє викликач
+		"interiorheld",  // невідомий виклик тримає &s.f: 16 байтів живі
+	} {
+		t.Run(fixture, func(t *testing.T) {
+			conf := build.NewDefaultConf(build.ModeRun)
+			conf.Tags = "owngo"
+			out, err := cltest.RunAndCaptureWithConf("../owngo/bytes/"+fixture, "", conf)
+			if err != nil {
+				t.Errorf("llgo run -tags owngo ./owngo/bytes/%s error = %v, want exit 0\n%s", fixture, err, out)
+			}
+		})
+	}
+}
