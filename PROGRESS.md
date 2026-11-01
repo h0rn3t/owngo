@@ -699,3 +699,13 @@
 - Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS. `Base` немає під `owngo` поза linux/darwin без ASan — там внутрішній `Dec` не злінкується.
 - Лишилось: P8.6; трек — S1.
 
+## 2026-11-01 — P8.6 Байти внутрішнього вказівника
+
+- Фікстури за P3.5 (сама звіряє зміну `Freed()` і `Live(CatRCLocal)`, код 0 лише при збігу): `owngo/bytes/interior` — локальний `&s.f` (P8.4), 16 байтів `S` у `freed`, `live rc-local` без змін; `owngo/bytes/freshinterior` — `field` повертає `&x.f` (P8.5), викликач звільняє 16 байтів; `owngo/bytes/interiorheld` — `&s.f` іде в невідомий `func`, `freed` без змін, `live rc-local` +16.
+- Місце — сама захоплена змінна `s := S{...}`: з `s := &S{...}` у `freed` додається ще 8 байтів комірки змінної, окремого місця.
+- `TestOwnGoInteriorBytes` (`cl/owngo_bytes_test.go`) запускає три фікстури через `cltest.RunAndCaptureWithConf` з тегом `owngo`; на зіпсованому очікуванні (`17` замість `16`) тест червоний.
+- Реалізація вже була в P8.4 і P8.5, тож тести не падали до неї в цій сесії. На ревізії `8333aac39` (до P8.4): `interior` і `freshinterior` — код 3, `freed delta 0 want 16`; `interiorheld` — код 0.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./cl/ -run OwnGo` — 19 `PASS`. `go vet`, `golangci-lint --new-from-rev` — чисто.
+- Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS.
+- Лишилось: P8.7; трек — S1.
+
