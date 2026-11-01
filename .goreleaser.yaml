@@ -1,5 +1,9 @@
 version: 2
 
+# Без явного імені goreleaser бере назву репозиторію (owngo), а релізні
+# jobs і інсталятори шукають архіви llgo*.
+project_name: llgo
+
 dist: .dist
 
 env:

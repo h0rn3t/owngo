@@ -286,7 +286,10 @@ jobs:
       - name: _xtool build tests
         run: |
           cd _xtool
-          llgo build -v ./...
+          # Єдиний main-пакет castdump інакше пишеться у файл castdump, який
+          # збігається з каталогом пакета.
+          mkdir -p "$RUNNER_TEMP/xtool"
+          llgo build -v -o "$RUNNER_TEMP/xtool" ./...
 
       - name: Show test result
         run: cat result.md

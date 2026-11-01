@@ -35,7 +35,7 @@ PKG_CONFIG_ALLOW_SYSTEM_LIBS = "1"
 # Use the full compiler prefix: clangxx is a metapackage, whose actual
 # executables are dependencies and are not exposed by mise's conda launchers.
 _.path = { path = [
-  "{{ config_root }}/conda-tools",
+  "{% if os() == 'linux' %}{{ config_root }}/conda-tools{% else %}{{ env.LLGO_CLANG_PREFIX }}/bin{% endif %}",
   "{{ env.LLGO_CLANG_PREFIX }}/{{ os(linux='bin', macos='bin') }}",
   "{{ env.LLGO_LLVM_PREFIX }}/{{ os(linux='bin', macos='bin') }}",
   "{{ env.LLGO_LLD_PREFIX }}/{{ os(linux='bin', macos='bin') }}",

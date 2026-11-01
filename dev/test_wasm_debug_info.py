@@ -77,9 +77,21 @@ def run(command, *, env=None, timeout=180):
     return result.stdout + result.stderr
 
 
-def check_source_lines(module, debug_line, addr2line):
+def code_section_start(module):
+    # Return the binary offset of the code section payload.
+    offset = 8
+    for kind, _, content, raw in wasm_sections(module):
+        if kind == 10:
+            return offset + len(raw) - len(content), len(content)
+        offset += len(raw)
+    raise RuntimeError(f"{module}: missing code section")
+
+
+def check_source_lines(module, debug_line, addr2line, code_start=0):
     # DWARF line tables use code-section offsets. The Wasm symbol table uses
     # different offsets, so resolve actual line-table rows, not symbol values.
+    # LLVM 23 llvm-addr2line takes Wasm binary offsets, so shift each row by
+    # the code section start.
     tables = re.split(r"(?=^debug_line\[)", debug_line, flags=re.MULTILINE)
     for filename, line in SOURCE_LINES.items():
         matches = []
@@ -91,7 +103,7 @@ def check_source_lines(module, debug_line, addr2line):
                 if int(match.group(2)) == line and int(match.group(3)) in indexes:
                     matches.append(match.group(1))
         for address in matches:
-            location = run([addr2line, "-e", str(module), "-f", f"0x{address}"])
+            location = run([addr2line, "-e", str(module), "-f", hex(int(address, 16) + code_start)])
             if re.search(rf"{re.escape(filename)}:{line}\b", location):
                 break
         else:
@@ -112,7 +124,7 @@ def check_module(module, *, dwarfdump, addr2line):
         if not re.search(rf'DW_AT_name\s+\("{re.escape(name)}"\)', info):
             raise RuntimeError(f"{module}: missing Go/C++ DWARF entry {name}")
     line_table = run([dwarfdump, "--debug-line", str(module)])
-    check_source_lines(module, line_table, addr2line)
+    check_source_lines(module, line_table, addr2line, code_section_start(module)[0])
 
 
 def check_artifact_report(output, profile, artifact, build_log, final_pipeline=False, source_maps=False):
@@ -165,16 +177,12 @@ def check_source_map(module, debug_module, addr2line):
     data = json.loads(source_map.read_text())
     if data["version"] != 3 or ";" in data["mappings"]:
         raise RuntimeError(f"{source_map}: invalid Wasm source map")
-    code_start = 8
-    for kind, _, content, raw in wasm_sections(module):
-        if kind == 10:
-            code_start += len(raw) - len(content)
-            code_end = code_start + len(content)
-            break
-        code_start += len(raw)
-    else:
-        raise RuntimeError(f"{module}: missing code section")
-    # Wasm maps use absolute binary offsets; DWARF uses code-section offsets.
+    code_start, code_size = code_section_start(module)
+    code_end = code_start + code_size
+    # Wasm maps use absolute binary offsets, as does LLVM 23 llvm-addr2line.
+    # The debug module can lay out sections differently, so translate through
+    # its own code section start.
+    debug_code_start = code_section_start(debug_module)[0]
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     generated = source = line = column = 0
     found = set()
@@ -205,7 +213,7 @@ def check_source_map(module, debug_module, addr2line):
         source_path = Path(os.path.abspath(source_map.parent / data.get("sourceRoot", "") / data["sources"][source]))
         if not source_path.is_file():
             raise RuntimeError(f"{source_map}: published source path is invalid: {source_path}")
-        location = run([addr2line, "-e", str(debug_module), "-f", hex(generated - code_start)])
+        location = run([addr2line, "-e", str(debug_module), "-f", hex(generated - code_start + debug_code_start)])
         if re.search(rf"{re.escape(filename)}:{line + 1}\b", location):
             found.add(filename)
     if found != set(SOURCE_LINES):
