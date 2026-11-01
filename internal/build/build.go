@@ -3463,7 +3463,22 @@ func optimizeLLVMModule(ctx *context, pkgPath string, mod gllvm.Module) error {
 		return fmt.Errorf("run LLVM passes failed for %v: %w", pkgPath, err)
 	}
 	preserveZeroInitAggregatesForLTO(ctx.buildConf, ctx.crossCompile.Toolchain, mod)
+	dropMemoryEffectsForBundledClang(ctx, mod)
 	return nil
+}
+
+// dropMemoryEffectsForBundledClang removes the memory(...) function attribute
+// when the textual IR is compiled by the bundled ESP clang (LLVM 22): LLVM 23
+// prints a target_mem location there that the older parser rejects. Dropping
+// the attribute is always sound; it only narrows what a function may access.
+func dropMemoryEffectsForBundledClang(ctx *context, mod gllvm.Module) {
+	if ctx.crossCompile.ClangRoot == "" {
+		return
+	}
+	memory := gllvm.AttributeKindID("memory")
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = gllvm.NextFunction(fn) {
+		fn.RemoveEnumFunctionAttribute(memory)
+	}
 }
 
 // preserveZeroInitAggregatesForLTO roots zero-initialized aggregate globals
