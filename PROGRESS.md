@@ -767,3 +767,14 @@
 - Корпус: вивід побайтно як у `go run`. binarytrees `10`: `live cyclic` 32 784 → 24, `rc-shared` 608 → 576, `freed` 2 229 472 → 2 262 328; `14`: `cyclic` 524 304 → 24. binarytreesarena: `rc-shared` 880 → 720, fannkuchredux: 840 → 712 (комірка `f` у `WaitGroup.Go`). binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan.
 - Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS; TSan.
 - Лишилось: P9.4; трек — S1.
+
+## 2026-11-01 — P9.4 Байти спільної втечі
+
+- Фікстури за P3.5 (самі звіряють зміну `Freed()` і `Live`, код 0 лише при збігу): `owngo/bytes/sharedgo` — `s` (16) і параметр `n` (8), захоплені замиканням go, звільнені після `wg.Wait()` і кінця функції; `owngo/bytes/sharedtree` — горутина пише `NewTree(4)` у захоплену змінну: 31 вузол по 16 і комірка 8 звільнені, `live cyclic` як до виклику; `owngo/bytes/sharedglobal` — те саме місце ще в глобальній змінній: `S` серед живих, звільнено лише `n`. `DecShared` горутини йде після `wg.Done()`, тож фікстура чекає до 5 с, доки `Freed()` досягне очікуваного.
+- `WaitGroup` спільним не стає й лишається в `live rc-shared` (фікстури це перевіряють): `Wait` за зведенням не лише позичає. Розбір — у P9.7.
+- `TestOwnGoSharedBytes` (`cl/owngo_bytes_test.go`) запускає три фікстури; на зіпсованому очікуванні (`+1`) — `freed delta 24 want 25`, тест червоний.
+- Виправлено корінь шуму у `freed`: таблиця `DecCyclic` тепер за значенням, як у `DecShared` (P9.2). З `&table` go/ssa клав її в купу, і прохід звільняв її як `static` — 64 байти у `freed` на кожен виклик, з P8.0. Через це падав `owngo/cyclicdeep` (`freed 16064 want 16000`); тепер `cyclicdeep-ok` під `owngo` і під `-O0 -asan` на `100000`. `freed` корпусу падає, `live` без змін: binarytrees `10` — 2 262 328 → 2 175 160 (1 362 виклики × 64), `14` — 52 954 554 → 51 556 666.
+- Перші версії фікстур міряли через `time.Now()` у циклі очікування: він звільняв 24 байти `static` у вікно виміру.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./cl/ -run OwnGo` — 21 `PASS`. `atomicrc`, `cyclic` — код 0. Корпус: вивід як у `go run`; binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan. `golangci-lint --new-from-rev` (`cl`, `runtime` з тегами `owngo,nogc`) — чисто.
+- Не перевірялось: швидкодія `DecCyclic` з таблицею за значенням (замір — у P9.7); macOS; TSan.
+- Лишилось: P9.5; трек — S1.

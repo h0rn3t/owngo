@@ -122,8 +122,8 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 		return
 	}
 	root := countWord(ptr)
-	var table [cyclicTableLen]*CyclicDesc
-	if !cyclicTable(desc, &table) {
+	table, ok := cyclicTable(desc)
+	if !ok {
 		// Без обходу, як DecAccounted: діти лишають свої слова. Це витік, не
 		// звільнення живого.
 		*root--
@@ -138,7 +138,7 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 	}
 	*root--
 	var work, done uintptr
-	work = trialEdges(ptr, desc, ptr, &table, work)
+	work = trialEdges(ptr, desc, ptr, table, work)
 	for work != 0 {
 		node := unsafe.Pointer(work)
 		w := countWord(node)
@@ -146,7 +146,7 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 		index := *w & cyclicIndexMask
 		*w = done | index
 		done = uintptr(node)
-		work = trialEdges(node, table[index], ptr, &table, work)
+		work = trialEdges(node, table[index], ptr, table, work)
 	}
 	if *root != 0 {
 		for done != 0 {
@@ -181,31 +181,33 @@ const (
 
 // cyclicTable збирає дескриптори, досяжні з desc за ребрами, з desc під
 // індексом 0. false — дескриптора немає, ребро без цілі або їх понад вісім.
-func cyclicTable(desc *CyclicDesc, table *[cyclicTableLen]*CyclicDesc) bool {
+// Таблиця йде за значенням: адреса локального масиву перенесла б його
+// в купу, і прохід звільняв би його як static на кожному виклику.
+func cyclicTable(desc *CyclicDesc) (table [cyclicTableLen]*CyclicDesc, ok bool) {
 	if desc == nil {
-		return false
+		return table, false
 	}
 	table[0] = desc
 	n := 1
 	for i := 0; i < n; i++ {
 		for _, e := range table[i].Edges {
 			if e.Elem == nil {
-				return false
+				return table, false
 			}
 			if cyclicIndex(table, e.Elem) >= 0 {
 				continue
 			}
 			if n == cyclicTableLen {
-				return false
+				return table, false
 			}
 			table[n] = e.Elem
 			n++
 		}
 	}
-	return true
+	return table, true
 }
 
-func cyclicIndex(table *[cyclicTableLen]*CyclicDesc, desc *CyclicDesc) int {
+func cyclicIndex(table [cyclicTableLen]*CyclicDesc, desc *CyclicDesc) int {
 	for i, d := range table {
 		if d == desc {
 			return i
@@ -216,7 +218,7 @@ func cyclicIndex(table *[cyclicTableLen]*CyclicDesc, desc *CyclicDesc) int {
 
 // trialEdges знімає ребра node і кладе в стек роботи дитину, чиє слово
 // стало нулем. Корінь у стек не йде: його ребра вже зняті.
-func trialEdges(node unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer, table *[cyclicTableLen]*CyclicDesc, work uintptr) uintptr {
+func trialEdges(node unsafe.Pointer, desc *CyclicDesc, root unsafe.Pointer, table [cyclicTableLen]*CyclicDesc, work uintptr) uintptr {
 	for _, e := range desc.Edges {
 		c := child(node, e.Off)
 		if c == nil {

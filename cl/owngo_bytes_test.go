@@ -25,3 +25,22 @@ func TestOwnGoInteriorBytes(t *testing.T) {
 		})
 	}
 }
+
+// TestOwnGoSharedBytes — P9.4: фікстури самі звіряють Freed і Live місць
+// спільної втечі через go.
+func TestOwnGoSharedBytes(t *testing.T) {
+	for _, fixture := range []string{
+		"sharedgo",     // змінна в замиканні go: звільнена після Wait і кінця функції
+		"sharedtree",   // горутина пише NewTree у змінну: звільнені комірка і дерево
+		"sharedglobal", // те саме місце ще в глобальній змінній: живе
+	} {
+		t.Run(fixture, func(t *testing.T) {
+			conf := build.NewDefaultConf(build.ModeRun)
+			conf.Tags = "owngo"
+			out, err := cltest.RunAndCaptureWithConf("../owngo/bytes/"+fixture, "", conf)
+			if err != nil {
+				t.Errorf("llgo run -tags owngo ./owngo/bytes/%s error = %v, want exit 0\n%s", fixture, err, out)
+			}
+		})
+	}
+}
