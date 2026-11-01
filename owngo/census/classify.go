@@ -435,11 +435,13 @@ func category(instr ssa.Instruction, k escapeKind, note transferNote, pinned boo
 	if origin != "" && !own {
 		return "implicit: " + origin
 	}
-	if pinned {
-		return "pinned: unsafe"
-	}
+	// Стек раніше за pinned: змінна з узятою адресою без Heap — це type-pun,
+	// з якого компілятор зняв Heap (P11.0.1); купових байтів у неї немає.
 	if alloc, ok := instr.(*ssa.Alloc); ok && !alloc.Heap {
 		return "stack"
+	}
+	if pinned {
+		return "pinned: unsafe"
 	}
 	reason := k.name()
 	if note.kind == k && note.word != "" {

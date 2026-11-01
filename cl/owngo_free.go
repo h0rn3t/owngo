@@ -29,6 +29,7 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 		return
 	}
 	funcs := ssaPackageFuncs(pkg)
+	p.ownGoStackPuns(funcs)
 	place := census.PlaceAll(funcs)
 	cats := place.Cats
 	p.ownGoUses = place.StaticUses
@@ -59,6 +60,80 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 		// Попередження не зупиняє збірку: помилці запису нікуди йти.
 		_, _ = fmt.Fprintf(p.options.OwnGoWarn, "%v: owngo: pinned: allocation converted to unsafe.Pointer stays live until exit\n", pos)
 	}
+}
+
+// ownGoStackPuns знімає Heap зі змінної, чию адресу лише перетворюють в інший
+// вказівник і через нього читають чи пишуть у межах функції:
+// *(*uint64)(unsafe.Pointer(&f)). go/ssa ставить Heap кожній змінній з узятою
+// адресою, census бачить unsafe.Pointer і дає pinned; у gc така змінна на
+// стеку. Без Heap census дає їй stack, а кодоген — alloca.
+func (p *context) ownGoStackPuns(funcs []*ssa.Function) {
+	for _, fn := range funcs {
+		if fn.TypeParams().Len() > len(fn.TypeArgs()) {
+			continue // тіло узагальненої функції: розміри типів невідомі
+		}
+		for _, block := range fn.Blocks {
+			for _, instr := range block.Instrs {
+				if alloc, ok := instr.(*ssa.Alloc); ok && alloc.Heap && p.ownGoLocalPun(alloc) {
+					alloc.Heap = false
+				}
+			}
+		}
+	}
+}
+
+// ownGoLocalPun: кожне використання адреси — читання, запис або
+// unsafe.Pointer, що одразу стає вказівником не більшого типу, яким лише
+// читають і пишуть. Хоч одне таке перетворення є.
+func (p *context) ownGoLocalPun(alloc *ssa.Alloc) bool {
+	size := p.prog.SizeOf(p.type_(alloc.Type().(*types.Pointer).Elem(), llssa.GoDecl))
+	punned := false
+	for _, ref := range *alloc.Referrers() {
+		if ownGoAccessOnly(alloc, ref) {
+			continue
+		}
+		conv, ok := ref.(*ssa.Convert)
+		if !ok {
+			return false
+		}
+		if basic, ok := conv.Type().Underlying().(*types.Basic); !ok || basic.Kind() != types.UnsafePointer {
+			return false
+		}
+		for _, use := range *conv.Referrers() {
+			if _, ok := use.(*ssa.DebugRef); ok {
+				continue
+			}
+			ptr, ok := use.(*ssa.Convert)
+			if !ok {
+				return false
+			}
+			typ, ok := ptr.Type().Underlying().(*types.Pointer)
+			if !ok || p.prog.SizeOf(p.type_(typ.Elem(), llssa.GoDecl)) > size {
+				return false
+			}
+			for _, access := range *ptr.Referrers() {
+				if !ownGoAccessOnly(ptr, access) {
+					return false
+				}
+			}
+		}
+		punned = true
+	}
+	return punned
+}
+
+// ownGoAccessOnly: instr читає чи пише за адресою addr, а саму адресу нікуди
+// не передає.
+func ownGoAccessOnly(addr ssa.Value, instr ssa.Instruction) bool {
+	switch instr := instr.(type) {
+	case *ssa.Store:
+		return instr.Addr == addr && instr.Val != addr
+	case *ssa.UnOp:
+		return instr.Op == token.MUL && instr.X == addr
+	case *ssa.DebugRef:
+		return true
+	}
+	return false
 }
 
 func ownGoCategory(label string) (uint64, bool) {
