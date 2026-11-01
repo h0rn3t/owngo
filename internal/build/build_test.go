@@ -1496,6 +1496,26 @@ func TestExtestNativeTestDAGFailFast(t *testing.T) {
 	}
 }
 
+// Пакет, що не злінкувався, має повернути помилку лінковки, а не лише
+// "[build failed]" з mockable.Exit.
+func TestNativeTestDAGReturnsLinkError(t *testing.T) {
+	mockable.EnableMock()
+	defer mockable.DisableMock()
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil && r != "exit" {
+				panic(r)
+			}
+		}()
+		_, err = Do([]string{"./testdata/linkfail/..."}, &Config{Mode: ModeTest, BuildParallelism: 2})
+	}()
+	const pkg = "github.com/xgo-dev/llgo/internal/build/testdata/linkfail/missing.test"
+	if err == nil || !strings.Contains(err.Error(), pkg) {
+		t.Fatalf("Do(./testdata/linkfail/...) error = %v, want a link error for %s", err, pkg)
+	}
+}
+
 func TestCmpTest(t *testing.T) {
 	mockRun([]string{"../../cl/_testgo/runtest"}, &Config{Mode: ModeCmpTest})
 }

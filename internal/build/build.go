@@ -1078,13 +1078,16 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 		if dagResult.tests.skipped != 0 {
 			fmt.Fprintf(os.Stderr, "FAIL\t%d package(s) skipped by -failfast\n", dagResult.tests.skipped)
 		}
-		if ctx.testFail {
+		err := errors.Join(errs...)
+		// Помилки збірки й лінковки повертаються навіть при впалому тесті:
+		// інакше лишається тільки "[build failed]" без причини.
+		if ctx.testFail && err == nil {
 			if conf.coverage != nil {
-				return allPkgs, coverageTestFailure(errs)
+				return allPkgs, ErrTestFailed
 			}
 			mockable.Exit(1)
 		}
-		return allPkgs, errors.Join(errs...)
+		return allPkgs, err
 	}
 	allPkgs, err = buildAllPkgs(ctx, allPkgs, verbose)
 	if err != nil {
