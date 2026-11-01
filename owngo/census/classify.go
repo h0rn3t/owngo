@@ -302,6 +302,9 @@ func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx
 		case *ssa.Defer:
 			noteCall(instr, &instr.Call, escapeCall, pts, escape, notes, false, v1)
 		case *ssa.Go:
+			if v1 != nil && v1.skipGo {
+				continue
+			}
 			noteCall(instr, &instr.Call, escapeGo, pts, escape, notes, true, v1)
 		case *ssa.Panic:
 			// recover отримує значення в будь-якому кадрі вище: як у зведенні, call.

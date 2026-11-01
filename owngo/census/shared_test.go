@@ -1,6 +1,7 @@
 package census
 
 import (
+	"slices"
 	"testing"
 
 	"golang.org/x/tools/go/ssa"
@@ -78,6 +79,12 @@ func treeLeak() {
 	gtree = t
 }
 
+func treeParam(p *Tree) int {
+	var t *Tree
+	go func() { t = p }()
+	return t.Count()
+}
+
 func treeGoLeak() {
 	var t *Tree
 	go func() {
@@ -114,6 +121,7 @@ func TestSharedGo(t *testing.T) {
 		{fn: "leak", local: "c"},
 		{fn: "treeLeak", local: "t", shared: true},
 		{fn: "treeGoLeak", local: "t", shared: true},
+		{fn: "treeParam", local: "t", shared: true},
 	}
 	for _, tt := range tests {
 		fn := pkg.Func(tt.fn)
@@ -136,8 +144,8 @@ func TestSharedGo(t *testing.T) {
 		if !counted || !dec {
 			t.Errorf("PlaceAll(%s): counted %v, DecUses %v, want both", tt.fn, counted, dec)
 		}
-		if len(goVals) != 1 || goVals[0] != ssa.Value(site) {
-			t.Errorf("PlaceAll(%s).GoShared[go] = %v, want [%v]", tt.fn, goVals, site.Name())
+		if !slices.Contains(goVals, ssa.Value(site)) {
+			t.Errorf("PlaceAll(%s).GoShared[go] = %v, want it to contain %v", tt.fn, goVals, site.Name())
 		}
 		elem := ""
 		if info.Content != nil {

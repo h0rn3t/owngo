@@ -26,11 +26,14 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 		return
 	}
 	funcs := ssaPackageFuncs(pkg)
-	cats, uses, decUses, counted, inc := census.Place(funcs)
-	p.ownGoUses = uses
-	p.ownGoDecUses = decUses
-	p.ownGoCounted = counted
-	p.ownGoInc = inc
+	place := census.PlaceAll(funcs)
+	cats := place.Cats
+	p.ownGoUses = place.StaticUses
+	p.ownGoDecUses = place.DecUses
+	p.ownGoCounted = place.Counted
+	p.ownGoInc = place.Inc
+	p.ownGoShared = place.Shared
+	p.ownGoGoShared = place.GoShared
 	if len(cats) == 0 {
 		return
 	}
@@ -344,6 +347,12 @@ func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 		if _, sized := p.ownGoSiteSize(site); !sized {
 			continue
 		}
+		if instr, ok := site.(ssa.Instruction); ok {
+			if _, shared := p.ownGoShared[instr]; shared {
+				p.callDecShared(b, ptr, p.sharedDesc(instr))
+				continue
+			}
+		}
 		if instr, ok := site.(ssa.Instruction); ok && p.ownGoCat[instr] == ownGoCyclic {
 			p.callDecCyclic(b, ptr, ownGoElem(site))
 			continue
@@ -358,6 +367,109 @@ func (p *context) emitOwnGoStoreInc(b llssa.Builder, store *ssa.Store, val llssa
 		return
 	}
 	p.callOwnGoAccount(b, "Inc", val, llssa.Nil, 0)
+}
+
+// emitOwnGoIncShared ставить IncShared перед go на кожне місце, яке
+// горутина отримує, і повертає ці місця для DecShared у рутині.
+func (p *context) emitOwnGoIncShared(b llssa.Builder, g *ssa.Go) []ssa.Value {
+	var sites []ssa.Value
+	unsafePtr := types.Typ[types.UnsafePointer]
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "ptr", unsafePtr),
+	), nil, false)
+	dst := p.type_(unsafePtr, llssa.GoDecl)
+	for _, site := range p.ownGoGoShared[g] {
+		ptr := p.ownGoFreePtr(b, site)
+		if ptr.IsNil() {
+			continue
+		}
+		b.Call(p.runtimeFunc("IncShared", sig), b.PtrCast(dst, ptr))
+		sites = append(sites, site)
+	}
+	return sites
+}
+
+// ownGoRoutineDec дописує вказівники місць p.ownGoGoSites у стартовий запис
+// горутини, а рутина після повернення функції горутини ставить на кожне
+// DecShared.
+func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, args []llssa.Expr) (func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, []llssa.Expr) {
+	n := len(args)
+	descs := make([]llssa.Expr, 0, len(p.ownGoGoSites))
+	full := append([]llssa.Expr(nil), args...)
+	for _, site := range p.ownGoGoSites {
+		full = append(full, p.ownGoFreePtr(b, site))
+		descs = append(descs, p.sharedDesc(site.(ssa.Instruction)))
+	}
+	wrapped := func(b llssa.Builder, fn llssa.Expr, all ...llssa.Expr) llssa.Expr {
+		ret := buildCall(b, fn, all[:n]...)
+		for i, ptr := range all[n:] {
+			p.callDecShared(b, ptr, descs[i])
+		}
+		return ret
+	}
+	return wrapped, full
+}
+
+func (p *context) callDecShared(b llssa.Builder, ptr, desc llssa.Expr) {
+	unsafePtr := types.Typ[types.UnsafePointer]
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "ptr", unsafePtr),
+		types.NewVar(token.NoPos, nil, "desc", unsafePtr),
+	), nil, false)
+	dst := p.type_(unsafePtr, llssa.GoDecl)
+	b.Call(p.runtimeFunc("DecShared", sig), b.PtrCast(dst, ptr), b.PtrCast(dst, desc))
+}
+
+// sharedDesc повертає глобальну runtime.SharedDesc місця спільної втечі:
+// розмір об'єкта, категорію і ребро у вміст комірки за census.Shared.
+// Розкладка збігається з runtime.SharedDesc і runtime.SharedEdge.
+func (p *context) sharedDesc(site ssa.Instruction) llssa.Expr {
+	if desc, ok := p.ownGoSharedDescs[site]; ok {
+		return desc
+	}
+	if p.ownGoSharedDescs == nil {
+		p.ownGoSharedDescs = map[ssa.Instruction]llssa.Expr{}
+	}
+	uintptrT, unsafePtr := types.Typ[types.Uintptr], types.Typ[types.UnsafePointer]
+	edgeT := types.NewStruct([]*types.Var{
+		types.NewField(token.NoPos, nil, "Off", uintptrT, false),
+		types.NewField(token.NoPos, nil, "Shared", unsafePtr, false),
+		types.NewField(token.NoPos, nil, "Cyclic", unsafePtr, false),
+		types.NewField(token.NoPos, nil, "Size", uintptrT, false),
+	}, nil)
+	edgesT := types.NewSlice(edgeT)
+	descT := types.NewStruct([]*types.Var{
+		types.NewField(token.NoPos, nil, "Size", uintptrT, false),
+		types.NewField(token.NoPos, nil, "Cat", types.Typ[types.Int32], false),
+		types.NewField(token.NoPos, nil, "Edges", edgesT, false),
+	}, nil)
+	name := p.pkg.Path() + ".__owngo_shared$" + strconv.Itoa(len(p.ownGoSharedDescs))
+	global := p.pkg.NewVarEx(name, p.prog.Pointer(p.type_(descT, llssa.GoDecl)))
+	p.ownGoSharedDescs[site] = global.Expr
+
+	edges := p.prog.Zero(p.type_(edgesT, llssa.GoDecl))
+	if info := p.ownGoShared[site]; info.Content != nil {
+		cyclicDesc := p.prog.Nil(p.type_(unsafePtr, llssa.GoDecl))
+		size := p.prog.IntVal(0, p.prog.Uintptr())
+		if info.ContentCyclic {
+			cyclicDesc = p.cyclicDesc(info.Content)
+		} else {
+			size = p.prog.IntVal(p.prog.SizeOf(p.type_(info.Content, llssa.GoDecl)), p.prog.Uintptr())
+		}
+		edge := p.prog.ConstStruct(p.type_(edgeT, llssa.GoDecl), []llssa.Expr{
+			p.prog.IntVal(0, p.prog.Uintptr()),
+			p.prog.Nil(p.type_(unsafePtr, llssa.GoDecl)),
+			cyclicDesc,
+			size,
+		})
+		edges = p.pkg.ConstSlice(name+"$edges", p.type_(edgesT, llssa.GoDecl), []llssa.Expr{edge})
+	}
+	global.Init(p.prog.ConstStruct(p.type_(descT, llssa.GoDecl), []llssa.Expr{
+		p.prog.IntVal(p.prog.SizeOf(p.type_(ownGoElem(site.(ssa.Value)), llssa.GoDecl)), p.prog.Uintptr()),
+		p.prog.IntVal(p.ownGoCat[site], p.prog.Int32()),
+		edges,
+	}))
+	return global.Expr
 }
 
 func (p *context) callDecCyclic(b llssa.Builder, ptr llssa.Expr, elem types.Type) {

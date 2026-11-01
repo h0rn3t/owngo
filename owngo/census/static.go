@@ -29,8 +29,37 @@ func Place(funcs []*ssa.Function) (
 	counted map[ssa.Instruction]struct{},
 	inc map[ssa.Instruction][]ssa.Value,
 ) {
+	p := PlaceAll(funcs)
+	return p.Cats, p.StaticUses, p.DecUses, p.Counted, p.Inc
+}
+
+// Placement — дії компілятора для набору функцій. Поля до Inc — як у Place.
+// Shared — місця спільної втечі через go з атомарним словом; їхні читачі
+// лежать у DecUses. GoShared — значення, яким go ставить IncShared перед
+// собою, а горутина DecShared після повернення своєї функції.
+type Placement struct {
+	Cats       map[ssa.Instruction]string
+	StaticUses map[ssa.Instruction][]ssa.Instruction
+	DecUses    map[ssa.Instruction][]ssa.Instruction
+	Counted    map[ssa.Instruction]struct{}
+	Inc        map[ssa.Instruction][]ssa.Value
+	Shared     map[ssa.Instruction]Shared
+	GoShared   map[*ssa.Go][]ssa.Value
+}
+
+// PlaceAll — Place разом з місцями спільної втечі через go (P9.3).
+func PlaceAll(funcs []*ssa.Function) Placement {
+	var (
+		cats       map[ssa.Instruction]string
+		staticUses map[ssa.Instruction][]ssa.Instruction
+		decUses    map[ssa.Instruction][]ssa.Instruction
+		counted    map[ssa.Instruction]struct{}
+		inc        map[ssa.Instruction][]ssa.Value
+		shared     map[ssa.Instruction]Shared
+		goShared   map[*ssa.Go][]ssa.Value
+	)
 	if len(funcs) == 0 {
-		return nil, nil, nil, nil, nil
+		return Placement{}
 	}
 	ctx := &v1Ctx{sums: packageSummaries(nil, funcs)}
 	cats = map[ssa.Instruction]string{}
@@ -49,6 +78,21 @@ func Place(funcs []*ssa.Function) (
 			for _, alloc := range freshAllocs(fn) {
 				counted[alloc] = struct{}{}
 			}
+		}
+		sites, goVals, sharedUses := sharedSites(fn, msg, pts, contents, ctx)
+		for site, info := range sites {
+			if shared == nil {
+				shared = map[ssa.Instruction]Shared{}
+				goShared = map[*ssa.Go][]ssa.Value{}
+			}
+			shared[site] = info
+			counted[site] = struct{}{}
+			if users := sharedUses[site]; len(users) > 0 {
+				decUses[site] = users
+			}
+		}
+		for g, vals := range goVals {
+			goShared[g] = vals
 		}
 		rings := cyclicSites(fn, msg, pts, storeInc, ctx)
 		for site := range rings {
@@ -115,7 +159,15 @@ func Place(funcs []*ssa.Function) (
 	if len(counted) == 0 {
 		counted = nil
 	}
-	return cats, staticUses, decUses, counted, inc
+	return Placement{
+		Cats:       cats,
+		StaticUses: staticUses,
+		DecUses:    decUses,
+		Counted:    counted,
+		Inc:        inc,
+		Shared:     shared,
+		GoShared:   goShared,
+	}
 }
 
 // interiorCall: місце — виклик зі свіжим внутрішнім результатом.

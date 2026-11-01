@@ -36,6 +36,7 @@ import (
 	"github.com/xgo-dev/llgo/internal/genmethod"
 	"github.com/xgo-dev/llgo/internal/goembed"
 	"github.com/xgo-dev/llgo/internal/typepatch"
+	"github.com/xgo-dev/llgo/owngo/census"
 	"golang.org/x/tools/go/ssa"
 
 	llssa "github.com/xgo-dev/llgo/ssa"
@@ -255,6 +256,11 @@ type context struct {
 	ownGoFreeEntry       map[*ssa.BasicBlock][]ssa.Value
 	ownGoDecEntry        map[*ssa.BasicBlock][]ssa.Value
 	ownGoDescs           map[types.Type]llssa.Expr
+	ownGoShared          map[ssa.Instruction]census.Shared
+	ownGoGoShared        map[*ssa.Go][]ssa.Value
+	ownGoSharedDescs     map[ssa.Instruction]llssa.Expr
+	// ownGoGoSites — місця, яким рутина поточного go ставить DecShared.
+	ownGoGoSites []ssa.Value
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -2510,7 +2516,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		p.call(b, p.blkInfos[v.Block().Index].Kind, &v.Call)
 	case *ssa.Go:
 		p.checkMethodCallReceiver(b, &v.Call)
+		p.ownGoGoSites = p.emitOwnGoIncShared(b, v)
 		p.call(b, llssa.Go, &v.Call)
+		p.ownGoGoSites = nil
 	case *ssa.RunDefers:
 		p.recordPanicLocation(b, p.deferRunPos(v.Pos()))
 		p.emitPCLineLabel(b, p.deferRunPos(v.Pos()))

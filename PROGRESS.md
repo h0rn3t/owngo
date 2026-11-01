@@ -755,3 +755,15 @@
 - Знайдено, не виправлено: `owngo/cyclicdeep` на HEAD до зміни теж падає (`freed 16064 want 16000` на `1000`) — таблиця `DecCyclic` у `freed` з P8.0.
 - Не перевірялось: macOS; TSan.
 - Лишилось: P9.3; трек — S1.
+
+## 2026-11-01 — P9.3 Вставка для `go`
+
+- `census.PlaceAll` (`Place` — обгортка над ним) повертає ще `Shared` і `GoShared`. `sharedSites` (`owngo/census/shared.go`): кандидат — куповий `Alloc` з `rc-shared: go` чи `cyclic: go`. Функція проходить `messages` удруге з `skipGo` (go втечі не дає); місце бере атомарне слово, якщо без go позначка `static`, `rc-local` чи `cyclic` і `decSite` її пропускає, якщо в go воно йде лише прямо (зв'язка замикання, яке вживає лише цей go, чи аргумент статичної функції), і якщо тіло горутини його лише позичає (`borrowUses`: читання, запис за ним, адреса поля чи елемента, параметр, що за зведенням не зберігає ні вказівник, ні вміст). Вміст переданого місця, похідний вказівник і невідомий callee блокують; спільна передача (неатомарний `Inc`) теж.
+- Каскад у вміст — лише для комірки з вказівником, куди і функція, і горутина пишуть nil чи переміщений свіжий результат, а прочитаний вміст лише порівнюють і передають параметру, що лише читає. Ребро — `DecCyclic` для циклічної структури, інакше `DecAccounted`. Поля структури каскад не проходить. Читачі місця для `DecShared` у функції — `readers` плюс go замикання і вживання прочитаного вмісту.
+- `cl`: `IncShared` перед go (`emitOwnGoIncShared`), вказівники місць — додатковими полями стартового запису, рутина після виклику ставить `DecShared` (`ownGoRoutineDec` у `emitDo`). `DecShared` у функції — замість `DecAccounted`/`DecCyclic`. Дескриптор `__owngo_shared$N` — розмір, категорія з позначки, ребро у вміст.
+- Тести спершу, окремим комітом `38d3cd0dc`: `TestSharedGo` (census, `PlaceAll` не існувало) і `TestOwnGoShared` (cl, без `AllocCounted`/`IncShared`/`DecShared`). У коміті реалізації в census додано випадок `treeParam` (запис не свіжого вказівника — без каскаду), а перевірку `GoShared` послаблено до «містить місце»: комірка параметра теж спільна.
+- Мутації: без `borrowUses` — `PlaceAll(leak).Shared[c] present = true`; `movedInto` завжди true — `treeParam ... Content = "example.com/p.Tree"`.
+- Прийняття (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`): `go test -count=1 ./owngo/census/` і `-race` — зелені; `go test -count=1 ./cl/ -run OwnGo` — 20 `PASS`. ASan-фікстури P8.7 — ті самі коди (8 живих — 0, 7 UAF — 1 і `heap-use-after-free`). `go vet`, `golangci-lint --new-from-rev` — чисто.
+- Корпус: вивід побайтно як у `go run`. binarytrees `10`: `live cyclic` 32 784 → 24, `rc-shared` 608 → 576, `freed` 2 229 472 → 2 262 328; `14`: `cyclic` 524 304 → 24. binarytreesarena: `rc-shared` 880 → 720, fannkuchredux: 840 → 712 (комірка `f` у `WaitGroup.Go`). binarytrees `12` під `-O0 -asan` — код 0 без тексту ASan.
+- Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS; TSan.
+- Лишилось: P9.4; трек — S1.

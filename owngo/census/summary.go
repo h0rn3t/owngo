@@ -54,6 +54,8 @@ type v1Ctx struct {
 	inc map[ssa.Instruction][]ssa.Value
 	// noDec — невідомий виклик, переміщення або внутрішній вказівник.
 	noDec map[ssa.Instruction]bool
+	// skipGo — go втечі не дає: позначка місця без його передачі горутині.
+	skipGo bool
 }
 
 // resolved — замкнені конкретні типи й функції однієї SSA-функції.
