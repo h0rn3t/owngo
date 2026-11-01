@@ -709,3 +709,13 @@
 - Не перевірялось: повні `go test ./cl/` і `./internal/build/`; macOS.
 - Лишилось: P8.7; трек — S1.
 
+## 2026-11-01 — P8.7 ASan на внутрішньому вказівнику
+
+- Нові фікстури `owngo/asan`, як наявні — те, що ставить прохід, прямими викликами рантайму (правильний прохід UAF не створює):
+  - `interioruaf`: місце `AllocCounted` з `S`, похідний `p := &s.f`, `DecAccounted` на базі, читання `*p` — код 1, `heap-use-after-free`.
+  - `freshuaf`: `field` — справжній свіжий внутрішній результат з `AllocCounted` компілятора; `main` знаходить слово через `runtime.Base` (під ASan — `__sanitizer_get_allocated_begin`), `DecAccounted`, читання — код 1, `heap-use-after-free`, читання на 16 байтів у 24-байтовому блоці (слово + `S`). `unsafe.Pointer` робить місце викликача `pinned`, тож другого `Dec` прохід не ставить.
+  - `interiorlive`: невідомий `func` зберігає `&s.f` у глобальну змінну, `main` після виклику читає 6 — код 0, тексту ASan немає.
+- Прогін (`/usr/lib/llvm-23/bin` першим у `PATH`, `LLGO_ROOT=$PWD`, `ASAN_OPTIONS=detect_leaks=0`, `llgo run -tags owngo -O0 -asan`): `clean`, `twouse`, `shared`, `outlive`, `imlive`, `ringlive`, `wggo`, `interiorlive` — код 0 без тексту ASan; `uaf`, `decuaf`, `outuaf`, `imuaf`, `ringuaf`, `interioruaf`, `freshuaf` — код 1 і `heap-use-after-free`. Старі фікстури — ті самі коди, що в P8.0.
+- Код компілятора й рантайму не змінювався; Go-тести не проганялись.
+- Лишилось: P8.8 (гейт фази 8); трек — S1.
+
