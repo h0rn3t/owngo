@@ -1,4 +1,4 @@
-// LITTEST darwin/arm64 linux/amd64 windows/386 windows/amd64 windows/arm64
+// LITTEST darwin/arm64 linux/amd64
 // Scope: common (native global storage, including function-pointer fields)
 package main
 

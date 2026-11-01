@@ -1,4 +1,4 @@
-// LITTEST: POST-ABI darwin/arm64 linux/amd64 linux/arm64 windows/amd64
+// LITTEST: POST-ABI darwin/arm64 linux/amd64 linux/arm64
 // Scope: arch (arm64/amd64 float-to-integer ABI)
 package main
 

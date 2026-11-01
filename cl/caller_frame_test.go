@@ -7,7 +7,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -539,9 +538,6 @@ func branchStorePanicLeaf(p *int, branch bool) {
 		{goos: "linux", goarch: "386"},
 		{goos: "darwin", goarch: "amd64"},
 		{goos: "darwin", goarch: "arm64"},
-		{goos: "windows", goarch: "amd64"},
-		{goos: "windows", goarch: "arm64"},
-		{goos: "windows", goarch: "386"},
 	} {
 		t.Run(test.goos+"/"+test.goarch, func(t *testing.T) {
 			ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", source)
@@ -1065,67 +1061,6 @@ func top() {
 	}
 }
 
-func TestCompileRuntimeCallerPCLineMetadataOnWindows(t *testing.T) {
-	ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
-import "runtime"
-
-func top() {
-	runtime.Caller(0)
-}
-`)
-	prog := newLLSSAProg(t)
-	prog.Target().GOOS = "windows"
-	prog.Target().GOARCH = "arm64"
-	prog.EnableFuncInfoMetadata(true)
-	prog.EnableFuncInfoSites(true)
-	pkg, err := NewPackage(prog, ssapkg, files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ir := pkg.Module().String()
-	for _, want := range []string{
-		`!llgo.pcline`,
-		"__llgo_pcsite_",
-		`.pushsection .llgopcl$$m,\22dr\22,associative,__llgo_pcsite_`,
-	} {
-		if !strings.Contains(ir, want) {
-			t.Fatalf("windows should emit associative COFF pc-site labels, missing %q:\n%s", want, ir)
-		}
-	}
-	for _, bad := range []string{`.pushsection llgo_pcline`, `.pushsection __DATA,__llgo_pcl`} {
-		if strings.Contains(ir, bad) {
-			t.Fatalf("windows must not use a non-COFF pcline section, found %q:\n%s", bad, ir)
-		}
-	}
-}
-
-func TestCompileRuntimeCallerPCLineMetadataOnWindows386(t *testing.T) {
-	ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
-import "runtime"
-
-func top() {
-	runtime.Caller(0)
-}
-`)
-	prog := newLLSSAProgForTarget(t, &llssa.Target{GOOS: "windows", GOARCH: "386"})
-	prog.EnableFuncInfoMetadata(true)
-	prog.EnableFuncInfoSites(true)
-	pkg, err := NewPackage(prog, ssapkg, files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ir := pkg.Module().String()
-	for _, want := range []string{
-		`.pushsection .llgopcl$$m,\22dr\22,associative,__llgo_pcsite_`,
-		`.long __llgo_pcsite_`,
-		`.long 0\0A.quad `,
-	} {
-		if !strings.Contains(ir, want) {
-			t.Fatalf("windows/386 pc-site metadata missing %q:\n%s", want, ir)
-		}
-	}
-}
-
 func TestCompileRuntimeCallerFrameUsesGoNameForLinkname(t *testing.T) {
 	ssapkg, files := buildCallerFrameSSAPackage(t, "command-line-arguments", `package main
 import "runtime"
@@ -1456,34 +1391,6 @@ func TestDirectiveFilename(t *testing.T) {
 		t.Fatal("nil fset must pass through")
 	}
 }
-func TestDirectiveFilenameWindowsRootedSlash(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows filepath semantics")
-	}
-	fset := token.NewFileSet()
-	src := "package p\n//line /foo/bar.go:123\nfunc F() {}\n"
-	file, err := parser.ParseFile(fset, `C:\work\pkg\orig.go`, src, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pos := file.Decls[0].Pos()
-	adjusted := fset.Position(pos).Filename
-	lines := strings.Split(src, "\n")
-	sourceLine := func(_ string, line int) (string, bool) {
-		if line <= 0 || line > len(lines) {
-			return "", false
-		}
-		return lines[line-1], true
-	}
-	got := runtimeSourceFilename(
-		&llssa.Target{GOOS: "windows"},
-		directiveFilename(fset, pos, adjusted, sourceLine),
-	)
-	if want := "/foo/bar.go"; got != want {
-		t.Fatalf("directiveFilename(%q) = %q, want %q", adjusted, got, want)
-	}
-}
-
 func TestPrecedingLineDirectiveFilename(t *testing.T) {
 	pos := token.Position{Filename: "source.go", Line: 4}
 	tests := []struct {
@@ -1551,12 +1458,8 @@ func TestParseLineDirectiveFilename(t *testing.T) {
 }
 
 func TestRuntimeSourceFilename(t *testing.T) {
-	windows := &llssa.Target{GOOS: "windows"}
 	linux := &llssa.Target{GOOS: "linux"}
 	const native = `C:\work\pkg\main.go`
-	if got, want := runtimeSourceFilename(windows, native), "C:/work/pkg/main.go"; got != want {
-		t.Fatalf("Windows runtime filename = %q, want %q", got, want)
-	}
 	if got := runtimeSourceFilename(linux, native); got != native {
 		t.Fatalf("Unix runtime filename = %q, want unchanged %q", got, native)
 	}

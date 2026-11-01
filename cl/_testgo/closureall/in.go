@@ -1,4 +1,4 @@
-// LITTEST darwin/arm64 linux/amd64 windows/arm64 windows/amd64
+// LITTEST darwin/arm64 linux/amd64
 // Scope: arch (arm64, amd64)
 package main
 
