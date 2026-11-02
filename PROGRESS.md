@@ -938,3 +938,12 @@
 - Вибір сервісу — рішення розробника: клонів на машині розробки немає. Умови — пік горутин до 1000 (`ms-zv`, `ms-ap` виключено: M:N не входить), `CGO_ENABLED=0`, залежності сценарію піднімаються на одному стенді.
 - Fuzzing — кандидат з умовою входу (знахідка ASan, якої фікстури не ловили), не задача фази. Рядок про коректність у треку швидкодії посилається на P11.3, P11.6, P11.7.
 - Коду не змінено. Лишилось: P11.2 (не потребує сервісу); P11.4 чекає вибору розробника; трек — S1.
+
+## 2026-11-02 — P11.2 Тег у раннері `GOROOT/test`
+
+- Тести спершу: `eed69fdd4` (`TestGOROOTBuildArgsLLGOFlags`, червоний на `tag`, `merge`, `mergeEq`, `asan`) і `e7aae0e5e` (`TestFilterNoiseStripsOwnGoExitReport`).
+- `-llgo-flags` / `LLGO_GOROOT_LLGO_FLAGS` (`test/goroot/runner_test.go`): аргументи додаються в `gorootBuildArgs` лише для `llgo` — це спільна точка всіх збірок випадків (`run`, `runoutput`, `buildrun`, каталоги, згенеровані програми). `-tags` прапорця і випадку зливаються в один `-tags a,b` лише коли прапорець дає теги; без прапорця аргументи побайтно як раніше. `llgo tool compile` (`compile`, `errorcheck`) прапорця не отримує: ці режими не входять у `ci`, і `tool compile` не бере `-tags`.
+- Поза текстом задачі, але без нього прогін з `owngo` неможливий: рантайм `owngo` друкує на виході `owngo freed …` / `owngo live …` у stderr, і кожен випадок розходився з `gc` за stderr. `filterNoise` прибирає ці рядки (upstream їх не друкує).
+- Прийняття: `go test -count=1 -race ./test/goroot/` — `ok`; `go vet`, `golangci-lint --new-from-rev` — чисто; `go fix -diff` — ті самі 13 давніх ділянок, що до зміни.
+- Живий прогін (`/usr/lib/llvm-23/bin` першим у `PATH`, `-min-swap-free-mib 0`: на цій машині вільного свопу ~30 МіБ, і сторож раннера зупиняє кожен випадок як `resource-fail`), `ci`, `append.go`, `helloworld.go`, `map.go`: без тегу — 3 `pass`; `-tags owngo` — `helloworld.go` `pass`, `append.go` — nil-розіменування в `main.init` (`append.go:144`), `map.go` — `panic: out of memory` у `fmt`; `-tags owngo -O0 -asan` (`detect_leaks=0`) — `append.go`: `AddressSanitizer: attempting free on address which was not malloc()-ed` (адреса в сегменті даних бінарника). Це перші регресії для P11.3.
+- Лишилось: P11.3; P11.4 чекає вибору сервісу розробником; трек — S1.

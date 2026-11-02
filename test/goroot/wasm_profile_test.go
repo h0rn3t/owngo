@@ -86,10 +86,21 @@ func gorootArtifactPath(rootDir, label string, llgo bool) string {
 
 func gorootBuildArgs(llgo bool, flags []string, output, target string) []string {
 	args := []string{"build"}
+	var tags []string
 	if llgo {
 		if p, ok := activeGOROOTWasmProfile(); ok && p.target != "" {
 			args = append(args, "-target", p.target)
 		}
+		var extra []string
+		tags, extra = splitTagsFlags(strings.Fields(*flagLLGOFlags))
+		args = append(args, extra...)
+	}
+	if len(tags) != 0 {
+		// llgo, як і go, бере лише останній -tags: теги випадку
+		// зливаються з тегами -llgo-flags в один список.
+		var caseTags []string
+		caseTags, flags = splitTagsFlags(flags)
+		tags = append(tags, caseTags...)
 	}
 	for i := 0; i < len(flags); i++ {
 		// These gc backend controls stay on the official Go baseline;
@@ -107,7 +118,27 @@ func gorootBuildArgs(llgo bool, flags []string, output, target string) []string 
 		}
 		args = append(args, flags[i])
 	}
+	if len(tags) != 0 {
+		args = append(args, "-tags", strings.Join(tags, ","))
+	}
 	return append(args, "-o", output, target)
+}
+
+// splitTagsFlags відокремлює значення "-tags v" і "-tags=v" від решти прапорців.
+func splitTagsFlags(flags []string) (tags, rest []string) {
+	for i := 0; i < len(flags); i++ {
+		if v, ok := strings.CutPrefix(flags[i], "-tags="); ok {
+			tags = append(tags, v)
+			continue
+		}
+		if flags[i] == "-tags" && i+1 < len(flags) {
+			tags = append(tags, flags[i+1])
+			i++
+			continue
+		}
+		rest = append(rest, flags[i])
+	}
+	return tags, rest
 }
 
 func gorootGCBackendOnlyFlags(payload string) bool {
