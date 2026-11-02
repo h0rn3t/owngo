@@ -1513,3 +1513,23 @@ func intersects(a, b siteSet) bool {
 	}
 	return false
 }
+
+// dominates: значення site визначене на кожному шляху до instr.
+func dominates(site, instr ssa.Instruction) bool {
+	sb, ib := site.Block(), instr.Block()
+	if sb == nil || ib == nil || sb.Parent() != ib.Parent() {
+		return false
+	}
+	if sb != ib {
+		return sb.Dominates(ib)
+	}
+	for _, x := range sb.Instrs {
+		switch x {
+		case site:
+			return true
+		case instr:
+			return false
+		}
+	}
+	return false
+}

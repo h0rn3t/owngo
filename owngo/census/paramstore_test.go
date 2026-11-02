@@ -73,3 +73,55 @@ func TestParamStoredIntoMemory(t *testing.T) {
 		}
 	}
 }
+
+// reflect.(*visibleFieldsWalker).walk: місце з гілки if, записане в пам'ять
+// параметра, спільне на рекурсивному виклику після гілки. Inc на виклику
+// стоїть лише для значень, що домінують над ним, — інакше IR невалідний.
+const incDominanceSrc = `package p
+
+type field struct {
+	typ   *node
+	index []int
+}
+
+type node struct{ fields []field }
+
+type walker struct {
+	visiting map[*node]bool
+	fields   []field
+	index    []int
+}
+
+func walk(w *walker, t *node) {
+	if w.visiting[t] {
+		return
+	}
+	w.visiting[t] = true
+	for i := range t.fields {
+		f := t.fields[i]
+		w.index = append(w.index, i)
+		if i%2 == 0 {
+			f.index = append([]int(nil), w.index...)
+			w.fields = append(w.fields, f)
+		}
+		if f.typ != nil {
+			walk(w, f.typ)
+		}
+		w.index = w.index[:len(w.index)-1]
+	}
+	delete(w.visiting, t)
+}
+`
+
+func TestIncDominatesCall(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", incDominanceSrc, ssa.SanityCheckFunctions)
+	got := PlaceAll(ssaFuncs(pkg))
+	for call, vals := range got.Inc {
+		for _, val := range vals {
+			site, ok := val.(ssa.Instruction)
+			if !ok || !dominates(site, call) {
+				t.Errorf("PlaceAll(walk).Inc[%v] has %v, which does not dominate the call", call, val.Name())
+			}
+		}
+	}
+}
