@@ -452,7 +452,7 @@ func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 
 // emitOwnGoStoreInc рахує вказівник місця cyclic, записаний у поле обходу.
 func (p *context) emitOwnGoStoreInc(b llssa.Builder, store *ssa.Store, val llssa.Expr) {
-	if len(p.ownGoInc[store]) == 0 {
+	if len(p.ownGoInc[store]) == 0 || val.IsConstant() {
 		return
 	}
 	p.callOwnGoAccount(b, "Inc", val, llssa.Nil, 0)
@@ -766,7 +766,18 @@ func (p *context) ownGoSizeExpr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	return zero
 }
 
+// ownGoFreePtr повертає вказівник блока місця для входів володіння. Константа —
+// адреса глобальної змінної, зокрема спільного символу купової алокації
+// нульового розміру, — не блок купи: Nil.
 func (p *context) ownGoFreePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
+	ptr := p.ownGoSitePtr(b, site)
+	if ptr.IsConstant() {
+		return llssa.Nil
+	}
+	return ptr
+}
+
+func (p *context) ownGoSitePtr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	expr, ok := p.bvals[site]
 	if !ok || expr.IsNil() {
 		return llssa.Nil
