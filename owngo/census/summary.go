@@ -509,8 +509,10 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		}
 		return changed
 	case *ssa.Store:
-		extra := mergeSets(tok[instr.Val], derived[instr.Val])
-		changed := sum.markWrites(mergeSets(tok[instr.Addr], derived[instr.Addr]))
+		extra := mergeSets(mergeSets(tok[instr.Val], derived[instr.Val]), content[instr.Val])
+		target := mergeSets(tok[instr.Addr], derived[instr.Addr])
+		changed := sum.markWrites(target)
+		changed = storeInto(sum, target, instr.Val, tok, derived, content) || changed
 		changed = unionAt(content, instr.Addr, extra) || changed
 		if base := addressBase(instr.Addr); base != instr.Addr {
 			changed = unionAt(content, base, extra) || changed
@@ -527,7 +529,11 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		return sum.raiseSide(content[instr.X], escapeChannel, false) || changed
 	case *ssa.MapUpdate:
 		extra := mergeSets(mergeSets(tok[instr.Value], derived[instr.Value]), mergeSets(tok[instr.Key], derived[instr.Key]))
-		changed := sum.markWrites(mergeSets(tok[instr.Map], derived[instr.Map]))
+		extra = mergeSets(extra, mergeSets(content[instr.Value], content[instr.Key]))
+		target := mergeSets(tok[instr.Map], derived[instr.Map])
+		changed := sum.markWrites(target)
+		changed = storeInto(sum, target, instr.Value, tok, derived, content) || changed
+		changed = storeInto(sum, target, instr.Key, tok, derived, content) || changed
 		changed = unionAt(content, instr.Map, extra) || changed
 		if base := addressBase(instr.Map); base != instr.Map {
 			changed = unionAt(content, base, extra) || changed
@@ -543,6 +549,9 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		if instr.Op == token.MUL || instr.Op == token.ARROW {
 			changed := unionAt(derived, instr, tok[instr.X])
 			changed = unionAt(derived, instr, derived[instr.X]) || changed
+			// У локальній пам'яті лежать і самі параметри, і їхній вміст:
+			// прочитане — обидва.
+			changed = unionAt(tok, instr, content[instr.X]) || changed
 			return unionAt(derived, instr, content[instr.X]) || changed
 		}
 		changed := unionAt(tok, instr, tok[instr.X])
@@ -579,8 +588,31 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		}
 		t, d := operandSets(instr, tok, derived)
 		changed := unionAt(tok, value, t)
-		return unionAt(derived, value, d) || changed
+		changed = unionAt(derived, value, d) || changed
+		// Slice, FieldAddr, ChangeType, Phi вказують у ту саму пам'ять.
+		_, c := operandSets(instr, nil, content)
+		return unionAt(content, value, c) || changed
 	}
+}
+
+// storeInto: val записано в пам'ять параметрів target. Параметри, що лежать у
+// val, ідуть з функції, крім самих target — їхній вміст лишається в них.
+func storeInto(sum *Summary, target pset, val ssa.Value, tok, derived, content map[ssa.Value]pset) bool {
+	if len(target) == 0 {
+		return false
+	}
+	changed := sum.raiseSide(without(mergeSets(tok[val], content[val]), target), escapeCall, false)
+	return sum.raiseSide(without(derived[val], target), escapeCall, true) || changed
+}
+
+func without(a, b pset) pset {
+	out := pset{}
+	for id := range a {
+		if _, ok := b[id]; !ok {
+			out[id] = struct{}{}
+		}
+	}
+	return out
 }
 
 func applyCall(instr ssa.Instruction, call *ssa.CallCommon, sum *Summary, tok, derived, content map[ssa.Value]pset, tuple map[*ssa.Call][]pset, lookup func(*ssa.Function) *Summary, concrete map[ssa.Value][]types.Type, knownFn map[ssa.Value][]*ssa.Function, prog *ssa.Program) bool {
@@ -591,7 +623,14 @@ func applyCall(instr ssa.Instruction, call *ssa.CallCommon, sum *Summary, tok, d
 				return false
 			}
 			changed := unionAt(tok, value, tok[call.Args[0]])
-			return unionAt(derived, value, derived[call.Args[0]]) || changed
+			changed = unionAt(derived, value, derived[call.Args[0]]) || changed
+			changed = unionAt(content, value, content[call.Args[0]]) || changed
+			if len(call.Args) > 1 {
+				// Елементи другого аргументу лягають у масив результату.
+				elems := call.Args[1]
+				changed = unionAt(content, value, mergeSets(mergeSets(tok[elems], derived[elems]), content[elems])) || changed
+			}
+			return changed
 		}
 		return false
 	}
@@ -1351,6 +1390,12 @@ func (v1 *v1Ctx) noteTransfer(call ssa.Instruction, arg ssa.Value, sites siteSet
 	for site := range sites {
 		val, ok := site.(ssa.Value)
 		if !ok {
+			continue
+		}
+		// Місце з гілки, що не домінує над викликом: Inc поставити нікуди,
+		// тож Dec теж немає — об'єкт лишається живим.
+		if !dominates(site, call) {
+			v1.blockDec(siteSet{site: {}})
 			continue
 		}
 		v1.inc[call] = append(v1.inc[call], val)
