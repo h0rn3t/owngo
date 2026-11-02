@@ -78,8 +78,22 @@ func TestContainerReadsAreUses(t *testing.T) {
 		t.Fatalf("%s: no MakeMap", fn.Name())
 		return nil
 	}
-	isLookup := func(i ssa.Instruction) bool { _, ok := i.(*ssa.Lookup); return ok }
-	isNext := func(i ssa.Instruction) bool { _, ok := i.(*ssa.Next); return ok }
+	// Вживання — сама інструкція чи будь-яка, що бере її результат операндом.
+	through := func(is func(ssa.Value) bool) func(ssa.Instruction) bool {
+		return func(i ssa.Instruction) bool {
+			if v, ok := i.(ssa.Value); ok && is(v) {
+				return true
+			}
+			for _, op := range i.Operands(nil) {
+				if *op != nil && is(*op) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	isLookup := through(func(v ssa.Value) bool { _, ok := v.(*ssa.Lookup); return ok })
+	isNext := through(func(v ssa.Value) bool { _, ok := v.(*ssa.Next); return ok })
 	tests := []struct {
 		name string
 		site func(*ssa.Function) ssa.Instruction

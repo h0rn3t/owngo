@@ -209,6 +209,11 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 		return grow(instr, pts[instr.X])
 	case *ssa.MakeInterface:
 		return grow(instr, pts[instr.X])
+	case *ssa.Range:
+		// Ітератор — аліас мапи чи рядка: Next читає їх.
+		return grow(instr, pts[instr.X])
+	case *ssa.Extract:
+		return grow(instr, pts[instr.Tuple])
 	default:
 		return false
 	}
@@ -244,9 +249,28 @@ func memory(instr ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.I
 			}
 		}
 		return changed
+	case *ssa.Lookup:
+		if _, ok := instr.X.Type().Underlying().(*types.Map); !ok {
+			return false
+		}
+		return grow(instr, heldBy(pts[instr.X], contents))
+	case *ssa.Next:
+		if instr.IsString {
+			return false
+		}
+		return grow(instr, heldBy(pts[instr.Iter], contents))
 	default:
 		return false
 	}
+}
+
+// heldBy — вміст усіх об'єктів objs.
+func heldBy(objs siteSet, contents map[ssa.Instruction]siteSet) siteSet {
+	held := siteSet{}
+	for obj := range objs {
+		held.absorb(contents[obj])
+	}
+	return held
 }
 
 func builtinResult(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa.Value]siteSet) bool {
