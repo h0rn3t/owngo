@@ -37,6 +37,7 @@ var (
 	flagGOROOT        = flag.String("goroot", os.Getenv("LLGO_GOROOT"), "Go toolchain root whose GOROOT/test sources should be used")
 	flagGoCmd         = flag.String("go", os.Getenv("LLGO_GO"), "go binary used as baseline (default: <goroot>/bin/go)")
 	flagLLGO          = flag.String("llgo", os.Getenv("LLGO_TEST_LLGO"), "llgo binary used for comparisons (default: build from current checkout)")
+	flagLLGOFlags     = flag.String("llgo-flags", os.Getenv("LLGO_GOROOT_LLGO_FLAGS"), "space-separated arguments added to every llgo build of a case; -tags merge with the case's own tags")
 	flagWasmProfile   = flag.String("wasm-profile", "", "target profile for host-driven wasm execution: J32-GoJS, J32-Emscripten, J64-Emscripten, or W32-WASI")
 	flagDirs          = flag.String("dirs", strings.Join(defaultGoRootTestDirs, ","), "comma-separated GOROOT/test subdirectories to scan")
 	flagCase          = flag.String("case", os.Getenv("LLGO_GOROOT_CASE"), "regexp selecting cases by relative path")

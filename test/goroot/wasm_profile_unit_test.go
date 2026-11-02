@@ -89,6 +89,34 @@ func TestGOROOTBuildArgsKeepGCBackendControlsOnBaseline(t *testing.T) {
 	}
 }
 
+func TestGOROOTBuildArgsLLGOFlags(t *testing.T) {
+	withGOROOTWasmProfile(t, "")
+	tests := []struct {
+		name      string
+		llgoFlags string
+		llgo      bool
+		flags     []string
+		want      []string
+	}{
+		{"none", "", true, []string{"-tags", "foo"}, []string{"build", "-tags", "foo", "-o", "out", "a.go"}},
+		{"tag", "-tags owngo", true, nil, []string{"build", "-tags", "owngo", "-o", "out", "a.go"}},
+		{"merge", "-tags owngo", true, []string{"-tags", "foo"}, []string{"build", "-tags", "owngo,foo", "-o", "out", "a.go"}},
+		{"mergeEq", "-tags=owngo", true, []string{"-tags=foo"}, []string{"build", "-tags", "owngo,foo", "-o", "out", "a.go"}},
+		{"asan", "-tags owngo -O0 -asan", true, nil, []string{"build", "-O0", "-asan", "-tags", "owngo", "-o", "out", "a.go"}},
+		{"gc", "-tags owngo -O0", false, []string{"-tags", "foo"}, []string{"build", "-tags", "foo", "-o", "out", "a.go"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			old := *flagLLGOFlags
+			*flagLLGOFlags = tt.llgoFlags
+			t.Cleanup(func() { *flagLLGOFlags = old })
+			if got := gorootBuildArgs(tt.llgo, tt.flags, "out", "a.go"); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("gorootBuildArgs(%v, %q) with -llgo-flags %q = %q, want %q", tt.llgo, tt.flags, tt.llgoFlags, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGOROOTGoJSRunCommandModelsBrowser(t *testing.T) {
 	withGOROOTWasmProfile(t, "J32-GoJS")
 	env := []string{"GOROOT=/go", "LLGO_ROOT=/llgo"}
