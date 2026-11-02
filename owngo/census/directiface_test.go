@@ -89,3 +89,61 @@ func TestDirectInterfaceNotSite(t *testing.T) {
 		}
 	}
 }
+
+// Значення, дістане з інтерфейсу, — аліас його даних: len(im.(map[int]int))
+// читає ту саму мапу, тож Dec мапи стоїть після цього читання.
+const typeAssertSrc = `package p
+
+func plain() int {
+	m := map[int]int{1: 2}
+	var im any = m
+	return len(im.(map[int]int))
+}
+
+func commaOk() int {
+	m := map[int]int{1: 2}
+	var im any = m
+	n, _ := im.(map[int]int)
+	return len(n)
+}
+
+func toIface() int {
+	m := map[int]int{1: 2}
+	var im any = m
+	s := im.(interface{})
+	return len(s.(map[int]int))
+}
+`
+
+func TestTypeAssertAliasesData(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", typeAssertSrc, ssa.SanityCheckFunctions)
+	for _, fn := range ssaFuncs(pkg) {
+		var instrs []ssa.Instruction
+		var site ssa.Instruction
+		for _, b := range fn.Blocks {
+			for _, instr := range b.Instrs {
+				instrs = append(instrs, instr)
+				if _, ok := instr.(*ssa.MakeMap); ok {
+					site = instr
+				}
+			}
+		}
+		if site == nil {
+			continue
+		}
+		pts, _ := pointTo(instrs, nil)
+		for _, instr := range instrs {
+			call, ok := instr.(*ssa.Call)
+			if !ok {
+				continue
+			}
+			if b, ok := call.Call.Value.(*ssa.Builtin); !ok || b.Name() != "len" {
+				continue
+			}
+			arg := call.Call.Args[0]
+			if _, ok := pts[arg][site]; !ok {
+				t.Errorf("pointTo(%s)[%s] = %v, want the MakeMap site", fn.Name(), arg.Name(), pts[arg])
+			}
+		}
+	}
+}
