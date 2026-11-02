@@ -877,6 +877,16 @@ func TestNormalizeOutputStripsLogTimestamp(t *testing.T) {
 	}
 }
 
+func TestFilterNoiseStripsOwnGoExitReport(t *testing.T) {
+	guardTestTimeout(t)
+	in := []byte("hello, world\nowngo freed 8\nowngo live rc-local 48\nowngo live 0\nowngo: user line\n")
+	got := string(filterNoise(in))
+	want := "hello, world\nowngo: user line\n"
+	if got != want {
+		t.Fatalf("filterNoise(%q) = %q, want %q", in, got, want)
+	}
+}
+
 func TestShardCases(t *testing.T) {
 	guardTestTimeout(t)
 	cases := []testCase{
