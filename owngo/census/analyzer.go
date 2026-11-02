@@ -99,8 +99,7 @@ func isSite(instr ssa.Instruction) bool {
 	case *ssa.MakeClosure:
 		return len(instr.Bindings) > 0
 	case *ssa.MakeInterface:
-		_, ptr := instr.X.Type().Underlying().(*types.Pointer)
-		return !ptr
+		return !directIface(instr.X.Type())
 	case *ssa.Call:
 		builtin, ok := instr.Call.Value.(*ssa.Builtin)
 		return ok && builtin.Name() == "append"
@@ -125,6 +124,23 @@ func sitePos(instr ssa.Instruction) token.Pos {
 		return instr.Pos()
 	}
 	return fn.Pos()
+}
+
+// directIface повторює directIfaceType з ssa/abitype.go: значення такого типу
+// llgo кладе в слово даних інтерфейсу без копії, тож MakeInterface нічого не
+// виділяє.
+func directIface(t types.Type) bool {
+	switch t := t.Underlying().(type) {
+	case *types.Pointer, *types.Chan, *types.Map, *types.Signature:
+		return true
+	case *types.Basic:
+		return t.Kind() == types.UnsafePointer
+	case *types.Array:
+		return t.Len() == 1 && directIface(t.Elem())
+	case *types.Struct:
+		return t.NumFields() == 1 && directIface(t.Field(0).Type())
+	}
+	return false
 }
 
 func isString(t types.Type) bool {

@@ -167,7 +167,7 @@ func seed(instr ssa.Instruction, ref func(ssa.Value) siteSet) bool {
 		}
 		return ref(instr).add(instr)
 	case *ssa.MakeInterface:
-		if _, ptr := instr.X.Type().Underlying().(*types.Pointer); ptr {
+		if directIface(instr.X.Type()) {
 			return false
 		}
 		return ref(instr).add(instr)
@@ -208,6 +208,9 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 		}
 		return grow(instr, pts[instr.X])
 	case *ssa.MakeInterface:
+		return grow(instr, pts[instr.X])
+	case *ssa.TypeAssert:
+		// Результат — слово даних інтерфейсу або копія з його коробки.
 		return grow(instr, pts[instr.X])
 	case *ssa.Range:
 		// Ітератор — аліас мапи чи рядка: Next читає їх.
