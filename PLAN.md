@@ -595,7 +595,7 @@ M:N у ці задачі не входить.
 - [x] **S1.1 Єдиний набір заміру.** Спільна частина `compare-binarytrees.sh` і `compare-fannkuchredux.sh` — один скрипт для `binarytrees`, `fannkuchredux`, `mandelbrot`. Варіанти: `go`, llgo без тега, `owngo` `-Os`, `owngo` `-O2 -lto full`, Rust, C (коли є, S1.2). RUNS прогонів із чергуванням варіантів: медіана, мін–макс, CPU user/sys, пікова RSS. Середовище: SHA, версії Go, LLVM, rustc, clang, модель CPU, прапорці ISA, кількість ядер, `ulimit`. Вихід — JSON і таблиця Markdown. binary-trees — дві окремі таблиці: звичайні алокації (Go #2, C на `malloc`) і арени (`binarytreesarena`, Rust #5, C на пулах); висновок між таблицями не робиться.
   - Прийняття: скрипт на `binarytrees 21 10`, `fannkuchredux 12 10`, `mandelbrot 16000 10` — код 0, вивід кожного варіанта побайтно як очікуваний, JSON містить усі поля вище. `compare-*.sh` — обгортки над ним або видалені; `owngo-binarytrees.yml` друкує ту саму таблицю. Таблиця — в `owngo/REPORT-BENCH.md`.
 
-- [ ] **S1.2 Варіанти C.** Програми C з Benchmarks Game для трьох задач поруч із варіантами Rust, з ліцензією, як у `*rust`: binary-trees на `malloc`/`free` і на пулах, fannkuch-redux, mandelbrot. Збирає `clang` з LLVM 23, ISA як у варіанта Rust.
+- [x] **S1.2 Варіанти C.** Програми C з Benchmarks Game для трьох задач поруч із варіантами Rust, з ліцензією, як у `*rust`: binary-trees на `malloc`/`free` і на пулах, fannkuch-redux, mandelbrot. Збирає `clang` з LLVM 23, ISA як у варіанта Rust.
   - Прийняття: вивід кожної програми C побайтно як очікуваний; рядки C у таблицях S1.1.
 
 **Гейт A.** На одному SHA набір S1.1 відтворює коректний вивід усіх програм і таблицю з медіаною, розкидом і RSS. Цей замір — база кожного наступного етапу.

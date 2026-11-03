@@ -1009,3 +1009,13 @@
 - Прийняття: `binarytrees 21 10`, `fannkuchredux 12 10`, `mandelbrot 16000 10` — код 0, вивід усіх прогонів як очікуваний. Таблиці — `owngo/REPORT-BENCH.md`, JSON — `owngo/bench/baseline/`. Медіани: Go #2 `go` 5.42 с, `owngo` 48.90 с; арени `owngo -O2 -lto full` 0.44 с, Rust #5 0.69 с; fannkuch-redux `owngo -O2 -lto full` 2.47 с проти Rust 2.22 с; mandelbrot 0.64 с проти 0.54 с.
 - C (S1.2) у наборі ще немає. Workflow не запускався (CI тут недоступний). Лінтерів Python/shell на машині немає; перевірено `py_compile`, `bash -n`, `clang -Wall -Wextra`.
 - Лишилось: P11.4 чекає вибору сервісу розробником; трек — S1.2 (варіанти C) для гейта A, далі S2.
+
+## 2026-11-03 — S1.2 Варіанти C
+
+- Програми C з Benchmarks Game без змін коду, ліцензія як у `*rust`: `binarytreesc` (C gcc #5, `malloc`/`free` + pthreads) у таблиці звичайних алокацій, `binarytreescpool` (C gcc #2, пули APR + OpenMP) у таблиці арен, `fannkuchreduxc` (C gcc #6, за C++ #6, як Rust #6), `mandelbrotc` (C gcc #6; прибрано лише BOM). Джерела переглянуто повністю перед збіркою. Збирає `clang` 23 з прапорцями gcc сторінок і `-march=ivybridge`, як Rust.
+- Три відхилення від сторінки без зміни коду: OpenMP через `libomp` (з `-fopenmp=libgomp` clang ігнорує прагми — перший замір C #2 і mandelbrot C #6 ішов в один потік); mandelbrot C #6 — `-fgnu89-inline` (C99 `inline` без зовнішнього визначення, clang не вбудовує `mand8`, компоновка падала); fannkuch-redux C #6 — `-t <ядра>` (типово 4 потоки — усі ядра машини Benchmarks Game).
+- Машина: встановлено `libapr1-dev` (apt підтягнув безпекове оновлення `util-linux` з Debian stable). `libomp-23-dev` через apt оновив би всю збірку LLVM 23 (інший знімок 23.1.5) — не встановлено, розпаковано в `~/.cache/owngo-libomp`, `compare.py` бере `LIBOMP_ROOT`. Workflow ставить `libapr1-dev libomp-23-dev`.
+- Прийняття: `binarytrees 21 10`, `fannkuchredux 12 10`, `mandelbrot 16000 10` на `1a278541f` — код 0, вивід кожного прогону кожного варіанта, включно з C, як очікуваний. Таблиці — `owngo/REPORT-BENCH.md` (розділ S1.1 замінено цим заміром), JSON — `owngo/bench/baseline/`. Медіани C: binary-trees `malloc` 5.48 с (Go #2 `go` 5.39 с), пули 1.03 с (арени `owngo -O2 -lto full` 0.45 с, Rust #5 0.69 с), fannkuch-redux 1.14 с (Rust #6 2.19 с, `owngo -O2 -lto full` 2.48 с), mandelbrot 0.61 с (Rust #4 0.54 с, `owngo -O2 -lto full` 0.64 с).
+- Гейт A: на одному SHA набір відтворює коректний вивід усіх програм і таблиці з медіаною, розкидом і RSS — умова виконана; рішення про гейт — за розробником.
+- Workflow не запускався (CI тут недоступний).
+- Лишилось: P11.4 чекає вибору сервісу розробником; трек — гейт A, далі S2.
