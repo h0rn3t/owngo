@@ -714,7 +714,8 @@ func containsRef(t types.Type) bool {
 		case *types.Pointer, *types.Slice, *types.Map, *types.Chan, *types.Interface, *types.Signature:
 			return true
 		case *types.Basic:
-			return u.Kind() == types.UnsafePointer
+			// Рядок з конкатенації чи string([]byte) під owngo — купове місце.
+			return u.Kind() == types.UnsafePointer || u.Kind() == types.String
 		case *types.Struct:
 			for field := range u.Fields() {
 				if walk(field.Type()) {
