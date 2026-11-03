@@ -77,4 +77,3 @@ func TestReflectFieldKeepsBox(t *testing.T) {
 		t.Errorf("PlaceAll(use): box %q freed after %v, want after %v or not freed", label, uses, intCall)
 	}
 }
-

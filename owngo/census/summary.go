@@ -198,7 +198,7 @@ func PublishProgram(prog *ssa.Program) {
 	for _, fn := range funcs {
 		sum := sums[fn]
 		obj := fn.Object()
-		if obj == nil || !obj.Exported() || sum == nil {
+		if obj == nil || !obj.Exported() || sum == nil || !declared(fn) {
 			continue
 		}
 		key := summaryKey(obj)
@@ -213,7 +213,7 @@ func PublishProgram(prog *ssa.Program) {
 }
 
 func publishedSummary(fn *ssa.Function) *Summary {
-	if fn == nil || fn.Blocks == nil {
+	if fn == nil || fn.Blocks == nil || !declared(fn) {
 		return nil
 	}
 	obj := fn.Object()
@@ -247,6 +247,13 @@ func storedSummary(obj types.Object) *Summary {
 	summaryMu.Lock()
 	defer summaryMu.Unlock()
 	return summaryBy[key]
+}
+
+// declared звітує, що fn — сама оголошена функція свого types.Object.
+// Обгортка (*T).M і екземпляр узагальненої функції мають той самий Object,
+// але інші параметри: їхнє зведення під ключем об'єкта підмінило б оголошене.
+func declared(fn *ssa.Function) bool {
+	return fn.Synthetic == "" && fn.Origin() == nil
 }
 
 func summaryKey(obj types.Object) string {
@@ -564,7 +571,9 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 			changed = sum.markPinned(tok[instr.X]) || changed
 		}
 		changed = unionAt(tok, instr, tok[instr.X]) || changed
-		return unionAt(derived, instr, derived[instr.X]) || changed
+		changed = unionAt(derived, instr, derived[instr.X]) || changed
+		// (*T)(unsafe.Pointer(&x)) вказує в ту саму пам'ять, що й &x.
+		return unionAt(content, instr, content[instr.X]) || changed
 	case *ssa.Extract:
 		call, ok := instr.Tuple.(*ssa.Call)
 		if !ok || instr.Index >= len(tuple[call]) {
@@ -1292,9 +1301,9 @@ func summaryOf(v1 *v1Ctx, fn *ssa.Function) *Summary {
 	if s, ok := v1.sums[fn]; ok {
 		return s
 	}
-	if fn.Object() != nil {
+	if fn.Object() != nil && declared(fn) {
 		for item, s := range v1.sums {
-			if item != nil && item.Object() == fn.Object() {
+			if item != nil && declared(item) && item.Object() == fn.Object() {
 				return s
 			}
 		}
