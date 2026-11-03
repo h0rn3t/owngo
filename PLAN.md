@@ -589,7 +589,7 @@ M:N у ці задачі не входить.
 
 ### Етап A — baseline
 
-- [ ] **S1 Порівняння Go #2.** `owngo/bench/compare-binarytrees.sh` міряє чотири варіанти: Go #2 під `GOAMD64=v2 go` і `llgo -tags owngo`, `binarytreesarena` під `llgo -tags owngo`, Rust #5. Для Go #2 під `owngo` — ще CPU-час (user) на `18` на 8 ядрах і під `taskset -c 0`. Workflow `owngo-binarytrees.yml` друкує цю таблицю.
+- [x] **S1 Порівняння Go #2.** `owngo/bench/compare-binarytrees.sh` міряє чотири варіанти: Go #2 під `GOAMD64=v2 go` і `llgo -tags owngo`, `binarytreesarena` під `llgo -tags owngo`, Rust #5. Для Go #2 під `owngo` — ще CPU-час (user) на `18` на 8 ядрах і під `taskset -c 0`. Workflow `owngo-binarytrees.yml` друкує цю таблицю.
   - Прийняття: `owngo/bench/compare-binarytrees.sh 21 3` — код 0, у таблиці чотири рядки, вивід кожного побайтно як `expected-21.txt`, і рядок CPU-часу на `18`.
 
 - [ ] **S1.1 Єдиний набір заміру.** Спільна частина `compare-binarytrees.sh` і `compare-fannkuchredux.sh` — один скрипт для `binarytrees`, `fannkuchredux`, `mandelbrot`. Варіанти: `go`, llgo без тега, `owngo` `-Os`, `owngo` `-O2 -lto full`, Rust, C (коли є, S1.2). RUNS прогонів із чергуванням варіантів: медіана, мін–макс, CPU user/sys, пікова RSS. Середовище: SHA, версії Go, LLVM, rustc, clang, модель CPU, прапорці ISA, кількість ядер, `ulimit`. Вихід — JSON і таблиця Markdown. binary-trees — дві окремі таблиці: звичайні алокації (Go #2, C на `malloc`) і арени (`binarytreesarena`, Rust #5, C на пулах); висновок між таблицями не робиться.
