@@ -100,7 +100,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 			if ctx.noDec[site] {
 				continue
 			}
-			if users := rcUsers(siteUsers(site, pts, contents), msg); len(users) > 0 {
+			if users := rcUsers(siteUsers(site, pts, contents), msg, pts); len(users) > 0 {
 				decUses[site] = users
 			}
 		}
@@ -134,7 +134,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 				continue
 			}
 			counted[site] = struct{}{}
-			users := rcUsers(siteUsers(site, pts, contents), msg)
+			users := rcUsers(siteUsers(site, pts, contents), msg, pts)
 			if len(users) > 0 {
 				decUses[site] = users
 			}
@@ -238,25 +238,30 @@ func countedImplicit(site ssa.Instruction, label string) bool {
 	return head == "rc-local"
 }
 
-// siteUsers додає читачів контейнера, у contents якого лежить це місце.
-// Замикання тримає alloc змінної, а не саму конкатенацію: без цього Dec
-// став би на Store і звільнив буфер до виклику замикання.
+// siteUsers додає читачів кожного контейнера, у contents якого лежить це
+// місце, транзитивно: виклик, що читає контейнер, читає і місце в ньому
+// (зріз у v.e, v у s, read(s)). Замикання тримає alloc змінної, а не саму
+// конкатенацію: без цього Dec став би на Store і звільнив буфер до виклику
+// замикання.
 func siteUsers(site ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet) []ssa.Instruction {
 	users := readers(site, pts)
-	if ImplicitOrigin(site) == "" {
-		return users
-	}
-	for obj, inner := range contents {
-		if _, ok := inner[site]; !ok {
-			continue
+	holders := siteSet{site: {}}
+	for grew := true; grew; {
+		grew = false
+		for obj, inner := range contents {
+			if _, done := holders[obj]; done || !overlaps(inner, holders) {
+				continue
+			}
+			holders.add(obj)
+			users = append(users, readers(obj, pts)...)
+			grew = true
 		}
-		users = append(users, readers(obj, pts)...)
 	}
 	return users
 }
 
-func rcUsers(users []ssa.Instruction, msg map[ssa.Instruction]string) []ssa.Instruction {
-	extra, gone := closureUses(users, msg)
+func rcUsers(users []ssa.Instruction, msg map[ssa.Instruction]string, pts map[ssa.Value]siteSet) []ssa.Instruction {
+	extra, gone := closureUses(users, msg, pts)
 	if gone {
 		return nil
 	}
@@ -266,26 +271,25 @@ func rcUsers(users []ssa.Instruction, msg map[ssa.Instruction]string) []ssa.Inst
 	return append(users, extra...)
 }
 
-// closureUses: замикання, що тримає місце, і є його вживанням. Замикання, що
-// йде з функції (повернуте, у горутину, канал, глобальну змінну чи за
-// позначкою leaves — у поле параметра, у виклик), забирає місце з собою.
-func closureUses(users []ssa.Instruction, msg map[ssa.Instruction]string) (extra []ssa.Instruction, gone bool) {
+// closureUses: замикання, що тримає місце, і є його вживанням разом з усіма
+// читачами значень, що на нього вказують (і через локальний масив чи
+// структуру). Замикання, що йде з функції (повернуте, у горутину, канал,
+// глобальну змінну чи за позначкою leaves — у поле параметра, у виклик),
+// забирає місце з собою.
+func closureUses(users []ssa.Instruction, msg map[ssa.Instruction]string, pts map[ssa.Value]siteSet) (extra []ssa.Instruction, gone bool) {
 	seen := map[ssa.Instruction]bool{}
 	for _, user := range users {
 		seen[user] = true
 	}
 	for _, user := range users {
 		clo, ok := user.(*ssa.MakeClosure)
-		if !ok || clo.Referrers() == nil {
+		if !ok {
 			continue
 		}
 		if leaves(msg[clo]) {
 			return nil, true
 		}
-		for _, ref := range *clo.Referrers() {
-			if ref == nil {
-				continue
-			}
+		for _, ref := range readers(clo, pts) {
 			switch ref := ref.(type) {
 			case *ssa.Return, *ssa.Go, *ssa.Send:
 				return nil, true
