@@ -2,7 +2,7 @@ name: OwnGo binary-trees
 
 # Єдиний набір заміру треку швидкодії (owngo/bench/compare.py, S1.1):
 # binary-trees 21, fannkuch-redux 12 і mandelbrot 16000 під go, llgo, llgo
-# -tags owngo (-Os і -O2 -lto full) і Rust, плюс CPU-час Go #2 під owngo на 18.
+# -tags owngo (-Os і -O2 -lto full), Rust і C, плюс CPU-час Go #2 під owngo на 18.
 # Час не має порогу: таблиці йдуть у підсумок job, а падає job лише на
 # розбіжному виводі.
 
@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   binarytrees:
-    name: benchmark corpus (go, llgo, owngo, Rust)
+    name: benchmark corpus (go, llgo, owngo, Rust, C)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -51,6 +51,9 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
           cargo --version
+
+      - name: Install C benchmark dependencies
+        run: sudo apt-get install -y libapr1-dev libomp-23-dev
 
       - name: Compare binary-trees
         run: |

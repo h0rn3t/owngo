@@ -2,17 +2,18 @@
 """Єдиний набір заміру треку швидкодії (S1.1).
 
 Збирає програму корпусу в кожному варіанті — go, llgo без тега, llgo -tags
-owngo з типовим -Os і з -O2 -lto full, Rust — і запускає кожен варіант RUNS
+owngo з типовим -Os і з -O2 -lto full, Rust, C — і запускає кожен варіант RUNS
 разів, чергуючи варіанти в кожному колі. Вивід кожного прогону звіряється з
 testdata/expected-N.* Go-програми таблиці. Таблиці Markdown — у stdout, JSON з
 усіма прогонами й оточенням — у файл --json.
 
-binary-trees має дві таблиці: звичайні алокації (Go #2) і арени
-(binarytreesarena, Rust #5). Висновок між таблицями не робиться. Для Go #2 під
+binary-trees має дві таблиці: звичайні алокації (Go #2, C на malloc) і арени
+(binarytreesarena, Rust #5, C на пулах APR). Висновок між таблицями не робиться. Для Go #2 під
 owngo окремо міряється CPU-час на 18: на всіх ядрах і під taskset -c 0 (S1).
 
 Лише Linux: ru_maxrss читається як КБ. Потрібні Go, LLVM 23 першим у PATH
-(clang збирає rusage.c), cargo, taskset.
+(clang збирає rusage.c і програми C), cargo, taskset, libomp-23-dev (чи LIBOMP_ROOT),
+libapr1-dev.
 
 Використання: owngo/bench/compare.py PROGRAM [N] [RUNS] [--json FILE]
 """
@@ -33,25 +34,36 @@ ROOT = Path(__file__).resolve().parents[2]
 BENCH = ROOT / "owngo" / "bench"
 X86 = platform.machine() == "x86_64"
 
-# Таблиці програми: назва, Go-пакет у owngo/bench, крейт Rust (чи None) і
-# підпис Rust. Підписи Go-варіантів однакові для всіх програм.
+# Таблиці програми: назва, Go-пакет у owngo/bench, крейт Rust (чи None),
+# підпис Rust і програма C (чи None): каталог у owngo/bench, підпис, прапорці
+# clang понад C_FLAGS, аргументи перед N. Підписи Go-варіантів однакові для
+# всіх програм.
 PROGRAMS = {
     "binarytrees": {
         "n": 21,
         "tables": [
-            ("regular", "binarytrees", None, None),
-            ("arena", "binarytreesarena", "binarytreesrust", "Rust #5, bumpalo + rayon"),
+            ("regular", "binarytrees", None, None,
+             ("binarytreesc", "C #5, malloc + pthreads", ["-pthread"], [])),
+            ("arena", "binarytreesarena", "binarytreesrust", "Rust #5, bumpalo + rayon",
+             ("binarytreescpool", "C #2, APR pools + OpenMP", ["OPENMP", "APR"], [])),
         ],
         # CPU-час Go #2 під owngo на 18 (S1): таблиця, варіант, N.
         "cpu_probe": ("regular", "owngo", 18),
     },
     "fannkuchredux": {
         "n": 12,
-        "tables": [("main", "fannkuchredux", "fannkuchreduxrust", "Rust #6, rayon")],
+        # C #6 типово бере 4 потоки — усі ядра машини Benchmarks Game.
+        "tables": [("main", "fannkuchredux", "fannkuchreduxrust", "Rust #6, rayon",
+                    ("fannkuchreduxc", "C #6, pthreads", ["-pthread"],
+                     ["-t", str(os.cpu_count())]))],
     },
     "mandelbrot": {
         "n": 16000,
-        "tables": [("main", "mandelbrot", "mandelbrotrust", "Rust #4, rayon")],
+        # C #6 оголошує mand8 як C99 inline без зовнішнього визначення: gcc
+        # вбудовує кожен виклик, clang — ні, тож -fgnu89-inline дає визначення.
+        "tables": [("main", "mandelbrot", "mandelbrotrust", "Rust #4, rayon",
+                    ("mandelbrotc", "C #6, OpenMP",
+                     ["OPENMP", "-mno-fma", "-fno-finite-math-only", "-fgnu89-inline"], []))],
     },
 }
 
@@ -72,6 +84,25 @@ GO_VARIANTS = [
 # codegen-units=1 (Cargo.toml) і target-cpu=ivybridge.
 GO_ENV = {"GOAMD64": "v2"} if X86 else {}
 RUST_ENV = {"RUSTFLAGS": "-C target-cpu=ivybridge"} if X86 else {}
+# C — прапорці gcc сторінок, але збирає clang з LLVM 23. OpenMP — libomp
+# (libomp-23-dev): з -fopenmp=libgomp clang ігнорує прагми і програма йде в
+# один потік. LIBOMP_ROOT — каталог llvm-23 з розпакованого libomp-23-dev, коли
+# його не встановлено в систему.
+C_FLAGS = ["-O3", "-fomit-frame-pointer"] + (["-march=ivybridge"] if X86 else [])
+
+
+def openmp_flags():
+    root = os.environ.get("LIBOMP_ROOT")
+    if not root:
+        return ["-fopenmp"]
+    return ["-fopenmp", "-idirafter", f"{root}/lib/clang/23/include",
+            f"-L{root}/lib", f"-Wl,-rpath,{root}/lib"]
+
+
+C_EXPANSIONS = {
+    "OPENMP": openmp_flags,
+    "APR": lambda: output(["pkg-config", "--cflags", "--libs", "apr-1"]).split(),
+}
 
 # Прапори ISA процесора, що впливають на codegen варіантів.
 ISA_FLAGS = ["sse4_2", "popcnt", "avx", "avx2", "fma", "bmi2", "avx512f"]
@@ -116,6 +147,8 @@ def environment():
         "ulimit": output(["sh", "-c", "ulimit -a"]),
         "go_env": GO_ENV,
         "rust_env": RUST_ENV,
+        "c_flags": C_FLAGS,
+        "libomp_root": os.environ.get("LIBOMP_ROOT"),
     }
 
 
@@ -138,7 +171,7 @@ def build(spec, work):
     llgo = work / "llgo"
     run(["go", "build", "-o", str(llgo), "./cmd/llgo"])
     tables = []
-    for name, pkg, crate, rust_label in spec["tables"]:
+    for name, pkg, crate, rust_label, c in spec["tables"]:
         variants = []
         for key, label, flags in GO_VARIANTS:
             exe = work / f"{pkg}-{key}"
@@ -156,6 +189,13 @@ def build(spec, work):
             exe = work / crate
             shutil.copy(target / "release" / crate.removesuffix("rust"), exe)
             variants.append({"key": "rust", "label": rust_label, "exe": exe})
+        if c:
+            cdir, c_label, extra, args = c
+            exe = work / cdir
+            flags = [f for e in extra for f in (C_EXPANSIONS[e]() if e in C_EXPANSIONS else [e])]
+            run(["clang", *C_FLAGS, str(BENCH / cdir / "main.c"), "-o", str(exe), *flags])
+            variants.append({"key": "c", "label": c_label, "exe": exe, "args": args,
+                             "cflags": C_FLAGS + flags})
         tables.append({"name": name, "pkg": pkg, "variants": variants})
     return tables
 
@@ -235,7 +275,7 @@ def main():
         for _ in range(args.runs):
             for t in tables:
                 for v in t["variants"]:
-                    v["runs"].append(m := measure(rusage, [str(v["exe"]), str(n)], out))
+                    v["runs"].append(m := measure(rusage, [str(v["exe"]), *v.get("args", []), str(n)], out))
                     check = checks[t["name"]]
                     if m["exit"] != 0:
                         m["output"] = f"exit {m['exit']}"
