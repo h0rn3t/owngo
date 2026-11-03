@@ -1,8 +1,10 @@
 name: OwnGo binary-trees
 
-# Порівнює binary-trees 21: Go #2 під go, binarytreesarena під llgo -tags
-# owngo і Rust #5 із Benchmarks Game, плюс CPU-час Go #2 під owngo на 18. Час не має порогу: таблиця йде в підсумок
-# job, а падає job лише на розбіжному виводі.
+# Єдиний набір заміру треку швидкодії (owngo/bench/compare.py, S1.1):
+# binary-trees 21, fannkuch-redux 12 і mandelbrot 16000 під go, llgo, llgo
+# -tags owngo (-Os і -O2 -lto full) і Rust, плюс CPU-час Go #2 під owngo на 18.
+# Час не має порогу: таблиці йдуть у підсумок job, а падає job лише на
+# розбіжному виводі.
 
 on:
   push:
@@ -28,9 +30,9 @@ concurrency:
 
 jobs:
   binarytrees:
-    name: binary-trees 21 (Go #2, owngo arena, Rust)
+    name: benchmark corpus (go, llgo, owngo, Rust)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       LLGO_ROOT: ${{ github.workspace }}
     steps:
@@ -50,7 +52,7 @@ jobs:
           rustup default stable
           cargo --version
 
-      - name: Compare
+      - name: Compare binary-trees
         run: |
           set -o pipefail
           owngo/bench/compare-binarytrees.sh 21 3 | tee -a "$GITHUB_STEP_SUMMARY"
