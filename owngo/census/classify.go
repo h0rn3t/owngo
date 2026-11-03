@@ -262,6 +262,19 @@ func memory(instr ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.I
 			return false
 		}
 		return grow(instr, heldBy(pts[instr.Iter], contents))
+	case *ssa.Call:
+		// append копіює елементи другого аргументу в буфер результату.
+		if name, ok := builtinName(&instr.Call); !ok || name != "append" || len(instr.Call.Args) < 2 {
+			return false
+		}
+		added := heldBy(pts[instr.Call.Args[1]], contents)
+		changed := false
+		for obj := range pts[instr] {
+			if hold(obj, added) {
+				changed = true
+			}
+		}
+		return changed
 	default:
 		return false
 	}
@@ -344,6 +357,15 @@ func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx
 		case *ssa.Store:
 			if fromGlobal(instr.Addr) {
 				raise(escape, notes, pts[instr.Val], escapeGlobal, "")
+			} else if len(pts[instr.Addr]) == 0 {
+				// Пам'ять поза місцями функції (поле параметра): значення
+				// живе, доки живе вона.
+				raise(escape, notes, pts[instr.Val], escapeCall, "")
+			}
+		case *ssa.MapUpdate:
+			if len(pts[instr.Map]) == 0 {
+				raise(escape, notes, pts[instr.Key], escapeCall, "")
+				raise(escape, notes, pts[instr.Value], escapeCall, "")
 			}
 		case *ssa.Call:
 			noteCall(instr, &instr.Call, escapeCall, pts, escape, notes, false, v1)

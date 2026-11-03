@@ -100,7 +100,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 			if ctx.noDec[site] {
 				continue
 			}
-			if users := rcUsers(siteUsers(site, pts, contents)); len(users) > 0 {
+			if users := rcUsers(siteUsers(site, pts, contents), msg); len(users) > 0 {
 				decUses[site] = users
 			}
 		}
@@ -134,7 +134,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 				continue
 			}
 			counted[site] = struct{}{}
-			users := rcUsers(siteUsers(site, pts, contents))
+			users := rcUsers(siteUsers(site, pts, contents), msg)
 			if len(users) > 0 {
 				decUses[site] = users
 			}
@@ -189,12 +189,18 @@ func decSite(site ssa.Instruction, label string, pts map[ssa.Value]siteSet, v1 *
 	if v1.noDec[site] || interiorEscapes(site, pts, v1) {
 		return false
 	}
+	return !leaves(label)
+}
+
+// leaves звітує, що місце з позначкою label іде з функції: return, move, call
+// і panic віддають його іншому власнику, Dec тут не ставиться.
+func leaves(label string) bool {
 	_, reason, _ := strings.Cut(label, ": ")
 	switch reason {
 	case "return", "move", "call", "panic":
-		return false
-	default:
 		return true
+	default:
+		return false
 	}
 }
 
@@ -249,9 +255,9 @@ func siteUsers(site ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa
 	return users
 }
 
-func rcUsers(users []ssa.Instruction) []ssa.Instruction {
-	extra, leaves := closureUses(users)
-	if leaves {
+func rcUsers(users []ssa.Instruction, msg map[ssa.Instruction]string) []ssa.Instruction {
+	extra, gone := closureUses(users, msg)
+	if gone {
 		return nil
 	}
 	if len(extra) == 0 {
@@ -260,7 +266,10 @@ func rcUsers(users []ssa.Instruction) []ssa.Instruction {
 	return append(users, extra...)
 }
 
-func closureUses(users []ssa.Instruction) (extra []ssa.Instruction, leaves bool) {
+// closureUses: замикання, що тримає місце, і є його вживанням. Замикання, що
+// йде з функції (повернуте, у горутину, канал, глобальну змінну чи за
+// позначкою leaves — у поле параметра, у виклик), забирає місце з собою.
+func closureUses(users []ssa.Instruction, msg map[ssa.Instruction]string) (extra []ssa.Instruction, gone bool) {
 	seen := map[ssa.Instruction]bool{}
 	for _, user := range users {
 		seen[user] = true
@@ -269,6 +278,9 @@ func closureUses(users []ssa.Instruction) (extra []ssa.Instruction, leaves bool)
 		clo, ok := user.(*ssa.MakeClosure)
 		if !ok || clo.Referrers() == nil {
 			continue
+		}
+		if leaves(msg[clo]) {
+			return nil, true
 		}
 		for _, ref := range *clo.Referrers() {
 			if ref == nil {
