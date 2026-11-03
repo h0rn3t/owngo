@@ -75,6 +75,11 @@ func (b Builder) aggregateValue(t Type, flds ...llvm.Value) Expr {
 func (b Builder) aggregateInit(ptr llvm.Value, t Type, flds ...llvm.Value) {
 	for i, fld := range flds {
 		fld = b.wrapStructField(t, i, fld)
+		// Як у Store: запис нульового розміру не має байтів, а останнє таке
+		// поле лежить на кінці алокації, і ASan хибно рапортує його.
+		if b.Prog.td.TypeAllocSize(fld.Type()) == 0 {
+			continue
+		}
 		b.impl.CreateStore(fld, llvm.CreateStructGEP(b.impl, t.ll, ptr, i))
 	}
 }
