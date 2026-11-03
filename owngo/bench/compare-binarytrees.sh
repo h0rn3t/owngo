@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Порівнює binary-trees: Go #2 (binarytrees) під go і під llgo з тегом owngo,
-# binarytreesarena під llgo з тегом owngo і програму Rust #5 (bumpalo + rayon)
-# з binarytreesrust. Кожна запускається RUNS разів на N, вивід звіряється з
+# Порівнює binary-trees: Go #2 (binarytrees) під go, binarytreesarena під llgo
+# з тегом owngo і програму Rust #5 (bumpalo + rayon) з binarytreesrust. Кожна
+# запускається RUNS разів на N, вивід звіряється з
 # binarytrees/testdata/expected-$N.txt. Окремо — CPU-час (user) Go #2 під owngo
 # на 18: на всіх ядрах і під taskset -c 0. Таблиця Markdown — у stdout. Лише
 # Linux: ru_maxrss читається як КБ.
@@ -54,7 +54,7 @@ echo "binary-trees $n, $runs runs, $(nproc) CPUs"
 echo
 echo "| Program | Times, s | Best, s | User of best, s | Peak RSS, MB | Output |"
 echo "| --- | --- | --- | --- | --- | --- |"
-for prog in go owngo arena rust; do
+for prog in go arena rust; do
 	times=()
 	rss=0
 	best=
@@ -74,7 +74,6 @@ for prog in go owngo arena rust; do
 	[[ -f $expected ]] || output="no expected-$n.txt"
 	case $prog in
 	go) label="Go #2, go" ;;
-	owngo) label="Go #2, llgo -tags owngo" ;;
 	arena) label="Go arena, llgo -tags owngo" ;;
 	rust) label="Rust #5, bumpalo + rayon" ;;
 	esac
