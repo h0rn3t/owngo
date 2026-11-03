@@ -1000,3 +1000,12 @@
 - Workflow не запускався (CI тут недоступний), перевірено лише локальний скрипт.
 - Лишилось: P11.4 чекає вибору сервісу розробником; трек — S1.1 або S2.
 - Рішення розробника (2026-11-03): рядок Go #2 під `llgo -tags owngo` з таблиці `compare-binarytrees.sh` прибрано; лишились Go #2 `go`, арени `owngo`, Rust #5. Рядок CPU-часу Go #2 під `owngo` на `18` лишився (окрема вимога S1). Текст S1 у `PLAN.md` і `owngo/REPORT-BENCH.md` оновлено. Перевірено: `compare-binarytrees.sh 21 1` — код 0, три рядки, вивід як `expected-21.txt`.
+
+## 2026-11-03 — S1.1 Єдиний набір заміру
+
+- Рішення розробника (2026-11-03): у таблиці звичайних алокацій binary-trees Go #2 іде в усіх чотирьох варіантах S1.1, включно з `owngo` `-Os` і `-O2 -lto full`.
+- `owngo/bench/compare.py`: `binarytrees`, `fannkuchredux`, `mandelbrot`; варіанти `go` (`GOAMD64=v2`), llgo, `owngo` `-Os`, `owngo` `-O2 -lto full`, Rust; прогони чергуються по колах; медіана, мін–макс, user/sys, пікова RSS; середовище в JSON (SHA і чи є зміни, Go, LLVM, clang, rustc, CPU, ISA, ядра, `ulimit -a`, прапорці збірки). binary-trees — дві таблиці (звичайні алокації, арени), рядок CPU-часу Go #2 під `owngo` на `18` (S1) лишився. `compare-*.sh` — обгортки (типово 10 прогонів); workflow `owngo-binarytrees.yml` кличе їх, таймаут 60 хв.
+- Знахідка: попередні скрипти брали RSS з Python, а Linux переносить `ru_maxrss` через `fork`/`exec` — рядки 11 МБ fannkuch-redux у старих таблицях були RSS інтерпретатора. Тепер програму запускає `owngo/bench/rusage.c` (збирає `clang`), RSS fannkuch-redux — 2–6 МБ.
+- Прийняття: `binarytrees 21 10`, `fannkuchredux 12 10`, `mandelbrot 16000 10` — код 0, вивід усіх прогонів як очікуваний. Таблиці — `owngo/REPORT-BENCH.md`, JSON — `owngo/bench/baseline/`. Медіани: Go #2 `go` 5.42 с, `owngo` 48.90 с; арени `owngo -O2 -lto full` 0.44 с, Rust #5 0.69 с; fannkuch-redux `owngo -O2 -lto full` 2.47 с проти Rust 2.22 с; mandelbrot 0.64 с проти 0.54 с.
+- C (S1.2) у наборі ще немає. Workflow не запускався (CI тут недоступний). Лінтерів Python/shell на машині немає; перевірено `py_compile`, `bash -n`, `clang -Wall -Wextra`.
+- Лишилось: P11.4 чекає вибору сервісу розробником; трек — S1.2 (варіанти C) для гейта A, далі S2.

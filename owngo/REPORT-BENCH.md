@@ -1,3 +1,75 @@
+# Єдиний набір заміру (S1.1, база гейта A)
+
+Скрипт — `owngo/bench/compare.py PROGRAM [N] [RUNS] [--json FILE]`; `compare-binarytrees.sh`, `compare-fannkuchredux.sh`, `compare-mandelbrot.sh` — обгортки над ним (типово 10 прогонів), їх же кличе workflow `owngo-binarytrees.yml`. Варіанти кожної Go-програми: `go` (`GOAMD64=v2`), llgo без тега, llgo `-tags owngo` з типовим `-Os` і з `-O2 -lto full`; поруч — Rust (release, `codegen-units=1`, `-C target-cpu=ivybridge`). C — після S1.2. Прогони чергуються: у кожному колі по одному прогону кожного варіанта. Медіана й мін–макс — wall clock; user, sys — медіани; пікова RSS — максимум за прогони. JSON містить кожен прогін і середовище: SHA (і чи є незакомічені зміни), версії Go, LLVM, clang, rustc, модель CPU, прапорці ISA, кількість ядер, `ulimit -a`, прапорці збірки Go і Rust.
+
+Пікову RSS тепер міряє `owngo/bench/rusage.c`, а не Python: Linux переносить `ru_maxrss` процесу через `fork` і `exec`, тож дитина Python успадковувала пікову RSS інтерпретатора. Рядки RSS попередніх таблиць цього файлу (11 МБ у fannkuch-redux) — це RSS інтерпретатора: та сама програма fannkuch-redux тепер показує 2–6 МБ.
+
+Ревізія `fa3a130d9` з робочими змінами цієї задачі (лише скрипти заміру). Debian 13 amd64, Intel Xeon Gold 6240R @ 2.40GHz, 8 ядер, ISA `sse4_2 popcnt avx avx2 fma bmi2 avx512f`. Go 1.27.1, LLVM 23.1.5 (clang 23.1.5), rustc 1.85.1. JSON — `owngo/bench/baseline/*.json`.
+
+```
+owngo/bench/compare-binarytrees.sh 21 10 --json owngo/bench/baseline/binarytrees.json
+owngo/bench/compare-fannkuchredux.sh 12 10 --json owngo/bench/baseline/fannkuchredux.json
+owngo/bench/compare-mandelbrot.sh 16000 10 --json owngo/bench/baseline/mandelbrot.json
+```
+
+Вивід кожного прогону кожного варіанта — побайтно як очікуваний (mandelbrot — SHA-256), код виходу всіх трьох — 0.
+
+## binary-trees 21
+
+Висновку між таблицями немає: стратегія пам'яті різна.
+
+**Звичайні алокації**
+
+| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB | Output |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| binarytrees, go, GOAMD64=v2 | 5.42 | 5.31–5.48 | 38.24 | 0.80 | 631 | matches |
+| binarytrees, llgo | 40.20 | 39.67–42.79 | 258.25 | 2.16 | 832 | matches |
+| binarytrees, llgo -tags owngo (-Os) | 48.90 | 48.48–50.29 | 369.78 | 6.56 | 475 | matches |
+| binarytrees, llgo -tags owngo -O2 -lto full | 48.62 | 48.01–49.34 | 368.26 | 6.62 | 472 | matches |
+
+**Арени**
+
+| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB | Output |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| binarytreesarena, go, GOAMD64=v2 | 0.42 | 0.41–0.45 | 2.81 | 0.16 | 227 | matches |
+| binarytreesarena, llgo | 0.53 | 0.52–0.59 | 3.04 | 0.45 | 360 | matches |
+| binarytreesarena, llgo -tags owngo (-Os) | 0.50 | 0.49–0.53 | 3.21 | 0.24 | 359 | matches |
+| binarytreesarena, llgo -tags owngo -O2 -lto full | 0.44 | 0.43–0.47 | 2.81 | 0.24 | 358 | matches |
+| Rust #5, bumpalo + rayon | 0.69 | 0.67–0.71 | 3.72 | 0.22 | 322 | matches |
+
+binarytrees, llgo -tags owngo (-Os), 18: user 41.03 s (5.44 s wall) on 8 CPUs, user 3.52 s (3.94 s wall) under taskset -c 0
+
+## fannkuch-redux 12
+
+| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB | Output |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| fannkuchredux, go, GOAMD64=v2 | 3.22 | 3.19–3.27 | 24.95 | 0.03 | 2 | matches |
+| fannkuchredux, llgo | 12.92 | 12.68–13.49 | 100.13 | 0.04 | 6 | matches |
+| fannkuchredux, llgo -tags owngo (-Os) | 5.54 | 5.47–6.41 | 42.79 | 0.02 | 6 | matches |
+| fannkuchredux, llgo -tags owngo -O2 -lto full | 2.47 | 2.47–2.54 | 19.12 | 0.01 | 5 | matches |
+| Rust #6, rayon | 2.22 | 2.19–2.33 | 16.90 | 0.01 | 2 | matches |
+
+## mandelbrot 16000
+
+| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB | Output |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| mandelbrot, go, GOAMD64=v2 | 1.51 | 1.49–1.57 | 11.72 | 0.06 | 33 | matches |
+| mandelbrot, llgo | 0.92 | 0.91–4.73 | 6.89 | 0.05 | 37 | matches |
+| mandelbrot, llgo -tags owngo (-Os) | 0.91 | 0.89–0.92 | 6.78 | 0.04 | 36 | matches |
+| mandelbrot, llgo -tags owngo -O2 -lto full | 0.64 | 0.64–0.65 | 4.72 | 0.04 | 36 | matches |
+| Rust #4, rayon | 0.54 | 0.53–0.57 | 3.99 | 0.05 | 33 | matches |
+
+Максимум 4.73 с у рядку llgo — один прогін (третє коло), решта дев'ять 0.91–0.94 с; медіана його не зачіпає.
+
+## Що видно
+
+- Go #2 під `owngo` — 48.9 с, у 9 разів повільніше за `go` і повільніше за llgo з BDWGC (40.2 с); `-O2 -lto full` не допомагає (48.6 с). На `18` під `taskset -c 0` той самий прогін бере в 11.7 раза менше CPU, ніж на 8 ядрах: час іде на взаємодію потоків — задача S2.
+- fannkuch-redux: `owngo -O2 -lto full` — 1.11× від Rust #6 (2.47 проти 2.22 с), типовий `-Os` — 2.5×; вибір профілю — P-NEW-01.
+- mandelbrot: `owngo -O2 -lto full` — 1.19× від Rust #4, `-Os` — 1.69×.
+- Арени: усі Go-варіанти швидші за Rust #5 (0.42–0.53 проти 0.69 с), RSS більша (358 проти 322 МБ під llgo).
+
+Рішення: merge — задача лише міряє, компілятор не змінено.
+
 # fannkuch-redux 12
 
 Програма — `owngo/bench/fannkuchredux`, порт на Go програми Rust #6 з Benchmarks Game (Henry Jayakusuma, за C++ #6 Andrei Simion, Revised BSD). Перестановка — `uint64` по півбайту на елемент, обертання і перевертання — зсуви й маски замість `pshufb`, поділ роботи той самий: n·(n-1) блоків на пул робітників. Порівняння — сама Rust #6 без змін, `owngo/bench/fannkuchreduxrust` (rayon 1.12.0 у `Cargo.lock`). Командний рядок той самий, що на сторінці бенчмарку: `./fannkuchredux 12`. Очікуваний вивід — `owngo/bench/fannkuchredux/testdata/expected-12.txt` (`3968050`, `Pfannkuchen(12) = 65`).

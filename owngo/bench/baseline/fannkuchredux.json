@@ -1,0 +1,509 @@
+{
+  "program": "fannkuchredux",
+  "n": 12,
+  "runs": 10,
+  "env": {
+    "sha": "fa3a130d99c6d564a92e009afa6045ad47fc954a",
+    "dirty": true,
+    "go": "go version go1.27.1 linux/amd64",
+    "llvm": "23.1.5",
+    "clang": "Debian clang version 23.1.5 (++20261028083851+a738f2737189-1~exp1~20261028203959.90)",
+    "rustc": "rustc 1.85.1 (4eb161250 2025-03-15) (built from a source tarball)",
+    "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+    "isa": [
+      "sse4_2",
+      "popcnt",
+      "avx",
+      "avx2",
+      "fma",
+      "bmi2",
+      "avx512f"
+    ],
+    "cores": 8,
+    "ulimit": "time(seconds)        unlimited\nfile(blocks)         unlimited\ndata(kbytes)         unlimited\nstack(kbytes)        8192\ncoredump(blocks)     unlimited\nmemory(kbytes)       unlimited\nlocked memory(kbytes) 8192\nprocess              unlimited\nnofiles              524288\nvmemory(kbytes)      unlimited\nlocks                unlimited\nrtprio               0",
+    "go_env": {
+      "GOAMD64": "v2"
+    },
+    "rust_env": {
+      "RUSTFLAGS": "-C target-cpu=ivybridge"
+    }
+  },
+  "tables": [
+    {
+      "name": "main",
+      "pkg": "fannkuchredux",
+      "variants": [
+        {
+          "key": "go",
+          "label": "fannkuchredux, go, GOAMD64=v2",
+          "exe": "fannkuchredux-go",
+          "runs": [
+            {
+              "wall": 3.231,
+              "user": 25.027,
+              "sys": 0.018,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.221,
+              "user": 24.995,
+              "sys": 0.031,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.211,
+              "user": 24.779,
+              "sys": 0.034,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.268,
+              "user": 25.224,
+              "sys": 0.028,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.234,
+              "user": 25.041,
+              "sys": 0.026,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.259,
+              "user": 25.004,
+              "sys": 0.021,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.208,
+              "user": 24.683,
+              "sys": 0.035,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.216,
+              "user": 24.691,
+              "sys": 0.016,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.188,
+              "user": 24.842,
+              "sys": 0.028,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.214,
+              "user": 24.896,
+              "sys": 0.019,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 3.219,
+          "min": 3.188,
+          "max": 3.268,
+          "user_median": 24.946,
+          "sys_median": 0.027,
+          "peak_rss_mb": 2.1
+        },
+        {
+          "key": "llgo",
+          "label": "fannkuchredux, llgo",
+          "exe": "fannkuchredux-llgo",
+          "runs": [
+            {
+              "wall": 12.912,
+              "user": 100.188,
+              "sys": 0.039,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.083,
+              "user": 101.093,
+              "sys": 0.036,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.83,
+              "user": 98.614,
+              "sys": 0.042,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.49,
+              "user": 104.695,
+              "sys": 0.038,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.046,
+              "user": 101.267,
+              "sys": 0.044,
+              "rss_mb": 6.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.894,
+              "user": 99.621,
+              "sys": 0.034,
+              "rss_mb": 6.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.684,
+              "user": 99.008,
+              "sys": 0.042,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.811,
+              "user": 98.959,
+              "sys": 0.048,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.92,
+              "user": 100.072,
+              "sys": 0.043,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.133,
+              "user": 101.651,
+              "sys": 0.038,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 12.916,
+          "min": 12.684,
+          "max": 13.49,
+          "user_median": 100.13,
+          "sys_median": 0.041,
+          "peak_rss_mb": 6.4
+        },
+        {
+          "key": "owngo",
+          "label": "fannkuchredux, llgo -tags owngo (-Os)",
+          "exe": "fannkuchredux-owngo",
+          "runs": [
+            {
+              "wall": 5.533,
+              "user": 42.728,
+              "sys": 0.015,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.543,
+              "user": 42.815,
+              "sys": 0.014,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.537,
+              "user": 42.878,
+              "sys": 0.023,
+              "rss_mb": 5.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.548,
+              "user": 42.69,
+              "sys": 0.015,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.531,
+              "user": 42.747,
+              "sys": 0.028,
+              "rss_mb": 5.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.538,
+              "user": 42.86,
+              "sys": 0.022,
+              "rss_mb": 5.8,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.548,
+              "user": 42.967,
+              "sys": 0.02,
+              "rss_mb": 5.8,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.47,
+              "user": 42.485,
+              "sys": 0.024,
+              "rss_mb": 5.8,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.406,
+              "user": 50.057,
+              "sys": 0.023,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.764,
+              "user": 42.76,
+              "sys": 0.02,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 5.54,
+          "min": 5.47,
+          "max": 6.406,
+          "user_median": 42.787,
+          "sys_median": 0.021,
+          "peak_rss_mb": 5.8
+        },
+        {
+          "key": "owngo-lto",
+          "label": "fannkuchredux, llgo -tags owngo -O2 -lto full",
+          "exe": "fannkuchredux-owngo-lto",
+          "runs": [
+            {
+              "wall": 2.473,
+              "user": 19.072,
+              "sys": 0.015,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.474,
+              "user": 19.172,
+              "sys": 0.012,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.485,
+              "user": 19.084,
+              "sys": 0.013,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.472,
+              "user": 19.104,
+              "sys": 0.011,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.543,
+              "user": 19.195,
+              "sys": 0.01,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.468,
+              "user": 19.061,
+              "sys": 0.015,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.469,
+              "user": 19.162,
+              "sys": 0.011,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.483,
+              "user": 19.118,
+              "sys": 0.015,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.503,
+              "user": 19.388,
+              "sys": 0.019,
+              "rss_mb": 5.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.474,
+              "user": 19.117,
+              "sys": 0.01,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 2.474,
+          "min": 2.468,
+          "max": 2.543,
+          "user_median": 19.117,
+          "sys_median": 0.013,
+          "peak_rss_mb": 5.4
+        },
+        {
+          "key": "rust",
+          "label": "Rust #6, rayon",
+          "exe": "fannkuchreduxrust",
+          "runs": [
+            {
+              "wall": 2.216,
+              "user": 16.86,
+              "sys": 0.011,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.221,
+              "user": 16.922,
+              "sys": 0.011,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.19,
+              "user": 16.874,
+              "sys": 0.008,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.222,
+              "user": 16.901,
+              "sys": 0.009,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.329,
+              "user": 16.947,
+              "sys": 0.007,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.236,
+              "user": 16.896,
+              "sys": 0.009,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.206,
+              "user": 16.878,
+              "sys": 0.012,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.209,
+              "user": 16.963,
+              "sys": 0.01,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.187,
+              "user": 16.9,
+              "sys": 0.011,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.217,
+              "user": 16.925,
+              "sys": 0.013,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 2.216,
+          "min": 2.187,
+          "max": 2.329,
+          "user_median": 16.901,
+          "sys_median": 0.01,
+          "peak_rss_mb": 2.1
+        }
+      ]
+    }
+  ]
+}

@@ -70,11 +70,11 @@
 
 ### S1 — завершити наявне порівняння
 
-- [ ] Уніфікувати `owngo/bench/compare-binarytrees.sh` і `compare-fannkuchredux.sh`.
+- [x] Уніфікувати `owngo/bench/compare-binarytrees.sh` і `compare-fannkuchredux.sh`.
 - [ ] Додати C (Clang) і Rust (rustc) варіанти з однаковими алгоритмами.
-- [ ] Розділити `binary-trees` на **звичайні алокації** та **арени**: не змішувати їх в одному висновку.
+- [x] Розділити `binary-trees` на **звичайні алокації** та **арени**: не змішувати їх в одному висновку.
 - [ ] Зберігати SHA компіляторів, версії LLVM/Go/Rust/C, CPU model, ISA flags, ядра, `ulimit`, частоти CPU та режим LTO.
-- [ ] Запускати достатню кількість повторів (спочатку 10) із чергуванням варіантів; звітувати медіану, розкид і peak RSS, не лише найкращий результат.
+- [x] Запускати достатню кількість повторів (спочатку 10) із чергуванням варіантів; звітувати медіану, розкид і peak RSS, не лише найкращий результат.
 - [ ] Додати CPU time, hardware counters (`perf stat` де доступно), allocs/sec, `inc/dec`, `DecCyclic`, bytes freed, live bytes.
 - [ ] Тримати порівняльний набір: `go`, `llgo`, `owngo -Os`, `owngo -O2 -lto full`, Rust, C.
 - [ ] CI публікує `performance.json` та Markdown-звіт; окремий scheduled runner — для стабільних вимірів (звичайний shared CI може бути шумним).
