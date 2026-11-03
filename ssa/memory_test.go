@@ -241,3 +241,30 @@ func TestStoreZeroSizedEmitsNoMemoryAccess(t *testing.T) {
 		t.Fatalf("Store of an int did not emit a memory access:\n%s", intIR)
 	}
 }
+
+// Вузол defer чи go з останнім аргументом нульового розміру: поле лежить
+// на кінці алокації, і ASan хибно рапортує запис нульового розміру туди.
+func TestAggregateInitSkipsZeroSizedField(t *testing.T) {
+	prog := NewProgram(nil)
+	defer prog.Dispose()
+	pkg := prog.NewPackage("p", "example.com/zeroinit")
+
+	empty := types.NewStruct(nil, nil)
+	node := types.NewStruct([]*types.Var{
+		types.NewField(token.NoPos, nil, "n", types.Typ[types.Int], false),
+		types.NewField(token.NoPos, nil, "e", empty, false),
+	}, nil)
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "p", types.NewPointer(node)),
+	), nil, false)
+	fn := pkg.NewFunc("initNode", sig, GoDecl)
+	b := fn.MakeBody(1)
+	b.aggregateInit(fn.Param(0).impl, prog.Type(node, GoDecl),
+		prog.IntVal(1, prog.Int()).impl, prog.Zero(prog.Type(empty, GoDecl)).impl)
+	b.Return()
+	b.EndBuild()
+	ir := fn.impl.String()
+	if got := strings.Count(ir, "store "); got != 1 {
+		t.Fatalf("aggregateInit({int, struct{}}) emitted %d stores, want 1 (int only):\n%s", got, ir)
+	}
+}
