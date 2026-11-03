@@ -215,6 +215,8 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 		return grow(instr, pts[instr.X])
 	case *ssa.MakeInterface:
 		return grow(instr, pts[instr.X])
+	case *ssa.ChangeInterface:
+		return grow(instr, pts[instr.X])
 	case *ssa.TypeAssert:
 		// Результат — слово даних інтерфейсу або копія з його коробки.
 		return grow(instr, pts[instr.X])
