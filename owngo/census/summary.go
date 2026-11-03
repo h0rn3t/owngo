@@ -529,6 +529,12 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 			changed = sum.raiseSide(derived[instr.Val], escapeGlobal, true) || changed
 			changed = sum.raiseSide(content[instr.Val], escapeGlobal, false) || changed
 		}
+		if _, captured := addressBase(instr.Addr).(*ssa.FreeVar); captured {
+			// Захоплена змінна — комірка викликача: записане живе після виклику.
+			changed = sum.raiseSide(tok[instr.Val], escapeCall, false) || changed
+			changed = sum.raiseSide(derived[instr.Val], escapeCall, true) || changed
+			changed = sum.raiseSide(content[instr.Val], escapeCall, false) || changed
+		}
 		return changed
 	case *ssa.Send:
 		return sendSide(sum, instr.X, tok, derived, content)
