@@ -26,6 +26,7 @@ main.main:
     _llgo_iface$anEWstLioBmxcO9rxTXClbAzDIEQLw2tApwq0mcSt88
     _llgo_main.T
     github.com/xgo-dev/llgo/runtime/internal/runtime.AllocU
+    github.com/xgo-dev/llgo/runtime/internal/runtime.AssertNilDeref
     github.com/xgo-dev/llgo/runtime/internal/runtime.NewItab
     main.use
 main.use:

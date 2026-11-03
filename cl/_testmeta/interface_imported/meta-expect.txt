@@ -62,6 +62,7 @@ main.main:
     _llgo_github.com/xgo-dev/llgo/cl/_testmeta/interface_imported/api.Source
     _llgo_iface$uycIKA3bbxRhudEjW1hHKWKdLqHQsCVy8NdW1bkQmNw
     github.com/xgo-dev/llgo/runtime/internal/runtime.AllocU
+    github.com/xgo-dev/llgo/runtime/internal/runtime.AssertNilDeref
     github.com/xgo-dev/llgo/runtime/internal/runtime.NewItab
     main.use
 main.use:
