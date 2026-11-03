@@ -19,10 +19,41 @@ const (
 	catCount    int32 = 6
 )
 
+// accountShard — лічильники обліку потоків, яким дістався цей шард. Живі
+// байти шарду можуть піти в мінус, якщо місце звільняє інший потік:
+// за модулем 2⁶⁴ сума шардів точна. Шард займає 128 байтів: лічильники
+// сусідніх шардів розділяють понад 64 байти, тож за будь-якого вирівнювання
+// масиву вони не ділять кеш-лінію.
+type accountShard struct {
+	freed uint64
+	live  [catCount]uint64
+	_     [128 - 8 - 8*catCount]byte
+}
+
+// Потоків понад accountShardCount ділять шарди по колу, тому додавання
+// лишаються атомарними; без спільного шарду кеш-лінія не переходить між ядрами.
+const accountShardCount = 64
+
 var (
-	freedBytes uint64
-	liveBytes  [catCount]uint64
+	accountShards    [accountShardCount]accountShard
+	nextAccountShard uint32
 )
+
+// currentAccountShard — номер шарду потоку плюс один; 0 — шард ще не
+// призначено. Номер, а не вказівник: змінна TLS із вказівником іде в блок
+// пакета через LocalPackage, і NoteAlloc на одному ядрі повільніший на 9%.
+//
+//llgointernal:tls
+var currentAccountShard uint32
+
+func myAccountShard() *accountShard {
+	i := currentAccountShard
+	if i == 0 {
+		i = atomic.Add(&nextAccountShard, 1)%accountShardCount + 1
+		currentAccountShard = i
+	}
+	return &accountShards[(i-1)%accountShardCount]
+}
 
 // NoteAlloc додає size байтів до живих місць категорії cat.
 // Нульовий розмір і категорія поза 0…5 нічого не змінюють.
@@ -30,7 +61,19 @@ func NoteAlloc(size uintptr, cat int32) {
 	if size == 0 || cat < 0 || cat >= catCount {
 		return
 	}
-	atomic.Add(&liveBytes[cat], uint64(size))
+	atomic.Add(&myAccountShard().live[cat], uint64(size))
+}
+
+// noteFree переносить size байтів категорії cat із живих у звільнені.
+// Нульовий розмір і категорія поза 0…5 нічого не змінюють.
+func noteFree(size uintptr, cat int32) {
+	if size == 0 || cat < 0 || cat >= catCount {
+		return
+	}
+	// Живі зменшуються раніше: хто бачить байти у Freed, бачить їх і поза Live.
+	s := myAccountShard()
+	atomic.Add(&s.live[cat], -uint64(size))
+	atomic.Add(&s.freed, uint64(size))
 }
 
 // FreeAccounted звільняє блок malloc і переносить size байтів категорії cat
@@ -40,11 +83,7 @@ func FreeAccounted(ptr unsafe.Pointer, size uintptr, cat int32) {
 	if !isZeroBase(ptr) {
 		FreeRoot(ptr)
 	}
-	if size == 0 || cat < 0 || cat >= catCount {
-		return
-	}
-	atomic.Add(&freedBytes, uint64(size))
-	atomic.Add(&liveBytes[cat], -uint64(size))
+	noteFree(size, cat)
 }
 
 // AllocCounted виділяє malloc на size байтів користувача плюс слово
@@ -84,11 +123,7 @@ func DecAccounted(ptr unsafe.Pointer, size uintptr) {
 		return
 	}
 	FreeRoot(unsafe.Pointer(word))
-	if size == 0 {
-		return
-	}
-	atomic.Add(&freedBytes, uint64(size))
-	atomic.Add(&liveBytes[CatRCLocal], -uint64(size))
+	noteFree(size, CatRCLocal)
 }
 
 // CyclicDesc описує тип вузла для DecCyclic: байти користувача і поля-вказівники.
@@ -134,7 +169,7 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 		}
 		FreeRoot(unsafe.Pointer(root))
 		if desc != nil {
-			cyclicFreed(desc.Size)
+			noteFree(desc.Size, CatCyclic)
 		}
 		return
 	}
@@ -171,7 +206,7 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 		FreeRoot(unsafe.Pointer(w))
 	}
 	FreeRoot(unsafe.Pointer(root))
-	cyclicFreed(size)
+	noteFree(size, CatCyclic)
 }
 
 // Таблиця досяжних дескрипторів: індекс уміщається в три нижні біти
@@ -244,14 +279,6 @@ func restoreEdges(node unsafe.Pointer, desc *CyclicDesc) {
 	}
 }
 
-func cyclicFreed(size uintptr) {
-	if size == 0 {
-		return
-	}
-	atomic.Add(&freedBytes, uint64(size))
-	atomic.Add(&liveBytes[CatCyclic], -uint64(size))
-}
-
 // SharedDesc описує тип об'єкта спільної втечі для DecShared: байти
 // користувача, категорію підсумку і поля, які проходить каскад.
 type SharedDesc struct {
@@ -306,7 +333,7 @@ func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
 		// Без каскаду: діти лишають свої слова. Це витік, не звільнення живого.
 		FreeRoot(unsafe.Pointer(root))
 		if desc != nil {
-			sharedFreed(desc.Size, desc.Cat)
+			noteFree(desc.Size, desc.Cat)
 		}
 		return
 	}
@@ -339,7 +366,7 @@ func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
 		}
 	}
 	for cat, size := range sizes {
-		sharedFreed(size, int32(cat))
+		noteFree(size, int32(cat))
 	}
 }
 
@@ -376,14 +403,6 @@ func sharedIndex(table [cyclicTableLen]*SharedDesc, desc *SharedDesc) int {
 	return -1
 }
 
-func sharedFreed(size uintptr, cat int32) {
-	if size == 0 || cat < 0 || cat >= catCount {
-		return
-	}
-	atomic.Add(&freedBytes, uint64(size))
-	atomic.Add(&liveBytes[cat], -uint64(size))
-}
-
 // moduleZero — спільний символ купових алокацій нульового розміру, який
 // кодоген кладе в модулі (ssa moduleZeroSizedAlloc); лінкер лишає одну копію.
 // Функція іншого модуля повертає його як блок, наприклад []byte("") зі
@@ -413,7 +432,11 @@ func child(ptr unsafe.Pointer, off uintptr) unsafe.Pointer {
 
 // Freed повертає байти, які FreeAccounted і DecAccounted перенесли у звільнені.
 func Freed() uint64 {
-	return atomic.Load(&freedBytes)
+	var n uint64
+	for i := range accountShards {
+		n += atomic.Load(&accountShards[i].freed)
+	}
+	return n
 }
 
 // Live повертає байти категорії cat, які ще не звільнені.
@@ -422,7 +445,11 @@ func Live(cat int32) uint64 {
 	if cat < 0 || cat >= catCount {
 		return 0
 	}
-	return atomic.Load(&liveBytes[cat])
+	var n uint64
+	for i := range accountShards {
+		n += atomic.Load(&accountShards[i].live[cat])
+	}
+	return n
 }
 
 // ReportExit друкує байти, звільнені FreeAccounted, і байти, що дожили
