@@ -193,6 +193,10 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 		return changed
 	case *ssa.FieldAddr:
 		return grow(instr, pts[instr.X])
+	case *ssa.Field:
+		return grow(instr, pts[instr.X])
+	case *ssa.Index:
+		return grow(instr, pts[instr.X])
 	case *ssa.IndexAddr:
 		return grow(instr, pts[instr.X])
 	case *ssa.Slice:
