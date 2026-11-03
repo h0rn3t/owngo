@@ -240,6 +240,17 @@ func TestStoreZeroSizedEmitsNoMemoryAccess(t *testing.T) {
 	if !strings.Contains(intIR, "store ") {
 		t.Fatalf("Store of an int did not emit a memory access:\n%s", intIR)
 	}
+
+	// Пам'ять, щойно виділена alloca чи AllocU, не буває nil: перевірка лише
+	// розщепила б блок (MakeInterface порожньої структури).
+	allocaFn := pkg.NewFunc("storeAlloca", types.NewSignatureType(nil, nil, nil, nil, nil, false), GoDecl)
+	ab := allocaFn.MakeBody(1)
+	ab.Store(ab.AllocaT(prog.Type(empty, GoDecl)), prog.Zero(prog.Type(empty, GoDecl)))
+	ab.Return()
+	ab.EndBuild()
+	if allocaIR := allocaFn.impl.String(); strings.Contains(allocaIR, "AssertNilDeref") {
+		t.Fatalf("Store of a zero-sized value into an alloca checked it for nil:\n%s", allocaIR)
+	}
 }
 
 // Вузол defer чи go з останнім аргументом нульового розміру: поле лежить
