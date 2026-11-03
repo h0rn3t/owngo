@@ -1,8 +1,9 @@
 name: OwnGo binary-trees
 
-# Порівнює binarytreesarena під llgo -tags owngo з програмою Rust #5 із
-# Benchmarks Game на ./binarytrees 21. Час не має порогу: таблиця йде в
-# підсумок job, а падає job лише на розбіжному виводі.
+# Порівнює binary-trees 21: Go #2 під go і під llgo -tags owngo,
+# binarytreesarena під llgo -tags owngo і Rust #5 із Benchmarks Game, плюс
+# CPU-час Go #2 під owngo на 18. Час не має порогу: таблиця йде в підсумок
+# job, а падає job лише на розбіжному виводі.
 
 on:
   push:
@@ -28,7 +29,7 @@ concurrency:
 
 jobs:
   binarytrees:
-    name: binary-trees 21 (owngo vs Rust)
+    name: binary-trees 21 (Go #2, owngo, Rust)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
