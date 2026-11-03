@@ -291,7 +291,7 @@ func closureUses(users []ssa.Instruction, msg map[ssa.Instruction]string, pts ma
 		}
 		for _, ref := range readers(clo, pts) {
 			switch ref := ref.(type) {
-			case *ssa.Return, *ssa.Go, *ssa.Send:
+			case *ssa.Return, *ssa.Go, *ssa.Send, *ssa.Select:
 				return nil, true
 			case *ssa.Store:
 				if fromGlobal(ref.Addr) {

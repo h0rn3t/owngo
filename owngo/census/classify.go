@@ -354,6 +354,12 @@ func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx
 			}
 		case *ssa.Send:
 			raise(escape, notes, pts[instr.X], escapeChannel, "")
+		case *ssa.Select:
+			for _, st := range instr.States {
+				if st.Dir == types.SendOnly {
+					raise(escape, notes, pts[st.Send], escapeChannel, "")
+				}
+			}
 		case *ssa.Store:
 			if fromGlobal(instr.Addr) {
 				raise(escape, notes, pts[instr.Val], escapeGlobal, "")

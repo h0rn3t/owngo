@@ -531,9 +531,15 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		}
 		return changed
 	case *ssa.Send:
-		changed := sum.raiseSide(tok[instr.X], escapeChannel, false)
-		changed = sum.raiseSide(derived[instr.X], escapeChannel, true) || changed
-		return sum.raiseSide(content[instr.X], escapeChannel, false) || changed
+		return sendSide(sum, instr.X, tok, derived, content)
+	case *ssa.Select:
+		changed := false
+		for _, st := range instr.States {
+			if st.Dir == types.SendOnly {
+				changed = sendSide(sum, st.Send, tok, derived, content) || changed
+			}
+		}
+		return changed
 	case *ssa.MapUpdate:
 		extra := mergeSets(mergeSets(tok[instr.Value], derived[instr.Value]), mergeSets(tok[instr.Key], derived[instr.Key]))
 		extra = mergeSets(extra, mergeSets(content[instr.Value], content[instr.Key]))
@@ -602,6 +608,13 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 		_, c := operandSets(instr, nil, content)
 		return unionAt(content, value, c) || changed
 	}
+}
+
+// sendSide: x надіслано в канал — c <- x чи гілкою select.
+func sendSide(sum *Summary, x ssa.Value, tok, derived, content map[ssa.Value]pset) bool {
+	changed := sum.raiseSide(tok[x], escapeChannel, false)
+	changed = sum.raiseSide(derived[x], escapeChannel, true) || changed
+	return sum.raiseSide(content[x], escapeChannel, false) || changed
 }
 
 // storeInto: val записано в пам'ять параметрів target. Параметри, що лежать у
