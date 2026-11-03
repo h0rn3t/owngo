@@ -197,6 +197,8 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 		return grow(instr, pts[instr.X])
 	case *ssa.Slice:
 		return grow(instr, pts[instr.X])
+	case *ssa.SliceToArrayPointer:
+		return grow(instr, pts[instr.X])
 	case *ssa.ChangeType:
 		return grow(instr, pts[instr.X])
 	case *ssa.Convert:
