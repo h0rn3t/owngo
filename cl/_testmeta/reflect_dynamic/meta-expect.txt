@@ -23,7 +23,6 @@ main.main:
 main.use:
     _llgo_main.T
     github.com/xgo-dev/llgo/runtime/internal/runtime.AllocU
-    github.com/xgo-dev/llgo/runtime/internal/runtime.AssertNilDeref
     reflect.Value.MethodByName
     reflect.ValueOf
 

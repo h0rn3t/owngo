@@ -6,7 +6,6 @@ main.init:
 main.main:
     _llgo_main.T
     github.com/xgo-dev/llgo/runtime/internal/runtime.AllocU
-    github.com/xgo-dev/llgo/runtime/internal/runtime.AssertNilDeref
     main.sink
 
 [UseIface]

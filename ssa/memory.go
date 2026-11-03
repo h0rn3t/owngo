@@ -546,7 +546,10 @@ func (b Builder) Store(ptr, val Expr) Expr {
 	if b.Prog.SizeOf(storageType) == 0 {
 		// Порожній запис не має байтів. ASan для доступу розміром 0
 		// перевіряє ще й байт перед адресою і хибно рапортує його.
-		b.AssertNilDeref(ptr)
+		// Щойно виділена пам'ять не буває nil, і перевірка лише розщепила б блок.
+		if !isKnownNonNilArrayBase(ptr.impl) {
+			b.AssertNilDeref(ptr)
+		}
 		return Expr{Type: b.Prog.Void()}
 	}
 	if storageType.kind == vkSIMD {
