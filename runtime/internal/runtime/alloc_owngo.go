@@ -53,8 +53,10 @@ func AllocRoot(size uintptr) unsafe.Pointer {
 	return ret
 }
 
+// FreeRoot звільняє блок AllocRoot. nil і zerobase нічого не звільняють, як
+// free(nil): рядок з порожнього зрізу має data == nil.
 func FreeRoot(ptr unsafe.Pointer) {
-	if ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
 		return
 	}
 	owngoFree(ptr)
