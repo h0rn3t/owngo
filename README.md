@@ -49,16 +49,16 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 
 Зараз — фаза 11, паритет з `gc`. Перші дві задачі прибрали витік закріпленого: рантайм хешує ключі мап без купової копії, а змінна, чию адресу лише перетворюють в інший тип (`*(*uint64)(unsafe.Pointer(&f))`, як у `math.Float64bits` і `strconv`), лежить на стеку, як у `gc`. На виході з binary-trees `10` живими лишаються 5 313 байтів замість 10 281: `rc-local` 3 961, кеш `sync.Pool` на потік 768, ініціалізація пакетів 560, кільце 24. Окремий трек — швидкодія до рівня Rust/C на незміненому Go-коді: етапи в [owngo/ROADMAP-PERF.md](owngo/ROADMAP-PERF.md).
 
-Бенчмарки (Debian 13 amd64, 8 ядер, Go 1.27.1, LLVM 23, rustc 1.85.1; найкращий із трьох прогонів, 2026-10-31):
+Бенчмарки (Debian 13 amd64, Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23, rustc 1.85.1; медіана з 10 прогонів із чергуванням варіантів, 2026-11-03, ревізія `1a278541f`):
 
-| Програма | `go` | llgo `-tags owngo` | Rust | Пікова RSS: `go` / `owngo` / Rust |
-| --- | --- | --- | --- | --- |
-| [binary-trees 21](owngo/REPORT-BINARYTREES.md) | 5.61 с | 56.36 с | 0.67 с (#5: арена bumpalo + rayon) | 571 / 688 / 322 МБ |
-| binary-trees 21, Go з ручною ареною ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.47 с | 0.43 с | 0.67 с (той самий #5) | 227 / 358 / 322 МБ |
-| [fannkuch-redux 12](owngo/REPORT-BENCH.md) | 3.11 с | 6.17 с; 2.48 с з `-O2 -lto full` | 2.18 с (#6: rayon, SSE4) | 11 / 11 / 11 МБ |
-| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.57 с | 1.13 с; 0.69 с з `-O2 -lto full` | 0.57 с (#4: rayon, AVX) | 33 / 36 / 32 МБ |
+| Програма | `go` | llgo `-tags owngo` | Rust | C | Пікова RSS: `go` / `owngo` / Rust / C |
+| --- | --- | --- | --- | --- | --- |
+| [binary-trees 21](owngo/REPORT-BENCH.md#binary-trees-21), Go #2 без змін | 5.39 с | 49.21 с; 48.56 с з `-O2 -lto full` | — | 5.48 с (#5: `malloc` + pthreads) | 633 / 475 / — / 343 МБ |
+| binary-trees 21 на аренах ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.41 с | 0.49 с; 0.45 с з `-O2 -lto full` | 0.69 с (#5: bumpalo + rayon) | 1.03 с (#2: пули APR + OpenMP) | 227 / 359 / 322 / 175 МБ |
+| [fannkuch-redux 12](owngo/REPORT-BENCH.md#fannkuch-redux-12) | 3.21 с | 5.52 с; 2.48 с з `-O2 -lto full` | 2.19 с (#6: rayon, SSE4) | 1.14 с (#6: pthreads, SSE4.1) | 2 / 6 / 2 / 2 МБ |
+| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.50 с | 0.90 с; 0.64 с з `-O2 -lto full` | 0.54 с (#4: rayon) | 0.61 с (#6: OpenMP, SSE2) | 33 / 36 / 33 / 33 МБ |
 
-Вивід усіх програм побайтно збігається з очікуваним. Rust #5 для binary-trees кладе дерева в арену, тож з Go #2 без змін (рядок 1) це не порівняння звільнення по одному вузлу. Рядок 2 — той самий алгоритм, де Go-код сам тримає вузли в арені, як Rust: так `owngo` швидший за Rust. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4 (2026-11-01). Команди: `owngo/bench/compare-fannkuchredux.sh 12 3`, `owngo/bench/compare-mandelbrot.sh 16000 3` і збірки зі звіту binary-trees.
+Вивід усіх програм побайтно збігається з очікуваним. Таблиці binary-trees — окремо за стратегією пам'яті: Go #2 і C #5 звільняють вузли по одному, а арена Go, Rust #5 і пули C тримають дерево цілим; висновку між рядками немає. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4; програми Rust і C — з Benchmarks Game без змін коду. Повні таблиці (llgo без тега, CPU user/sys, розкид) і JSON — у [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md) і [owngo/bench/baseline](owngo/bench/baseline). Команда: `owngo/bench/compare.py binarytrees|fannkuchredux|mandelbrot`.
 
 ## Збірка і запуск
 
