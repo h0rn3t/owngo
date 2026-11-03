@@ -654,6 +654,17 @@ func applyCall(instr ssa.Instruction, call *ssa.CallCommon, sum *Summary, tok, d
 			}
 			return changed
 		}
+		if aliasBuiltin(name) && len(call.Args) > 0 {
+			// unsafe.String, unsafe.Slice, SliceData, StringData: та сама пам'ять.
+			value, ok := instr.(ssa.Value)
+			if !ok {
+				return false
+			}
+			arg := call.Args[0]
+			changed := unionAt(tok, value, tok[arg])
+			changed = unionAt(derived, value, derived[arg]) || changed
+			return unionAt(content, value, content[arg]) || changed
+		}
 		return false
 	}
 	targets, known := callTargets(call, concrete, knownFn, prog)

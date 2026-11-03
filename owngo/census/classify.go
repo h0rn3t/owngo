@@ -298,10 +298,21 @@ func builtinResult(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pt
 	if !ok {
 		return false
 	}
-	if name != "append" && name != "SliceData" && name != "StringData" {
+	if !aliasBuiltin(name) {
 		return false
 	}
 	return grow(call, pts[call.Call.Args[0]])
+}
+
+// aliasBuiltin: результат вбудованої функції вказує в пам'ять першого
+// аргументу.
+func aliasBuiltin(name string) bool {
+	switch name {
+	case "append", "SliceData", "StringData", "String", "Slice":
+		return true
+	default:
+		return false
+	}
 }
 
 func pinnedSites(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx) map[ssa.Instruction]bool {
