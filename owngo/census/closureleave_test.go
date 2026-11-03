@@ -1,6 +1,7 @@
 package census
 
 import (
+	"slices"
 	"testing"
 
 	"golang.org/x/tools/go/ssa"
@@ -73,5 +74,47 @@ func TestClosureLeavesWithCapturedCell(t *testing.T) {
 	}
 	if got := place.Cats[stored]; got != "rc-local: call" {
 		t.Errorf("PlaceAll(stored).Cats[new(int)] = %q, want %q", got, "rc-local: call")
+	}
+}
+
+// GOROOT/test escape.go for_escapes3: замикання лежить у локальному масиві
+// і викликається через f[0](). Dec комірки p стоїть після цього виклику, а не
+// після запису замикання в масив.
+const closureArraySrc = `package p
+
+func stored(x int) int {
+	var f [1]func() int
+	p := new(int)
+	*p = x
+	f[0] = func() int { return *p }
+	return f[0]()
+}
+`
+
+func TestClosureInLocalArrayKeepsCell(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", closureArraySrc, ssa.SanityCheckFunctions)
+	place := PlaceAll(ssaFuncs(pkg))
+	fn := pkg.Func("stored")
+	var cell, call ssa.Instruction
+	for _, b := range fn.Blocks {
+		for _, instr := range b.Instrs {
+			switch instr := instr.(type) {
+			case *ssa.Alloc:
+				if instr.Comment == "p" {
+					cell = instr
+				}
+			case *ssa.Call:
+				if instr.Call.StaticCallee() == nil {
+					call = instr
+				}
+			}
+		}
+	}
+	if cell == nil || call == nil {
+		t.Fatalf("stored: cell %v, closure call %v; want both", cell, call)
+	}
+	uses, ok := place.DecUses[cell]
+	if ok && !slices.Contains(uses, call) {
+		t.Errorf("PlaceAll(stored).DecUses[p] = %v, want it to include %v", uses, call)
 	}
 }
