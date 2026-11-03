@@ -756,8 +756,9 @@ func (p *context) ownGoSizeExpr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	}
 	switch underlying := site.Type().Underlying().(type) {
 	case *types.Slice:
+		// Буфер append має cap елементів (OwnedAppendCap), не len.
 		elem := p.prog.SizeOf(p.type_(underlying.Elem(), llssa.GoDecl))
-		return b.Convert(p.prog.Uintptr(), p.ownGoBytes(b, b.SliceLen(expr), elem))
+		return b.Convert(p.prog.Uintptr(), p.ownGoBytes(b, b.SliceCap(expr), elem))
 	case *types.Basic:
 		if underlying.Kind() == types.String {
 			return b.Convert(p.prog.Uintptr(), b.StringLen(expr))
@@ -924,11 +925,17 @@ func (p *context) emitOwnedAppend(b llssa.Builder, call *ssa.Call, allocName str
 		extraCount = p.prog.IntVal(1, p.prog.Int())
 	}
 	newLen := b.BinOp(token.ADD, oldLen, extraCount)
-	raw := p.callSizedAlloc(b, allocName, p.ownGoBytes(b, newLen, elemSize))
+	intTy := types.Typ[types.Int]
+	capSig := types.NewSignatureType(nil, nil, nil,
+		types.NewTuple(types.NewVar(token.NoPos, nil, "newLen", intTy), types.NewVar(token.NoPos, nil, "oldCap", intTy), types.NewVar(token.NoPos, nil, "etSize", intTy)),
+		types.NewTuple(types.NewVar(token.NoPos, nil, "", intTy)),
+		false)
+	newCap := b.Call(p.runtimeFunc("OwnedAppendCap", capSig), newLen, b.SliceCap(src), p.prog.IntVal(elemSize, p.prog.Int()))
+	raw := p.callSizedAlloc(b, allocName, p.ownGoBytes(b, newCap, elemSize))
 	elemPtr := b.PtrCast(p.prog.Pointer(elemLL), raw)
 	b.CopyBytes(elemPtr, b.SliceData(src), p.ownGoBytes(b, oldLen, elemSize))
 	b.CopyBytes(b.Advance(elemPtr, oldLen), extraPtr, p.ownGoBytes(b, extraCount, elemSize))
-	return b.SliceFromData(elemPtr, newLen, newLen)
+	return b.SliceFromData(elemPtr, newLen, newCap)
 }
 
 func (p *context) emitCountedStringCat(b llssa.Builder, v *ssa.BinOp) llssa.Expr {
