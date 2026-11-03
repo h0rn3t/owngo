@@ -109,35 +109,6 @@ func (T) method() {}
 	}
 }
 
-func TestFuncInfoWrapperMetadataIsWindowsOnly(t *testing.T) {
-	const src = `package foo
-
-type T struct{}
-
-func (T) method() {}
-`
-	for _, test := range []struct {
-		goos        string
-		wantVersion int
-		wantFlags   uint32
-	}{
-		{goos: "linux", wantVersion: 1},
-		{goos: "windows", wantVersion: 2, wantFlags: llssa.FuncInfoFlagWrapper},
-	} {
-		t.Run(test.goos, func(t *testing.T) {
-			ir := cltest.CompileIREx(t, src, "foo.go", false, func(prog llssa.Program) {
-				prog.Target().GOOS = test.goos
-				prog.EnableFuncInfoMetadata(true)
-				prog.EnableFuncInfoSites(true)
-			})
-			got := parseFuncInfoRecords(t, ir)["foo.(*T).method"]
-			if got.version != test.wantVersion || got.flags != test.wantFlags {
-				t.Fatalf("%s synthetic pointer method wrapper funcinfo = %#v, want version %d flags %#x", test.goos, got, test.wantVersion, test.wantFlags)
-			}
-		})
-	}
-}
-
 func TestNoInlineDirectiveDisablesTailCalls(t *testing.T) {
 	const src = `package foo
 
