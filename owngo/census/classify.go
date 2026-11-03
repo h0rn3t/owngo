@@ -401,8 +401,9 @@ func directEscape(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1Ctx
 	return escape, notes
 }
 
-// noteCall піднімає аргументи. Callee лишається, окрім go: там значення функції теж виходить.
-// invoke не чіпає отримувача — він callee, не аргумент. builtin не є причиною call.
+// noteCall піднімає аргументи. Callee лишається, окрім go: там значення функції
+// (і отримувач invoke) теж виходить. Звичайний invoke не чіпає отримувача — він
+// callee, не аргумент. builtin не є причиною call.
 // go не читає зведення: горутина — інший потік, навіть якщо тіло лише читає вказівник.
 // v1 == nil лишає кожен виклик втечею call, як у корпусі v0.
 func noteCall(instr ssa.Instruction, call *ssa.CallCommon, k escapeKind, pts map[ssa.Value]siteSet, escape map[ssa.Instruction]escapeKind, notes map[ssa.Instruction]transferNote, includeCallee bool, v1 *v1Ctx) {
@@ -413,7 +414,8 @@ func noteCall(instr ssa.Instruction, call *ssa.CallCommon, k escapeKind, pts map
 		for _, arg := range call.Args {
 			raise(escape, notes, pts[arg], k, "")
 		}
-		if includeCallee && !call.IsInvoke() {
+		if includeCallee {
+			// go i.m(): отримувач інтерфейсу теж іде в горутину.
 			raise(escape, notes, pts[call.Value], k, "")
 		}
 		return

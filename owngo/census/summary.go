@@ -718,7 +718,8 @@ func applyCall(instr ssa.Instruction, call *ssa.CallCommon, sum *Summary, tok, d
 func sideCall(sum *Summary, call *ssa.CallCommon, k escapeKind, tok, derived, content map[ssa.Value]pset) bool {
 	changed := false
 	args := call.Args
-	if !call.IsInvoke() && call.Value != nil {
+	if call.Value != nil {
+		// Значення функції чи отримувач invoke теж ідуть у горутину.
 		args = append([]ssa.Value{call.Value}, args...)
 	}
 	for _, arg := range args {
