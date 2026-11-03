@@ -92,10 +92,13 @@ func (p Package) moduleZeroSizedAlloc(elem Type) Expr {
 		// zero-sized objects from supplying an under-aligned sentinel.
 		name += fmt.Sprintf("align%d", alignment)
 	}
+	byteTy := p.Prog.Byte()
 	zerobase := p.mod.NamedGlobal(name)
 	if zerobase.IsNil() {
-		byteTy := p.Prog.Byte()
 		zerobase = llvm.AddGlobal(p.mod, byteTy.ll, name)
+	}
+	// A package variable linknamed to the sentinel may have declared it first.
+	if zerobase.Initializer().IsNil() {
 		zerobase.SetInitializer(llvm.ConstNull(byteTy.ll))
 		p.setODRLinkage(zerobase, llvm.LinkOnceODRLinkage)
 		zerobase.SetUnnamedAddr(true)
@@ -213,7 +216,12 @@ func (p Package) doNewVarEx(name string, t Type, threadLocal bool) Global {
 			}
 		}
 	}
-	gbl := llvm.AddGlobal(p.mod, typ, name)
+	gbl := p.mod.NamedGlobal(name)
+	if name != moduleZeroName || gbl.IsNil() {
+		// The module sentinel may already exist; a variable linknamed to it
+		// must name that global, not a renamed copy.
+		gbl = llvm.AddGlobal(p.mod, typ, name)
+	}
 	gbl.SetThreadLocal(threadLocal)
 	alignment := int(p.Prog.AlignOf(elem))
 	gbl.SetAlignment(alignment)

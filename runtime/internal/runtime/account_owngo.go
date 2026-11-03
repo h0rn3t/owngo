@@ -37,7 +37,9 @@ func NoteAlloc(size uintptr, cat int32) {
 // із живих у звільнені. Нульовий розмір і категорія поза 0…5 блок звільняють,
 // лічильники не чіпають. zerobase лишається.
 func FreeAccounted(ptr unsafe.Pointer, size uintptr, cat int32) {
-	FreeRoot(ptr)
+	if !isZeroBase(ptr) {
+		FreeRoot(ptr)
+	}
 	if size == 0 || cat < 0 || cat >= catCount {
 		return
 	}
@@ -61,7 +63,7 @@ func AllocCounted(size uintptr) unsafe.Pointer {
 
 // Inc збільшує слово перед ptr на одиницю. zerobase і nil лишаються.
 func Inc(ptr unsafe.Pointer) {
-	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
 	word := (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
@@ -73,7 +75,7 @@ func Inc(ptr unsafe.Pointer) {
 // FreeAccounted з категорією CatRCLocal. FreeAccounted на ptr не кличеться:
 // це середина блока. zerobase нічого не звільняє. Слово не атомарне.
 func DecAccounted(ptr unsafe.Pointer, size uintptr) {
-	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
 	word := (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
@@ -118,7 +120,7 @@ type CyclicEdge struct {
 // списком оброблених від останнього: слово вузла знову стає лічильником
 // раніше, ніж відновлюється ребро, яке довело його до нуля.
 func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
-	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
 	root := countWord(ptr)
@@ -272,7 +274,7 @@ type SharedEdge struct {
 // IncShared атомарно збільшує слово перед ptr на одиницю. zerobase і nil
 // лишаються.
 func IncShared(ptr unsafe.Pointer) {
-	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
 	atomic.Add(countWord(ptr), 1)
@@ -292,7 +294,7 @@ func IncShared(ptr unsafe.Pointer) {
 // тримає посилання стеку роботи, а три нижні біти — індекс дескриптора
 // в таблиці досяжних з desc дескрипторів.
 func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
-	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
+	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
 	root := countWord(ptr)
@@ -382,6 +384,19 @@ func sharedFreed(size uintptr, cat int32) {
 	atomic.Add(&liveBytes[cat], -uint64(size))
 }
 
+// moduleZero — спільний символ купових алокацій нульового розміру, який
+// кодоген кладе в модулі (ssa moduleZeroSizedAlloc); лінкер лишає одну копію.
+// Функція іншого модуля повертає його як блок, наприклад []byte("") зі
+// StringToBytes.
+//
+//go:linkname moduleZero C.__llgo.moduleZeroSizedAlloc$
+var moduleZero byte
+
+// isZeroBase повідомляє, чи ptr — спільна база нульового розміру, а не блок malloc.
+func isZeroBase(ptr unsafe.Pointer) bool {
+	return ptr == unsafe.Pointer(&zerobase) || ptr == unsafe.Pointer(&moduleZero)
+}
+
 func countWord(ptr unsafe.Pointer) *uintptr {
 	return (*uintptr)(unsafe.Add(ptr, -int(unsafe.Sizeof(uintptr(0)))))
 }
@@ -390,7 +405,7 @@ func countWord(ptr unsafe.Pointer) *uintptr {
 // не рахується.
 func child(ptr unsafe.Pointer, off uintptr) unsafe.Pointer {
 	c := *(*unsafe.Pointer)(unsafe.Add(ptr, off))
-	if c == unsafe.Pointer(&zerobase) {
+	if isZeroBase(c) {
 		return nil
 	}
 	return c

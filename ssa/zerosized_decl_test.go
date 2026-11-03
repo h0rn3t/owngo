@@ -3,7 +3,6 @@ package ssa
 import (
 	"go/token"
 	"go/types"
-	"os"
 	"testing"
 
 	"github.com/goplus/gogen/packages"
@@ -14,13 +13,6 @@ import (
 // алокує нульовий розмір: в модулі один глобал з цим ім'ям, і він визначений,
 // за будь-якого порядку.
 func TestModuleZeroSentinelDeclaredVar(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Chdir("../../runtime")
-	defer os.Chdir(wd)
-
 	tests := []struct {
 		name     string
 		varFirst bool

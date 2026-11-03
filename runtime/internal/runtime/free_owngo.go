@@ -23,5 +23,8 @@ import "unsafe"
 // Free звільняє блок malloc, який повернув AllocU або AllocZ.
 // Спільний zerobase лишається. Інші алокації самі не звільняються.
 func Free(ptr unsafe.Pointer) {
+	if isZeroBase(ptr) {
+		return
+	}
 	FreeRoot(ptr)
 }
