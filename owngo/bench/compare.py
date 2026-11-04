@@ -15,7 +15,12 @@ owngo окремо міряється CPU-час на 18: на всіх ядра
 (clang збирає rusage.c і програми C), cargo, taskset, libomp-23-dev (чи LIBOMP_ROOT),
 libapr1-dev.
 
-Використання: owngo/bench/compare.py PROGRAM [N] [RUNS] [--json FILE]
+З --profiles Go-варіанти — профілі збірки owngo (P-NEW-01): -Os, -O2, -O3,
+-O2 -lto thin, -O2 -lto full. Для кожного Go-варіанта записуються розмір
+бінарника і час холодної збірки: кожен варіант збирається з власним
+XDG_CACHE_HOME (кеш llgo і go), який після збірки видаляється.
+
+Використання: owngo/bench/compare.py PROGRAM [N] [RUNS] [--profiles] [--json FILE]
 """
 
 import argparse
@@ -28,6 +33,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +83,16 @@ GO_VARIANTS = [
     ("go", "go, GOAMD64=v2" if X86 else "go", None),
     ("llgo", "llgo", []),
     ("owngo", "llgo -tags owngo (-Os)", ["-tags", "owngo"]),
+    ("owngo-lto", "llgo -tags owngo -O2 -lto full", ["-tags", "owngo", "-O2", "-lto", "full"]),
+]
+
+# Профілі збірки owngo (P-NEW-01). Ключ owngo — типовий -Os, як у GO_VARIANTS:
+# на нього посилається cpu_probe.
+PROFILE_VARIANTS = [
+    ("owngo", "llgo -tags owngo (-Os)", ["-tags", "owngo"]),
+    ("owngo-O2", "llgo -tags owngo -O2", ["-tags", "owngo", "-O2"]),
+    ("owngo-O3", "llgo -tags owngo -O3", ["-tags", "owngo", "-O3"]),
+    ("owngo-thin", "llgo -tags owngo -O2 -lto thin", ["-tags", "owngo", "-O2", "-lto", "thin"]),
     ("owngo-lto", "llgo -tags owngo -O2 -lto full", ["-tags", "owngo", "-O2", "-lto", "full"]),
 ]
 
@@ -165,7 +181,7 @@ def expected_check(pkg, n):
     return None
 
 
-def build(spec, work):
+def build(spec, work, go_variants):
     """Збирає всі варіанти всіх таблиць; повертає таблиці з шляхами бінарників."""
     run(["clang", "-O2", "-o", str(work / "rusage"), str(BENCH / "rusage.c")])
     llgo = work / "llgo"
@@ -173,14 +189,20 @@ def build(spec, work):
     tables = []
     for name, pkg, crate, rust_label, c in spec["tables"]:
         variants = []
-        for key, label, flags in GO_VARIANTS:
+        for key, label, flags in go_variants:
             exe = work / f"{pkg}-{key}"
+            cache = work / f"cache-{pkg}-{key}"
+            start = time.monotonic()
             if flags is None:
-                run(["go", "build", "-o", str(exe), f"./owngo/bench/{pkg}"], env=GO_ENV)
+                run(["go", "build", "-o", str(exe), f"./owngo/bench/{pkg}"],
+                    env={**GO_ENV, "XDG_CACHE_HOME": str(cache)})
             else:
                 run([str(llgo), "build", *flags, "-o", str(exe), f"./owngo/bench/{pkg}"],
-                    env={"LLGO_ROOT": str(ROOT)})
-            variants.append({"key": key, "label": f"{pkg}, {label}", "exe": exe})
+                    env={"LLGO_ROOT": str(ROOT), "XDG_CACHE_HOME": str(cache)})
+            build_s = round(time.monotonic() - start, 1)
+            shutil.rmtree(cache, ignore_errors=True)
+            variants.append({"key": key, "label": f"{pkg}, {label}", "exe": exe,
+                             "build_s": build_s, "size_kb": exe.stat().st_size // 1024})
         if crate:
             target = work / "cargo"
             run(["cargo", "build", "--quiet", "--release", "--locked",
@@ -234,14 +256,15 @@ def markdown(result):
         if len(result["tables"]) > 1:
             lines += [f"### {TABLE_TITLES.get(table['name'], table['name'])}", ""]
         lines += [
-            "| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB | Output |",
-            "| --- | ---: | --- | ---: | ---: | ---: | --- |",
+            "| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB "
+            "| Size, KB | Build, s | Output |",
+            "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
         for v in table["variants"]:
             lines.append(
                 f"| {v['label']} | {v['median']:.2f} | {v['min']:.2f}–{v['max']:.2f} "
                 f"| {v['user_median']:.2f} | {v['sys_median']:.2f} | {v['peak_rss_mb']:.0f} "
-                f"| {v['output']} |")
+                f"| {v.get('size_kb', '—')} | {v.get('build_s', '—')} | {v['output']} |")
         lines.append("")
     probe = result.get("cpu_probe")
     if probe:
@@ -258,6 +281,8 @@ def main():
     parser.add_argument("program", choices=PROGRAMS)
     parser.add_argument("n", nargs="?", type=int)
     parser.add_argument("runs", nargs="?", type=int, default=10)
+    parser.add_argument("--profiles", action="store_true",
+                        help="Go-варіанти — профілі збірки owngo (P-NEW-01)")
     parser.add_argument("--json", type=Path, help="куди записати JSON")
     args = parser.parse_args()
     spec = PROGRAMS[args.program]
@@ -265,7 +290,7 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        tables = build(spec, work)
+        tables = build(spec, work, PROFILE_VARIANTS if args.profiles else GO_VARIANTS)
         checks = {t["name"]: expected_check(t["pkg"], n) for t in tables}
         for t in tables:
             for v in t["variants"]:
@@ -309,6 +334,7 @@ def main():
         "program": args.program,
         "n": n,
         "runs": args.runs,
+        "profiles": args.profiles,
         "env": environment(),
         "tables": tables,
     }
