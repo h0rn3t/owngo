@@ -2,12 +2,12 @@
 
 package runtime
 
-type memProfileCounter = uintptr
+var memProfileObjects [len(memProfileBuckets)]uintptr
 
-func memProfileAddObject(p *memProfileCounter) {
-	*p = *p + 1
+func memProfileAddObject(bucket int) {
+	memProfileObjects[bucket]++
 }
 
-func memProfileLoadObjects(p *memProfileCounter) memProfileCounter {
-	return *p
+func memProfileLoadObjects(bucket int) uint64 {
+	return uint64(memProfileObjects[bucket])
 }
