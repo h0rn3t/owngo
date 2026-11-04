@@ -24,6 +24,7 @@ import (
 	"go/types"
 	"log"
 	"math"
+	"math/bits"
 
 	"github.com/xgo-dev/llvm"
 )
@@ -2216,13 +2217,110 @@ func checkExpr(v Expr, t types.Type, b Builder) Expr {
 }
 
 func needsNegativeCheck(x Expr) bool {
-	if x.kind == vkSigned {
-		if rv := x.impl.IsAConstantInt(); !rv.IsNil() && rv.SExtValue() >= 0 {
-			return false
-		}
-		return true
+	if x.kind != vkSigned {
+		return false
 	}
-	return false
+	bound, ok := unsignedBound(x.impl, unsignedBoundDepth)
+	return !ok || bound > maxUnsigned(x.impl.Type().IntTypeWidth())>>1
+}
+
+// unsignedBoundDepth limits how many instructions unsignedBound walks back.
+const unsignedBoundDepth = 8
+
+// unsignedBound returns an upper bound of v read as an unsigned integer of its
+// width, built from constants and the instructions whose result range follows
+// from their operands' ranges. ok is false when no bound is proven.
+func unsignedBound(v llvm.Value, depth int) (bound uint64, ok bool) {
+	width := v.Type().IntTypeWidth()
+	if width == 0 || width > 64 {
+		return 0, false
+	}
+	if c := v.IsAConstantInt(); !c.IsNil() {
+		return c.ZExtValue(), true
+	}
+	if depth == 0 || v.IsAInstruction().IsNil() {
+		return 0, false
+	}
+	operand := func(i int) (uint64, bool) { return unsignedBound(v.Operand(i), depth-1) }
+	maxV := maxUnsigned(width)
+	switch v.InstructionOpcode() {
+	case llvm.ZExt:
+		if a, ok := operand(0); ok {
+			return a, true
+		}
+		return maxUnsigned(v.Operand(0).Type().IntTypeWidth()), true
+	case llvm.SExt:
+		// Sign extension of a non-negative value is zero extension.
+		a, ok := operand(0)
+		return a, ok && a <= maxUnsigned(v.Operand(0).Type().IntTypeWidth())>>1
+	case llvm.Trunc:
+		a, ok := operand(0)
+		return a, ok && a <= maxV
+	case llvm.And:
+		a, aok := operand(0)
+		b, bok := operand(1)
+		switch {
+		case aok && bok:
+			return min(a, b), true
+		case aok:
+			return a, true
+		case bok:
+			return b, true
+		}
+	case llvm.LShr, llvm.UDiv, llvm.URem:
+		rhs := v.Operand(1).IsAConstantInt()
+		if rhs.IsNil() {
+			return 0, false
+		}
+		c := rhs.ZExtValue()
+		a, aok := operand(0)
+		if !aok {
+			a = maxV
+		}
+		switch v.InstructionOpcode() {
+		case llvm.LShr:
+			if c < uint64(width) {
+				return a >> c, true
+			}
+		case llvm.UDiv:
+			if c != 0 {
+				return a / c, true
+			}
+		default:
+			if c != 0 {
+				return min(a, c-1), true
+			}
+		}
+	case llvm.Add, llvm.Mul, llvm.Shl:
+		a, aok := operand(0)
+		b, bok := operand(1)
+		if !aok || !bok {
+			return 0, false
+		}
+		var hi, lo uint64
+		switch v.InstructionOpcode() {
+		case llvm.Add:
+			lo, hi = bits.Add64(a, b, 0)
+		case llvm.Mul:
+			hi, lo = bits.Mul64(a, b)
+		default:
+			if b >= uint64(width) {
+				return 0, false
+			}
+			hi, lo = bits.Mul64(a, 1<<b)
+		}
+		return lo, hi == 0 && lo <= maxV
+	case llvm.Select:
+		a, aok := operand(1)
+		b, bok := operand(2)
+		return max(a, b), aok && bok
+	}
+	return 0, false
+}
+
+// maxUnsigned returns the largest unsigned value of an integer of width bits.
+func maxUnsigned(width int) uint64 {
+	return math.MaxUint64 >> (64 - width)
 }
 
 func llvmParamsEx(data Expr, vals []Expr, params *types.Tuple, b Builder) (ret []llvm.Value) {
