@@ -131,6 +131,25 @@ func carried(n, depth int) int {
 	return acc
 }
 
+func deferWrite(depth int) {
+	a := NewTree(depth)
+	defer graft(a, nil)
+}
+
+func writeChild(depth int) int {
+	a := NewTree(depth)
+	l := a.Left
+	l.Right = nil
+	return a.Count()
+}
+
+func id(t *Tree) *Tree { return t }
+
+func aliased(depth int) bool {
+	a := NewTree(depth)
+	return id(a) == nil
+}
+
 func notBuilder(depth int) int {
 	a := counting(depth)
 	return a.Count()
@@ -161,6 +180,9 @@ func TestOwnGoRegionRoot(t *testing.T) {
 		{"childUnsafe", false},
 		{"writeNil", false},
 		{"carried", false},
+		{"deferWrite", false},
+		{"writeChild", false},
+		{"aliased", false},
 		{"notBuilder", false},
 	}
 	for _, tt := range tests {

@@ -45,6 +45,9 @@ type Placement struct {
 	Inc        map[ssa.Instruction][]ssa.Value
 	Shared     map[ssa.Instruction]Shared
 	GoShared   map[*ssa.Go][]ssa.Value
+	// Regions — виклики будівників, які стають коренями регіону (P-NEW-05.2).
+	// Codegen їх поки не змінює.
+	Regions map[ssa.Instruction]struct{}
 }
 
 // PlaceAll — Place разом з місцями спільної втечі через go (P9.3).
@@ -57,6 +60,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		inc        map[ssa.Instruction][]ssa.Value
 		shared     map[ssa.Instruction]Shared
 		goShared   map[*ssa.Go][]ssa.Value
+		regions    map[ssa.Instruction]struct{}
 	)
 	if len(funcs) == 0 {
 		return Placement{}
@@ -106,6 +110,12 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		}
 		for site, label := range msg {
 			cats[site] = label
+			if regionRoot(site, ctx) {
+				if regions == nil {
+					regions = map[ssa.Instruction]struct{}{}
+				}
+				regions[site] = struct{}{}
+			}
 			head, _, _ := strings.Cut(label, ":")
 			if head == "static" && freshSite(site) {
 				// Слово вже є: замість FreeAccounted — DecAccounted.
@@ -167,6 +177,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		Inc:        inc,
 		Shared:     shared,
 		GoShared:   goShared,
+		Regions:    regions,
 	}
 }
 
