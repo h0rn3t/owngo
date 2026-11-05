@@ -17,6 +17,10 @@ const (
 	CatPinned   int32 = 4
 	CatImplicit int32 = 5
 	catCount    int32 = 6
+	// CatRegion — байти регіонів (region_owngo.go). Компілятор цієї
+	// категорії в NoteAlloc не передає: облік веде сам регіон.
+	CatRegion   int32 = 6
+	accountCats int32 = 7
 )
 
 // accountShard — лічильники обліку потоків, яким дістався цей шард. Живі
@@ -26,8 +30,8 @@ const (
 // масиву вони не ділять кеш-лінію.
 type accountShard struct {
 	freed uint64
-	live  [catCount]uint64
-	_     [128 - 8 - 8*catCount]byte
+	live  [accountCats]uint64
+	_     [128 - 8 - 8*accountCats]byte
 }
 
 // Потоків понад accountShardCount ділять шарди по колу, тому додавання
@@ -472,9 +476,9 @@ func Freed() uint64 {
 }
 
 // Live повертає байти категорії cat, які ще не звільнені.
-// Категорія поза 0…5 дає 0.
+// Категорія поза 0…6 дає 0.
 func Live(cat int32) uint64 {
-	if cat < 0 || cat >= catCount {
+	if cat < 0 || cat >= accountCats {
 		return 0
 	}
 	var n uint64
@@ -489,7 +493,7 @@ func Live(cat int32) uint64 {
 // owngo ops з кількістю кожної операції.
 func ReportExit() {
 	freed := Freed()
-	var live [catCount]uint64
+	var live [accountCats]uint64
 	for cat := range live {
 		live[cat] = Live(int32(cat))
 	}
@@ -514,6 +518,8 @@ func ReportExit() {
 			label = "pinned"
 		case CatImplicit:
 			label = "implicit"
+		case CatRegion:
+			label = "region"
 		}
 		println("owngo live", label, n)
 	}

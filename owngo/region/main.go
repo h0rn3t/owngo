@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
@@ -46,10 +47,12 @@ func fill(p unsafe.Pointer, size uintptr, v byte) {
 	}
 }
 
-func check(p unsafe.Pointer, size uintptr, v byte, what string) {
+// check перевіряє, що всі байти блока — v; what і id називають блок
+// у повідомленні. Рядок не збирається заздалегідь: звільнення змінило б Freed.
+func check(p unsafe.Pointer, size uintptr, v byte, what string, id uintptr) {
 	for i, b := range unsafe.Slice((*byte)(p), size) {
 		if b != v {
-			fail("%s: byte %d = %#x, want %#x", what, i, b, v)
+			fail("%s %d: byte %d = %#x, want %#x", what, id, i, b, v)
 		}
 	}
 }
@@ -79,7 +82,7 @@ func zeroAlign() {
 			if uintptr(p)%16 != 0 {
 				fail("RegionAlloc(%d) = %p, want 16-byte alignment", size, p)
 			}
-			check(p, size, 0, fmt.Sprint("RegionAlloc(", size, ")"))
+			check(p, size, 0, "RegionAlloc", size)
 			fill(p, size, 0x5a)
 		}
 	}
@@ -107,7 +110,7 @@ func outOfOrder() {
 	}
 	verify := func(i int) {
 		for _, b := range blocks[i] {
-			check(b.p, b.size, byte(i+1), fmt.Sprint("region ", i))
+			check(b.p, b.size, byte(i+1), "region", uintptr(i))
 		}
 	}
 	freeRegion(regions[1])
@@ -144,10 +147,19 @@ func accounting() {
 	}
 }
 
+// Бар'єри — атомарні змінні: між знімками горутини лише працюють
+// з регіонами, тож у різницю Freed не потрапляє звільнення замикань.
+var ready, finished, start, release atomic.Int32
+
+func wait(flag *atomic.Int32, want int32) {
+	for flag.Load() != want {
+		runtime.Gosched()
+	}
+}
+
 // goroutines: вісім горутин зі своїми регіонами; підсумок Freed точний.
 func goroutines() {
 	const workers, rounds, allocs = 8, 200, 300
-	beforeFreed := freed()
 	var want uint64
 	for g := range workers {
 		for j := range allocs {
@@ -158,6 +170,8 @@ func goroutines() {
 	for g := range workers {
 		wg.Go(func() {
 			blocks := make([]block, allocs)
+			ready.Add(1)
+			wait(&start, 1)
 			for range rounds {
 				r := regionCreate()
 				for j := range blocks {
@@ -167,14 +181,22 @@ func goroutines() {
 					blocks[j] = block{p, size}
 				}
 				for _, b := range blocks {
-					check(b.p, b.size, byte(g+1), fmt.Sprint("goroutine ", g))
+					check(b.p, b.size, byte(g+1), "goroutine", uintptr(g))
 				}
 				freeRegion(r)
 			}
+			finished.Add(1)
+			wait(&release, 1)
 		})
 	}
+	wait(&ready, workers)
+	beforeFreed := freed()
+	start.Store(1)
+	wait(&finished, workers)
+	afterFreed := freed()
+	release.Store(1)
 	wg.Wait()
-	if got := freed() - beforeFreed; got != want {
+	if got := afterFreed - beforeFreed; got != want {
 		fail("goroutines: freed delta %d, want %d", got, want)
 	}
 }
