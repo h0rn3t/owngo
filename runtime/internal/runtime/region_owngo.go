@@ -36,6 +36,9 @@ type region struct {
 	blocks   unsafe.Pointer // окремі блоки
 	bytes    uintptr        // байти користувача всіх алокацій
 	noted    uintptr        // з них уже додані до Live(CatRegion)
+	// profile — об'єкти за кошиком профілю пам'яті, ще не додані до нього.
+	// Шматок вміщає до regionChunk/regionAlign об'єктів, тож uint32 досить.
+	profile [len(memProfileBuckets)]uint32
 }
 
 const regionHeader = (unsafe.Sizeof(region{}) + regionAlign - 1) &^ (regionAlign - 1)
@@ -60,14 +63,15 @@ func RegionCreate() unsafe.Pointer {
 
 // RegionAlloc повертає size обнулених байтів регіону r, вирівняних на 16.
 // Нульовий size дає спільний zerobase. Слова лічильника, NoteAlloc і
-// атомарних операцій на цьому шляху немає: Live(CatRegion) отримує байти,
-// коли регіон бере новий шматок або блок.
+// атомарних операцій на цьому шляху немає: Live(CatRegion) і профіль
+// пам'яті отримують байти й об'єкти, коли регіон бере новий шматок чи
+// блок, і в FreeRegion.
 func RegionAlloc(rp unsafe.Pointer, size uintptr) unsafe.Pointer {
 	if size == 0 {
 		return unsafe.Pointer(&zerobase)
 	}
 	r := (*region)(rp)
-	recordMemProfileAlloc(size)
+	r.profile[memProfileBucket(size)]++
 	r.bytes += size
 	n := (size + regionAlign - 1) &^ (regionAlign - 1)
 	if n <= uintptr(r.end)-uintptr(r.cur) {
@@ -84,6 +88,7 @@ func RegionAlloc(rp unsafe.Pointer, size uintptr) unsafe.Pointer {
 func (r *region) allocSlow(size, n uintptr) unsafe.Pointer {
 	atomic.Add(&myAccountShard().live[CatRegion], uint64(r.bytes-r.noted))
 	r.noted = r.bytes
+	r.flushProfile()
 	if regionPerObject || n > regionChunk/2 {
 		block := AllocRoot(regionLink + n)
 		*(*unsafe.Pointer)(block) = r.blocks
@@ -109,6 +114,7 @@ func FreeRegion(rp unsafe.Pointer) {
 		return
 	}
 	r := (*region)(rp)
+	r.flushProfile()
 	s := myAccountShard()
 	atomic.Add(&s.live[CatRegion], -uint64(r.noted))
 	atomic.Add(&s.freed, uint64(r.bytes))
@@ -126,4 +132,25 @@ func freeRegionList(p unsafe.Pointer) {
 		FreeRoot(p)
 		p = next
 	}
+}
+
+// flushProfile додає накопичені об'єкти регіону до профілю пам'яті.
+func (r *region) flushProfile() {
+	for bucket, n := range r.profile {
+		if n != 0 {
+			memProfileAddObjects(bucket, uint64(n))
+			r.profile[bucket] = 0
+		}
+	}
+}
+
+// memProfileBucket — індекс кошика memProfileBuckets для size, як
+// memProfileSizeClass: найменший кошик, не менший за size, або останній.
+// Кошики — степені двійки від 16.
+func memProfileBucket(size uintptr) int {
+	i := 0
+	for b := memProfileBuckets[0]; b < size && i < len(memProfileBuckets)-1; b <<= 1 {
+		i++
+	}
+	return i
 }

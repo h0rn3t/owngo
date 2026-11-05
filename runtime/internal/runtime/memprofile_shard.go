@@ -30,12 +30,16 @@ var (
 var currentMemProfileShard uint32
 
 func memProfileAddObject(bucket int) {
+	memProfileAddObjects(bucket, 1)
+}
+
+func memProfileAddObjects(bucket int, n uint64) {
 	i := currentMemProfileShard
 	if i == 0 {
 		i = atomic.Add(&nextMemProfileShard, 1)%memProfileShardCount + 1
 		currentMemProfileShard = i
 	}
-	atomic.Add(&memProfileShards[i-1].objects[bucket], 1)
+	atomic.Add(&memProfileShards[i-1].objects[bucket], n)
 }
 
 func memProfileLoadObjects(bucket int) uint64 {
