@@ -121,10 +121,52 @@ func outOfOrder() {
 	freeRegion(regions[2])
 }
 
+// profileBuf — записи runtime.MemProfile; масив глобальний, щоб знімок
+// сам нічого не виділяв між знімками.
+var profileBuf [64]runtime.MemProfileRecord
+
+// profileObjects повертає AllocObjects профілю пам'яті за log2 розміру кошика.
+func profileObjects() (objects [64]int64) {
+	// Обгортка runtime.MemProfile рахує записи, а потім сама виділяє масив,
+	// і новий кошик цього масиву може не вміститись: тоді ok == false
+	// (бачено під -asan). Другий виклик уже бачить цей кошик.
+	n, ok := runtime.MemProfile(profileBuf[:], true)
+	if !ok {
+		n, ok = runtime.MemProfile(profileBuf[:], true)
+	}
+	if !ok {
+		fail("MemProfile: %d records do not fit", n)
+	}
+	for _, r := range profileBuf[:n] {
+		if r.AllocObjects > 0 {
+			objects[log2Bucket(uintptr(r.AllocBytes/r.AllocObjects))] += r.AllocObjects
+		}
+	}
+	return objects
+}
+
+// log2Bucket — log2 кошика профілю для об'єкта size: найменший степінь
+// двійки, не менший за size і за 16.
+func log2Bucket(size uintptr) int {
+	k := 4
+	for uintptr(1)<<k < size {
+		k++
+	}
+	return k
+}
+
 // accounting: Freed росте на байти користувача регіону, Live категорії
 // region після звільнення — як до створення, а поки регіон живий — не
-// більше за його байти.
+// більше за його байти. Профіль пам'яті після FreeRegion рахує кожен
+// об'єкт регіону у своєму кошику.
 func accounting() {
+	// Два знімки поспіль дають внесок самого виклику MemProfile.
+	first := profileObjects()
+	beforeProfile := profileObjects()
+	var wantProfile [64]int64
+	for k := range wantProfile {
+		wantProfile[k] = beforeProfile[k] - first[k]
+	}
 	beforeFreed, beforeLive := freed(), live(catRegion)
 	r := regionCreate()
 	var want uint64
@@ -132,9 +174,11 @@ func accounting() {
 		size := uintptr(1 + j%300)
 		regionAlloc(r, size)
 		want += uint64(size)
+		wantProfile[log2Bucket(size)]++
 	}
 	regionAlloc(r, 1<<20)
 	want += 1 << 20
+	wantProfile[20]++
 	if got := live(catRegion) - beforeLive; got == 0 || got > want {
 		fail("live region while alive: delta %d, want 1…%d", got, want)
 	}
@@ -144,6 +188,12 @@ func accounting() {
 	}
 	if got := live(catRegion); got != beforeLive {
 		fail("live region %d after FreeRegion, want %d", got, beforeLive)
+	}
+	afterProfile := profileObjects()
+	for k := range afterProfile {
+		if got := afterProfile[k] - beforeProfile[k]; got != wantProfile[k] {
+			fail("MemProfile bucket %d bytes: %d objects, want %d", 1<<k, got, wantProfile[k])
+		}
 	}
 }
 
