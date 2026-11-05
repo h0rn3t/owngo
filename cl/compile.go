@@ -17,6 +17,7 @@
 package cl
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -275,6 +276,8 @@ type context struct {
 	// ownGoSites — таблиця owngo site пакета (OwnGoStat): лічильник на
 	// рядок і реєстрація в init.
 	ownGoSites ownGoSiteTable
+	// ownGoErrs — порушення верифікатора володіння (census.Verify) пакета.
+	ownGoErrs []error
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -873,6 +876,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			p.bvals = make(map[ssa.Value]llssa.Expr)
 			p.ownGoFreeAfter, p.ownGoFreeEntry = ownGoFreeAfter(f, p.ownGoUses, false)
 			p.ownGoDecAfter, p.ownGoDecEntry = ownGoFreeAfter(f, p.ownGoDecUses, true)
+			p.verifyOwnGo(f)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
 			p.prepareCooperativeSafepoints(f, isCgo)
 			p.prepareGCRoots(f, hasCtx)
@@ -3073,6 +3077,9 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 		}
 	}
 	ctx.finishOwnGoSites()
+	if err = errors.Join(ctx.ownGoErrs...); err != nil {
+		return nil, nil, err
+	}
 	if err = ctx.validateCVariadicWrapperUses(); err != nil {
 		return nil, nil, err
 	}

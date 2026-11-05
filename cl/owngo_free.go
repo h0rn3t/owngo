@@ -1021,3 +1021,39 @@ func precedes(a, b ssa.Instruction) bool {
 	}
 	return false
 }
+
+// verifyOwnGo перевіряє census.Verify рішення володіння f до codegen:
+// звільнення, які поставив ownGoFreeAfter, читачів місць і Inc (P-NEW-03.1).
+func (p *context) verifyOwnGo(f *ssa.Function) {
+	if !p.options.OwnGoFree {
+		return
+	}
+	own := census.Ownership{
+		Uses:  map[ssa.Instruction][]ssa.Instruction{},
+		After: map[ssa.Instruction][]ssa.Value{},
+		Entry: map[*ssa.BasicBlock][]ssa.Value{},
+		Inc:   p.ownGoInc,
+	}
+	addSites := func(sites []ssa.Value) {
+		for _, site := range sites {
+			if instr, ok := site.(ssa.Instruction); ok {
+				own.Uses[instr] = slices.Concat(p.ownGoUses[instr], p.ownGoDecUses[instr])
+			}
+		}
+	}
+	for _, m := range []map[ssa.Instruction][]ssa.Value{p.ownGoFreeAfter, p.ownGoDecAfter} {
+		for instr, sites := range m {
+			own.After[instr] = append(own.After[instr], sites...)
+			addSites(sites)
+		}
+	}
+	for _, m := range []map[*ssa.BasicBlock][]ssa.Value{p.ownGoFreeEntry, p.ownGoDecEntry} {
+		for block, sites := range m {
+			own.Entry[block] = append(own.Entry[block], sites...)
+			addSites(sites)
+		}
+	}
+	for _, e := range census.Verify(f, own) {
+		p.ownGoErrs = append(p.ownGoErrs, fmt.Errorf("%v: owngo: %s: %w", p.fset.Position(e.Pos), f.String(), e))
+	}
+}
