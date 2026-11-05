@@ -1,0 +1,16 @@
+[package]
+name = "knucleotide"
+version = "0.1.0"
+# rustc без --edition, як на сторінці Benchmarks Game.
+edition = "2015"
+publish = false
+
+[dependencies]
+futures = "0.1"
+tokio-threadpool = "0.1"
+itertools = "0.14"
+num = "0.4"
+hashbrown = "0.15"
+
+[profile.release]
+codegen-units = 1

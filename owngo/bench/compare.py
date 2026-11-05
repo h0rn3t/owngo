@@ -15,6 +15,12 @@ owngo окремо міряється CPU-час на 18: на всіх ядра
 (clang збирає rusage.c і програми C), cargo, taskset, libomp-23-dev (чи LIBOMP_ROOT),
 libapr1-dev.
 
+k-nucleotide, regex-redux і reverse-complement (корпус етапу C, P-NEW-02.2)
+читають FASTA зі stdin, як на сторінках Benchmarks Game: вхід — вивід
+owngo/bench/fasta N, який скрипт генерує один раз; аргумент програм — 0.
+regex-redux C потребує заголовків PCRE2: libpcre2-dev чи PCRE2_ROOT (каталог
+usr розпакованого libpcre2-dev).
+
 З --profiles Go-варіанти — профілі збірки owngo (P-NEW-01): -Os, -O2, -O3,
 -O2 -lto thin, -O2 -lto full. Для кожного Go-варіанта записуються розмір
 бінарника і час холодної збірки: кожен варіант збирається з власним
@@ -63,6 +69,27 @@ PROGRAMS = {
                     ("fannkuchreduxc", "C #6, pthreads", ["-pthread"],
                      ["-t", str(os.cpu_count())]))],
     },
+    # Корпус етапу C (P-NEW-02.2): вхід — fasta N через stdin.
+    "knucleotide": {
+        "n": 25000000,
+        "stdin": True,
+        "tables": [("main", "knucleotide", "knucleotiderust",
+                    "Rust #7, hashbrown + tokio-threadpool",
+                    ("knucleotidec", "C #1, khash + OpenMP",
+                     ["OPENMP", "-Iowngo/bench/knucleotidec/Include"], []))],
+    },
+    "regexredux": {
+        "n": 5000000,
+        "stdin": True,
+        "tables": [("main", "regexredux", "regexreduxrust", "Rust #7, PCRE2 JIT + rayon",
+                    ("regexreduxc", "C #5, PCRE2 JIT + OpenMP", ["OPENMP", "PCRE2"], []))],
+    },
+    "revcomp": {
+        "n": 100000001,
+        "stdin": True,
+        "tables": [("main", "revcomp", "revcomprust", "Rust #1, rayon",
+                    ("revcompc", "C #7, pthreads", ["-pthread"], []))],
+    },
     "mandelbrot": {
         "n": 16000,
         # C #6 оголошує mand8 як C99 inline без зовнішнього визначення: gcc
@@ -83,6 +110,8 @@ GO_VARIANTS = [
     ("go", "go, GOAMD64=v2" if X86 else "go", None),
     ("llgo", "llgo", []),
     ("owngo", "llgo -tags owngo (-Os)", ["-tags", "owngo"]),
+    # Профіль треку (P-NEW-01).
+    ("owngo-thin", "llgo -tags owngo -O2 -lto thin", ["-tags", "owngo", "-O2", "-lto", "thin"]),
     ("owngo-lto", "llgo -tags owngo -O2 -lto full", ["-tags", "owngo", "-O2", "-lto", "full"]),
 ]
 
@@ -115,8 +144,16 @@ def openmp_flags():
             f"-L{root}/lib", f"-Wl,-rpath,{root}/lib"]
 
 
+def pcre2_flags():
+    root = os.environ.get("PCRE2_ROOT")
+    if not root:
+        return output(["pkg-config", "--cflags", "--libs", "libpcre2-8"]).split()
+    return [f"-I{root}/include", f"-L{root}/lib/{platform.machine()}-linux-gnu", "-lpcre2-8"]
+
+
 C_EXPANSIONS = {
     "OPENMP": openmp_flags,
+    "PCRE2": pcre2_flags,
     "APR": lambda: output(["pkg-config", "--cflags", "--libs", "apr-1"]).split(),
 }
 
@@ -165,6 +202,7 @@ def environment():
         "rust_env": RUST_ENV,
         "c_flags": C_FLAGS,
         "libomp_root": os.environ.get("LIBOMP_ROOT"),
+        "pcre2_root": os.environ.get("PCRE2_ROOT"),
     }
 
 
@@ -222,11 +260,22 @@ def build(spec, work, go_variants):
     return tables
 
 
-def measure(rusage, cmd, out):
-    """Запускає cmd з stdout у файл out через rusage.c; повертає час, CPU і
-    пікову RSS."""
-    line = subprocess.run([str(rusage), str(out), *cmd], capture_output=True,
-                          text=True, check=True).stdout
+def fasta_input(work, n):
+    """Генерує вхід програм зі stdin: вивід owngo/bench/fasta N."""
+    exe = work / "fasta"
+    run(["go", "build", "-o", str(exe), "./owngo/bench/fasta"])
+    path = work / f"fasta-{n}.txt"
+    with path.open("wb") as f:
+        subprocess.run([str(exe), str(n)], stdout=f, check=True)
+    return path
+
+
+def measure(rusage, cmd, out, stdin=None):
+    """Запускає cmd з stdout у файл out (і stdin з файлу stdin) через rusage.c;
+    повертає час, CPU і пікову RSS."""
+    with open(stdin or os.devnull, "rb") as f:
+        line = subprocess.run([str(rusage), str(out), *cmd], stdin=f, capture_output=True,
+                              text=True, check=True).stdout
     wall, user, sys_, rss_kb, code = line.split()
     return {
         "wall": float(wall),
@@ -297,10 +346,13 @@ def main():
                 v["runs"] = []
         out = work / "out"
         rusage = work / "rusage"
+        stdin = fasta_input(work, n) if spec.get("stdin") else None
+        # Програми зі stdin беруть аргумент 0, як на сторінках Benchmarks Game.
+        arg = "0" if stdin else str(n)
         for _ in range(args.runs):
             for t in tables:
                 for v in t["variants"]:
-                    v["runs"].append(m := measure(rusage, [str(v["exe"]), *v.get("args", []), str(n)], out))
+                    v["runs"].append(m := measure(rusage, [str(v["exe"]), *v.get("args", []), arg], out, stdin))
                     check = checks[t["name"]]
                     if m["exit"] != 0:
                         m["output"] = f"exit {m['exit']}"

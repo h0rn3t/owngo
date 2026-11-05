@@ -1,0 +1,13 @@
+[package]
+name = "revcomp"
+version = "0.1.0"
+# rustc без --edition, як на сторінці Benchmarks Game.
+edition = "2015"
+publish = false
+
+[dependencies]
+memchr = "2"
+rayon = "1"
+
+[profile.release]
+codegen-units = 1
