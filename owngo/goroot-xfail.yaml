@@ -11,3 +11,7 @@ xfails:
   - directive: run
     case: tinyfin.go
     reason: "owngo: no tracing collector, so runtime.SetFinalizer finalizers never run"
+host_skips:
+  - directive: run
+    case: heapsampling.go
+    reason: "owngo: storing a new object into a global does not free the old one (phase 5 rule), so the allocation loop exceeds the runner RSS limit before the heap-profile check, which base xfail already expects to fail"

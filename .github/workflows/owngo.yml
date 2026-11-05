@@ -98,15 +98,16 @@ jobs:
       - name: Build llgo
         run: go build -o "$RUNNER_TEMP/llgo" ./cmd/llgo
 
-      # Базові xfail llgo плюс випадки, що за задумом не працюють без
-      # трасувального збирача (owngo/goroot-xfail.yaml).
+      # Базові xfail і host_skips llgo плюс випадки, що за задумом не
+      # працюють без трасувального збирача (owngo/goroot-xfail.yaml).
       - name: Merge xfail lists
         run: |
           python3 - "$RUNNER_TEMP/xfail.yaml" <<'EOF'
           import sys, yaml
           base = yaml.safe_load(open("test/goroot/xfail.yaml"))
           extra = yaml.safe_load(open("owngo/goroot-xfail.yaml"))
-          base["xfails"] = (base.get("xfails") or []) + extra["xfails"]
+          for key in ("xfails", "host_skips"):
+              base[key] = (base.get(key) or []) + (extra.get(key) or [])
           yaml.safe_dump(base, open(sys.argv[1], "w"), sort_keys=False)
           EOF
 
