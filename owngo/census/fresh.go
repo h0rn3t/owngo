@@ -15,6 +15,7 @@ import (
 var (
 	freshProg *ssa.Program
 	freshBy   map[*ssa.Function]bool
+	builderBy map[*ssa.Function]bool
 )
 
 // freshResults повертає функції funcs зі свіжим результатом. Якщо
@@ -51,9 +52,9 @@ func freshResults(funcs []*ssa.Function) map[*ssa.Function]bool {
 	return out
 }
 
-func publishFresh(prog *ssa.Program, by map[*ssa.Function]bool) {
+func publishFresh(prog *ssa.Program, fresh, builders map[*ssa.Function]bool) {
 	programMu.Lock()
-	freshProg, freshBy = prog, by
+	freshProg, freshBy, builderBy = prog, fresh, builders
 	programMu.Unlock()
 }
 

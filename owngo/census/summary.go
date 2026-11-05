@@ -24,6 +24,10 @@ type Summary struct {
 	// Interior — свіжий результат є &x.f чи x[i:j] власного купового Alloc x.
 	// Слово лежить перед x, тож викликач знаходить його через runtime.Base.
 	Interior bool
+	// Builder — свіжий результат зібрано лише з власних Alloc цієї функції і
+	// переміщених результатів будівників (P-NEW-05.1), без вказівників поза
+	// полями обходу і без інших втеч. Таку структуру можна виділити в регіоні.
+	Builder bool
 }
 
 // Param описує один параметр після міжпроцедурного розбору.
@@ -132,10 +136,16 @@ func packageSummaries(pass *analysis.Pass, funcs []*ssa.Function) map[*ssa.Funct
 			push(caller)
 		}
 	}
-	for fn := range freshResults(funcs) {
+	fresh := freshResults(funcs)
+	for fn := range fresh {
 		if s := cur[fn]; s != nil {
 			s.Fresh = true
 			s.Interior = returnsInterior(fn)
+		}
+	}
+	for fn := range builderResults(funcs, fresh) {
+		if s := cur[fn]; s != nil {
+			s.Builder = true
 		}
 	}
 	for _, fn := range funcs {
@@ -188,12 +198,16 @@ func PublishProgram(prog *ssa.Program) {
 	}
 	sums := packageSummaries(nil, funcs)
 	fresh := map[*ssa.Function]bool{}
+	builders := map[*ssa.Function]bool{}
 	for fn, sum := range sums {
 		if sum != nil && sum.Fresh {
 			fresh[fn] = true
 		}
+		if sum != nil && sum.Builder {
+			builders[fn] = true
+		}
 	}
-	publishFresh(prog, fresh)
+	publishFresh(prog, fresh, builders)
 	next := map[string]*Summary{}
 	for _, fn := range funcs {
 		sum := sums[fn]

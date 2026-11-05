@@ -8,6 +8,8 @@ import (
 
 const builderSrc = `package p
 
+import "unsafe"
+
 type Tree struct {
 	Left, Right *Tree
 	Val         int
@@ -76,6 +78,22 @@ func interior() *int {
 }
 
 func newTagged() *Tagged { return &Tagged{} }
+
+func writeParam(t *Tree) *Tree {
+	t.Val = 1
+	return &Tree{}
+}
+
+func withChan(c chan int) *Tree {
+	c <- 1
+	return &Tree{}
+}
+
+func recv(c chan int) *Tree { return &Tree{Val: <-c} }
+
+func concat(s string) *Tree { return &Tree{Val: len(s + "x")} }
+
+func viaUnsafe(p *int) *Tree { return &Tree{Val: int(uintptr(unsafe.Pointer(p)))} }
 `
 
 // TestBuilder — P-NEW-05.1: будівник — функція зі свіжим результатом, чия
@@ -104,6 +122,11 @@ func TestBuilder(t *testing.T) {
 			{"callsNonBuilder", true, false},
 			{"interior", true, false},
 			{"newTagged", true, false},
+			{"writeParam", true, false},
+			{"withChan", true, false},
+			{"recv", true, false},
+			{"concat", true, false},
+			{"viaUnsafe", true, false},
 		}
 		for _, tt := range tests {
 			sum := sums[pkg.Func(tt.fn)]
