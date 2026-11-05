@@ -38,6 +38,7 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 	p.ownGoInc = place.Inc
 	p.ownGoShared = place.Shared
 	p.ownGoGoShared = place.GoShared
+	p.ownGoLabel = cats
 	if len(cats) == 0 {
 		return
 	}
@@ -392,6 +393,7 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 		// Свіжий результат уже облікував викликаний код.
 		return
 	}
+	p.countOwnGoSite(b, val, "note_alloc")
 	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, p.ownGoSizeExpr(b, val), cat)
 }
 
@@ -423,6 +425,7 @@ func (p *context) emitOwnGoFreeSites(b llssa.Builder, sites []ssa.Value) {
 		} else {
 			cat = ownGoStatic
 		}
+		p.countOwnGoSite(b, site, "free_accounted")
 		p.callOwnGoAccount(b, "FreeAccounted", ptr, size, cat)
 	}
 }
@@ -438,23 +441,29 @@ func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 		}
 		if instr, ok := site.(ssa.Instruction); ok {
 			if _, shared := p.ownGoShared[instr]; shared {
+				p.countOwnGoSite(b, site, "dec_shared")
 				p.callDecShared(b, ptr, p.sharedDesc(instr))
 				continue
 			}
 		}
 		if instr, ok := site.(ssa.Instruction); ok && p.ownGoCat[instr] == ownGoCyclic {
+			p.countOwnGoSite(b, site, "dec_cyclic")
 			p.callDecCyclic(b, ptr, ownGoElem(site))
 			continue
 		}
+		p.countOwnGoSite(b, site, "dec_accounted")
 		p.callOwnGoAccount(b, "DecAccounted", ptr, p.ownGoSizeExpr(b, site), 0)
 	}
 }
 
 // emitOwnGoStoreInc рахує вказівник місця cyclic, записаний у поле обходу.
 func (p *context) emitOwnGoStoreInc(b llssa.Builder, store *ssa.Store, val llssa.Expr) {
-	if len(p.ownGoInc[store]) == 0 || val.IsConstant() {
+	sites := p.ownGoInc[store]
+	if len(sites) == 0 || val.IsConstant() {
 		return
 	}
+	// Записане значення може бути одним з кількох місць; рядок — першого.
+	p.countOwnGoSite(b, sites[0], "inc")
 	p.callOwnGoAccount(b, "Inc", val, llssa.Nil, 0)
 }
 
@@ -472,6 +481,7 @@ func (p *context) emitOwnGoIncShared(b llssa.Builder, g *ssa.Go) []ssa.Value {
 		if ptr.IsNil() {
 			continue
 		}
+		p.countOwnGoSite(b, site, "inc_shared")
 		b.Call(p.runtimeFunc("IncShared", sig), b.PtrCast(dst, ptr))
 		sites = append(sites, site)
 	}
@@ -480,7 +490,7 @@ func (p *context) emitOwnGoIncShared(b llssa.Builder, g *ssa.Go) []ssa.Value {
 
 // ownGoRoutineDec дописує вказівники місць p.ownGoGoSites у стартовий запис
 // горутини, а рутина після повернення функції горутини ставить на кожне
-// DecShared і, якщо p.ownGoGoFreeCtx, звільняє контекст замикання.
+// DecShared і звільняє контекст замикання p.ownGoGoCtx, якщо він є.
 func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, args []llssa.Expr) (func(llssa.Builder, llssa.Expr, ...llssa.Expr) llssa.Expr, []llssa.Expr) {
 	n := len(args)
 	descs := make([]llssa.Expr, 0, len(p.ownGoGoSites))
@@ -489,14 +499,17 @@ func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder,
 		full = append(full, p.ownGoFreePtr(b, site))
 		descs = append(descs, p.sharedDesc(site.(ssa.Instruction)))
 	}
-	freeCtx := p.ownGoGoFreeCtx
+	sites := p.ownGoGoSites
+	ctx := p.ownGoGoCtx
 	wrapped := func(b llssa.Builder, fn llssa.Expr, all ...llssa.Expr) llssa.Expr {
 		ret := buildCall(b, fn, all[:n]...)
 		for i, ptr := range all[n:] {
+			p.countOwnGoSite(b, sites[i], "dec_shared")
 			p.callDecShared(b, ptr, descs[i])
 		}
-		if freeCtx {
+		if ctx != nil {
 			// Байти контексту не обліковуються, як у static замикання.
+			p.countOwnGoSite(b, ctx, "free_accounted")
 			p.callOwnGoAccount(b, "FreeAccounted", b.Field(fn, 1), p.prog.IntVal(0, p.prog.Uintptr()), ownGoStatic)
 		}
 		return ret
@@ -639,6 +652,7 @@ func (p *context) emitOwnGoInc(b llssa.Builder, instr ssa.Instruction) {
 		if _, sized := p.ownGoSiteSize(site); !sized {
 			continue
 		}
+		p.countOwnGoSite(b, site, "inc")
 		p.callOwnGoAccount(b, "Inc", ptr, llssa.Nil, 0)
 	}
 }

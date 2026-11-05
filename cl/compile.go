@@ -91,6 +91,9 @@ type Options struct {
 	// місця, яке census v1 позначає static, і runtime.NoteAlloc для купового
 	// місця з відомим розміром. Без прапорця прохід не працює.
 	OwnGoFree bool
+	// OwnGoStat (тег owngostat) з OwnGoFree дає кожній операції рантайму
+	// місця свій лічильник і таблицю пакета для рядків owngo site.
+	OwnGoStat bool
 	// OwnGoWarn отримує рядок попередження на кожне місце pinned пакета.
 	// Збірка дає його лише пакетам головного модуля; nil — без попереджень.
 	OwnGoWarn io.Writer
@@ -264,8 +267,14 @@ type context struct {
 	ownGoSharedDescs     map[ssa.Instruction]llssa.Expr
 	// ownGoGoSites — місця, яким рутина поточного go ставить DecShared.
 	ownGoGoSites []ssa.Value
-	// ownGoGoFreeCtx — рутина поточного go звільняє контекст замикання.
-	ownGoGoFreeCtx bool
+	// ownGoGoCtx — замикання поточного go, контекст якого звільняє рутина;
+	// nil — рутина його не звільняє.
+	ownGoGoCtx ssa.Value
+	// ownGoLabel — позначки census місць пакета для таблиці owngo site.
+	ownGoLabel map[ssa.Instruction]string
+	// ownGoSites — таблиця owngo site пакета (OwnGoStat): лічильник на
+	// рядок і реєстрація в init.
+	ownGoSites ownGoSiteTable
 }
 
 func (p *context) initStaticByteArrayGlobal(define bool, gbl *ssa.Global, g llssa.Global) bool {
@@ -2383,6 +2392,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		case *ssa.Jump, *ssa.If, *ssa.Return, *ssa.Panic:
 			return
 		}
+		p.countOwnGoAlloc(b, instr)
 		p.emitOwnGoNote(b, instr)
 		p.emitOwnGoFree(b, instr)
 	}()
@@ -2522,9 +2532,11 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	case *ssa.Go:
 		p.checkMethodCallReceiver(b, &v.Call)
 		p.ownGoGoSites = p.emitOwnGoIncShared(b, v)
-		p.ownGoGoFreeCtx = p.options.OwnGoFree && census.GoOwnsClosure(v)
+		if p.options.OwnGoFree && census.GoOwnsClosure(v) {
+			p.ownGoGoCtx = v.Call.Value
+		}
 		p.call(b, llssa.Go, &v.Call)
-		p.ownGoGoSites, p.ownGoGoFreeCtx = nil, false
+		p.ownGoGoSites, p.ownGoGoCtx = nil, nil
 	case *ssa.RunDefers:
 		p.recordPanicLocation(b, p.deferRunPos(v.Pos()))
 		p.emitPCLineLabel(b, p.deferRunPos(v.Pos()))
@@ -3060,6 +3072,7 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 			ini()
 		}
 	}
+	ctx.finishOwnGoSites()
 	if err = ctx.validateCVariadicWrapperUses(); err != nil {
 		return nil, nil, err
 	}

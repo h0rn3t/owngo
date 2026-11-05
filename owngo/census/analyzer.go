@@ -69,7 +69,7 @@ func run(pass *analysis.Pass) (any, error) {
 		msg, _, _ := messages(fn, mode, universe, ctx)
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
-				if !isSite(instr) {
+				if !IsSite(instr) {
 					continue
 				}
 				text := msg[instr]
@@ -92,7 +92,9 @@ func run(pass *analysis.Pass) (any, error) {
 	return sites, nil
 }
 
-func isSite(instr ssa.Instruction) bool {
+// IsSite звітує, що instr — місце census: інструкція, яка може виділити
+// пам'ять у купі.
+func IsSite(instr ssa.Instruction) bool {
 	switch instr := instr.(type) {
 	case *ssa.Alloc, *ssa.MakeSlice, *ssa.MakeMap, *ssa.MakeChan:
 		return true

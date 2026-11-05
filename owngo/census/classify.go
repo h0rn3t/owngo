@@ -94,7 +94,7 @@ func messages(fn *ssa.Function, mode ifaceMode, universe []types.Type, v1 *v1Ctx
 
 	out := make(map[ssa.Instruction]string)
 	for _, instr := range instrs {
-		if !isSite(instr) && !fresh[instr] {
+		if !IsSite(instr) && !fresh[instr] {
 			continue
 		}
 		out[instr] = category(instr, escape[instr], notes[instr], pinned[instr], mode, universe, v1 != nil)

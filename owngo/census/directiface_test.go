@@ -74,8 +74,8 @@ func TestDirectInterfaceNotSite(t *testing.T) {
 					continue
 				}
 				seen[name] = true
-				if got := isSite(mi); got != site {
-					t.Errorf("isSite(MakeInterface %s) = %v, want %v", name, got, site)
+				if got := IsSite(mi); got != site {
+					t.Errorf("IsSite(MakeInterface %s) = %v, want %v", name, got, site)
 				}
 				if got := seed(mi, func(ssa.Value) siteSet { return siteSet{} }); got != site {
 					t.Errorf("seed(MakeInterface %s) = %v, want %v", name, got, site)

@@ -715,6 +715,7 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 		ShadowStack:    conf.Goarch == "wasm",
 		DebuggerFrames: conf.Goarch == "wasm" && slices.Contains(splitSourcePatchBuildTags(conf.Tags), "llgo.wasm.debugger"),
 		OwnGoFree:      slices.Contains(splitSourcePatchBuildTags(conf.Tags), "owngo"),
+		OwnGoStat:      slices.Contains(splitSourcePatchBuildTags(conf.Tags), "owngostat"),
 	}
 	preloadOptions := frontendOptions
 	llssaInitOnce.Do(func() {

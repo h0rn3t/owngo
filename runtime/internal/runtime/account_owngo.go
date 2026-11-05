@@ -85,10 +85,13 @@ const (
 // NoteAlloc додає size байтів до живих місць категорії cat.
 // Нульовий розмір і категорія поза 0…5 нічого не змінюють.
 func NoteAlloc(size uintptr, cat int32) {
-	if size == 0 || cat < 0 || cat >= catCount {
+	if cat < 0 || cat >= catCount {
 		return
 	}
 	countOp(opNoteAlloc + cat)
+	if size == 0 {
+		return
+	}
 	atomic.Add(&myAccountShard().live[cat], uint64(size))
 }
 

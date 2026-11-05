@@ -9,7 +9,7 @@ import (
 )
 
 // ownGoOpCall — виклик операції рантайму, яку codegen ставить місцю.
-var ownGoOpCall = regexp.MustCompile(`call [^\n]*@"[^"]*runtime\.(AllocZ|AllocCounted|NoteAlloc|FreeAccounted|DecAccounted|DecCyclic|Inc)"\(`)
+var ownGoOpCall = regexp.MustCompile(`call [^\n]*@"[^"]*runtime\.(AllocZ|AllocU|AllocCounted|NoteAlloc|FreeAccounted|DecAccounted|DecCyclic|Inc)"\(`)
 
 // TestOwnGoStatSites — P-NEW-02.1: під OwnGoStat кожна операція рантайму
 // місця static, rc-local і cyclic отримує свій лічильник, а таблиця пакета
@@ -76,8 +76,12 @@ func closureUse() int {
 			t.Errorf("site table has no row matching %q", row)
 		}
 	}
-	if !strings.Contains(mustNamedFunction(t, mod, "foo.init").String(), "runtime.RegisterSites") {
-		t.Error("foo.init has no runtime.RegisterSites call")
+	// Конструктор модуля, а не init: пакет LLGoPackage = "link" init не має.
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.__owngo_sites$ctor").String(), "runtime.RegisterSites") {
+		t.Error("foo.__owngo_sites$ctor has no runtime.RegisterSites call")
+	}
+	if !regexp.MustCompile(`__owngo_sites\$ctor.*section "\.init_array"|@llvm\.global_ctors = appending .*__owngo_sites\$ctor`).MatchString(ir) {
+		t.Error("module does not run foo.__owngo_sites$ctor as a constructor")
 	}
 
 	off := compileOwnGo(t, src, Options{OwnGoFree: true}).String()
