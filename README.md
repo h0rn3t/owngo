@@ -47,18 +47,30 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 
 Готові фази 0–10: виміри на профілях сервісів, `free` для статичного володіння, неатомарний RC для локальних об'єктів, звільнення неявних алокацій (`append`, конкатенація рядків), збирач циклів у `DecCyclic`; на корпусі програм Benchmarks Game — алокації без місця в census, внутрішні вказівники, атомарний RC для об'єктів, спільних між горутинами, облік закріпленого `unsafe.Pointer` з попередженням компілятора.
 
-Зараз — фаза 11, паритет з `gc`. Перші дві задачі прибрали витік закріпленого: рантайм хешує ключі мап без купової копії, а змінна, чию адресу лише перетворюють в інший тип (`*(*uint64)(unsafe.Pointer(&f))`, як у `math.Float64bits` і `strconv`), лежить на стеку, як у `gc`. На виході з binary-trees `10` живими лишаються 5 313 байтів замість 10 281: `rc-local` 3 961, кеш `sync.Pool` на потік 768, ініціалізація пакетів 560, кільце 24. Окремий трек — швидкодія до рівня Rust/C на незміненому Go-коді: етапи в [owngo/ROADMAP-PERF.md](owngo/ROADMAP-PERF.md).
+Зараз — фаза 11, паритет з `gc`. Готово:
 
-Бенчмарки (Debian 13 amd64, Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23, rustc 1.85.1; медіана з 10 прогонів із чергуванням варіантів, 2026-11-03, ревізія `1a278541f`):
+- **Витік закріпленого (P11.0, P11.0.1).** Рантайм хешує ключі мап без купової копії, а змінна, чию адресу лише перетворюють в інший тип (`*(*uint64)(unsafe.Pointer(&f))`, як у `math.Float64bits` і `strconv`), лежить на стеку, як у `gc`.
+- **`GOROOT/test` під тегом `owngo` (P11.2, P11.3).** Режим `ci` (`.`, `fixedbugs`, 830 випадків) проти llgo без тегу: з `owngo` лишились 3 регресії, і всі не застосовні — `init1.go` чекає зростання `runtime.NumGC`, `mallocfin.go` і `tinyfin.go` — фіналізаторів, а трасувального збирача немає за задумом. Під `-O0 -asan` — жодного `heap-use-after-free`, `double-free` чи `attempting free`; ще 4 падіння — обмеження ASan, `-O0` і ліміту пам'яті раннера. Деталі — [owngo/REPORT-PHASE11.md](owngo/REPORT-PHASE11.md).
 
-| Програма | `go` | llgo `-tags owngo` | Rust | C | Пікова RSS: `go` / `owngo` / Rust / C |
-| --- | --- | --- | --- | --- | --- |
-| [binary-trees 21](owngo/REPORT-BENCH.md#binary-trees-21), Go #2 без змін | 5.39 с | 49.21 с; 48.56 с з `-O2 -lto full` | — | 5.48 с (#5: `malloc` + pthreads) | 633 / 475 / — / 343 МБ |
-| binary-trees 21 на аренах ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.41 с | 0.49 с; 0.45 с з `-O2 -lto full` | 0.69 с (#5: bumpalo + rayon) | 1.03 с (#2: пули APR + OpenMP) | 227 / 359 / 322 / 175 МБ |
-| [fannkuch-redux 12](owngo/REPORT-BENCH.md#fannkuch-redux-12) | 3.21 с | 5.52 с; 2.48 с з `-O2 -lto full` | 2.19 с (#6: rayon, SSE4) | 1.14 с (#6: pthreads, SSE4.1) | 2 / 6 / 2 / 2 МБ |
-| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.50 с | 0.90 с; 0.64 с з `-O2 -lto full` | 0.54 с (#4: rayon) | 0.61 с (#6: OpenMP, SSE2) | 33 / 36 / 33 / 33 МБ |
+Далі — збірка і замір реального сервісу (P11.4–P11.8): чекає вибору сервісу.
 
-Вивід усіх програм побайтно збігається з очікуваним. Таблиці binary-trees — окремо за стратегією пам'яті: Go #2 і C #5 звільняють вузли по одному, а арена Go, Rust #5 і пули C тримають дерево цілим; висновку між рядками немає. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4; програми Rust і C — з Benchmarks Game без змін коду. Повні таблиці (llgo без тега, CPU user/sys, розкид) і JSON — у [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md) і [owngo/bench/baseline](owngo/bench/baseline). Команда: `owngo/bench/compare.py binarytrees|fannkuchredux|mandelbrot`.
+Окремий трек — швидкодія до рівня Rust/C на незміненому Go-коді, етапи в [owngo/ROADMAP-PERF.md](owngo/ROADMAP-PERF.md). Гейти A і B прийнято:
+
+- облік `owngo` і лічильники профілю пам'яті розкладено по шардах потоків (S2, S3): CPU-час Go #2 binary-trees `18` на 8 ядрах — 40.9 → 4.2 с;
+- профіль треку — `-O2 -lto thin` (P-NEW-01): fannkuch-redux `12` — 1.15× від Rust #6; типовий профіль лишається `-Os`;
+- лічильники операцій рантайму під тегом `owngostat` (P-NEW-02.0) — база етапу C (зведення володіння, RC elision, стек);
+- рантайм регіонів `RegionCreate`/`RegionAlloc`/`FreeRegion` (P-NEW-05.3) — перший крок етапу D; codegen, що кладе дерева в регіон, — наступні задачі.
+
+Бенчмарки (Debian 13 amd64, Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23.1.5, rustc 1.85.1; медіана з 10 прогонів із чергуванням варіантів). `owngo`, Rust і C — замір профілів P-NEW-01 (2026-11-04, ревізія `96ae9b792`, після S2 і S3); `go` — замір S1.1 (2026-11-03, ревізія `1a278541f`), код форку на нього не впливає:
+
+| Програма | `go` | `owngo` `-Os` | `owngo` `-O2 -lto thin` | Rust | C | Пікова RSS: `go` / `owngo` / Rust / C |
+| --- | --- | --- | --- | --- | --- | --- |
+| [binary-trees 21](owngo/REPORT-BENCH.md#binary-trees-21), Go #2 без змін | 5.39 с | 8.89 с | 8.03 с | — | 6.02 с (#5: `malloc` + pthreads) | 633 / 476 / — / 343 МБ |
+| binary-trees 21 на аренах ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.41 с | 0.54 с | 0.51 с | 0.76 с (#5: bumpalo + rayon) | 1.13 с (#2: пули APR + OpenMP) | 227 / 359 / 322 / 175 МБ |
+| [fannkuch-redux 12](owngo/REPORT-BENCH.md#fannkuch-redux-12) | 3.21 с | 7.23 с | 2.69 с | 2.33 с (#6: rayon, SSE4) | 1.35 с (#6: pthreads, SSE4.1) | 2 / 6 / 2 / 2 МБ |
+| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.50 с | 1.32 с | 0.70 с | 0.54 с (#4: rayon) | 0.62 с (#6: OpenMP, SSE2) | 33 / 36 / 33 / 33 МБ |
+
+Вивід усіх програм побайтно збігається з очікуваним. Таблиці binary-trees — окремо за стратегією пам'яті: Go #2 і C #5 звільняють вузли по одному, а арена Go, Rust #5 і пули C тримають дерево цілим; висновку між рядками немає. Go #2 під `owngo` до S2 і S3 ішов 49.2 с: час з'їдали атомарні лічильники обліку і профілю на спільних кеш-лініях. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4; програми Rust і C — з Benchmarks Game без змін коду. Повні таблиці (усі профілі, llgo без тега, CPU user/sys, розкид, розмір бінарника, час збірки) і JSON — у [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md), [owngo/bench/profiles](owngo/bench/profiles) і [owngo/bench/baseline](owngo/bench/baseline). Команда: `owngo/bench/compare.py binarytrees|fannkuchredux|mandelbrot [--profiles]`.
 
 ## Збірка і запуск
 
@@ -68,10 +80,19 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 export LLGO_ROOT=$PWD
 go install ./cmd/llgo
 llgo build -tags owngo -o app ./path/to/pkg
+llgo build -tags owngo -O2 -lto thin -o app ./path/to/pkg   # профіль треку швидкодії
 llgo run -tags owngo -O0 -asan .   # debug-збірка під ASan
 ```
 
-Без тегу `owngo` збірка поводиться як llgo з BDWGC.
+Без тегу `owngo` збірка поводиться як llgo з BDWGC. Тег `owngostat` разом з `owngo` додає на виході рядки `owngo ops` — лічильники операцій рантайму. Під ASan потрібен `ASAN_OPTIONS=detect_leaks=0`: без GC LeakSanitizer вважає витоком кожен живий об'єкт на виході.
+
+Вбудовані цілі (`-target esp32c3`, `rp2040` тощо) збирає ESP clang 23, який llgo завантажує сам.
+
+## Перевірки
+
+- `go test ./...` — відомі падіння в [owngo/BASELINE.md](owngo/BASELINE.md); зміна не має додавати нових.
+- `owngo/fixtures.sh [llgo]` — усі програми прийняття `owngo/*`: під `owngo/asan` фікстура `*uaf` має впасти зі звітом ASan, решта — код 0.
+- CI форку перевіряє лише owngo: workflow `OwnGo` (`go test` пакетів owngo, фікстури, `GOROOT/test` під `-tags=owngo` з додатковими xfail з [owngo/goroot-xfail.yaml](owngo/goroot-xfail.yaml)) і `OwnGo binary-trees` (корпус бенчмарків). Upstream-перевірки llgo (embedded, wasm, релізи) у форку вимкнено.
 
 ## Документи
 
@@ -80,5 +101,6 @@ llgo run -tags owngo -O0 -asan .   # debug-збірка під ASan
 - [PROGRESS.md](PROGRESS.md) — журнал сесій.
 - [LLGO.md](LLGO.md) — опис llgo від upstream: підтримка Go, інтероп із C, залежності, встановлення.
 - [owngo/BASELINE.md](owngo/BASELINE.md) — відомі падіння `go test ./...`.
+- [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md) — корпус бенчмарків і профілі збірки.
 - [owngo/ROADMAP-PERF.md](owngo/ROADMAP-PERF.md) — етапи треку швидкодії.
 - `owngo/REPORT-*.md` — заміри фаз і бенчмарків.
