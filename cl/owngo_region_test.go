@@ -1,9 +1,11 @@
 package cl
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xgo-dev/llgo/owngo/census"
+	"github.com/xgo-dev/llvm"
 	gossa "golang.org/x/tools/go/ssa"
 )
 
@@ -196,6 +198,52 @@ func TestOwnGoRegionRoot(t *testing.T) {
 		}
 		if got := len(roots) == 1; got != tt.root || len(roots) > 1 {
 			t.Errorf("PlaceAll(%s) region roots = %v, want root %v", tt.fn, roots, tt.root)
+		}
+	}
+}
+
+// TestOwnGoRegionCodegen — P-NEW-05.4: корінь регіону створює регіон, кличе
+// клон будівника і звільняє регіон замість DecCyclic. Клон виділяє вузли в
+// регіоні; будівник і функції без кореня — без змін.
+func TestOwnGoRegionCodegen(t *testing.T) {
+	mod := compileOwnGoFree(t, ownGoRegionSrc, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.counted", "foo.childAfter", "foo.loop"} {
+		body := mustNamedFunction(t, mod, name).String()
+		for _, want := range []string{"runtime.RegionCreate", `@"foo.NewTree$region"`, "runtime.FreeRegion"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s has no %s", name, want)
+			}
+		}
+		if strings.Contains(body, "runtime.DecCyclic") {
+			t.Errorf("%s has runtime.DecCyclic, want FreeRegion", name)
+		}
+	}
+	clone := mustNamedFunction(t, mod, "foo.NewTree$region").String()
+	for _, want := range []string{"runtime.RegionAlloc", `@"foo.NewTree$region"`} {
+		if !strings.Contains(clone, want) {
+			t.Errorf("foo.NewTree$region has no %s", want)
+		}
+	}
+	if strings.Contains(clone, "runtime.AllocCounted") {
+		t.Error("foo.NewTree$region has runtime.AllocCounted, want RegionAlloc")
+	}
+	builder := mustNamedFunction(t, mod, "foo.NewTree").String()
+	if !strings.Contains(builder, "runtime.AllocCounted") || strings.Contains(builder, "runtime.RegionAlloc") {
+		t.Error("foo.NewTree changed, want AllocCounted and no RegionAlloc")
+	}
+	for _, name := range []string{
+		"foo.grafted", "foo.stashed", "foo.returned", "foo.returnsLeft", "foo.childGo",
+		"foo.childChan", "foo.childGlobal", "foo.childUnsafe", "foo.writeNil", "foo.carried",
+		"foo.deferWrite", "foo.writeChild", "foo.aliased", "foo.notBuilder",
+	} {
+		body := mustNamedFunction(t, mod, name).String()
+		for _, unwanted := range []string{"runtime.RegionCreate", "runtime.FreeRegion", "$region"} {
+			if strings.Contains(body, unwanted) {
+				t.Errorf("%s has %s, want no region", name, unwanted)
+			}
 		}
 	}
 }

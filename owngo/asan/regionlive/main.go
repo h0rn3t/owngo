@@ -1,7 +1,9 @@
 //go:build owngo
 
-// Програма прийняття P-NEW-05.3: дерево в регіоні читається до FreeRegion
-// і більше не читається. Під -asan — код 0 без тексту ASan.
+// Програма прийняття P-NEW-05.3 і P-NEW-05.4: дерево в регіоні читається до
+// FreeRegion і більше не читається — і з рантаймом напряму, і з регіоном,
+// який вивів компілятор (newTree — будівник, t — корінь). Під -asan — код 0
+// без тексту ASan.
 package main
 
 import "unsafe"
@@ -14,6 +16,29 @@ func regionAlloc(r unsafe.Pointer, size uintptr) unsafe.Pointer
 
 //go:linkname freeRegion github.com/xgo-dev/llgo/runtime/internal/runtime.FreeRegion
 func freeRegion(r unsafe.Pointer)
+
+//go:linkname live github.com/xgo-dev/llgo/runtime/internal/runtime.Live
+func live(cat int32) uint64
+
+const catRegion = 6 // runtime.CatRegion
+
+type tree struct {
+	left, right *tree
+}
+
+func newTree(depth int) *tree {
+	if depth > 0 {
+		return &tree{left: newTree(depth - 1), right: newTree(depth - 1)}
+	}
+	return &tree{}
+}
+
+func (t *tree) count() int {
+	if t.left == nil {
+		return 1
+	}
+	return 1 + t.left.count() + t.right.count()
+}
 
 type node struct {
 	left, right *node
@@ -44,6 +69,17 @@ func main() {
 		big[len(big)-1] = 1
 		total += int(big[len(big)-1])
 		freeRegion(r)
+	}
+	for depth := range 12 {
+		t := newTree(depth)
+		if live(catRegion) == 0 {
+			// Під -asan кожен вузол регіону — окремий блок, і Live росте з першого.
+			panic("compiler region: Live(region) = 0 while the tree is live")
+		}
+		total += t.count()
+	}
+	if live(catRegion) != 0 {
+		panic("compiler region: Live(region) != 0 after the last read")
 	}
 	println("regionlive-ok", total)
 }

@@ -93,6 +93,10 @@ func recv(c chan int) *Tree { return &Tree{Val: <-c} }
 
 func concat(s string) *Tree { return &Tree{Val: len(s + "x")} }
 
+func closure(d int) func() *Tree {
+	return func() *Tree { return &Tree{Val: d} }
+}
+
 func viaUnsafe(p *int) *Tree { return &Tree{Val: int(uintptr(unsafe.Pointer(p)))} }
 `
 
@@ -103,7 +107,13 @@ func viaUnsafe(p *int) *Tree { return &Tree{Val: int(uintptr(unsafe.Pointer(p)))
 func TestBuilder(t *testing.T) {
 	for _, mode := range []ssa.BuilderMode{ssa.SanityCheckFunctions, ssa.SanityCheckFunctions | ssa.GlobalDebug} {
 		pkg := buildOnePackage(t, "example.com/p", builderSrc, mode)
-		sums := packageSummaries(nil, ssaFuncs(pkg))
+		funcs := ssaFuncs(pkg)
+		anon := pkg.Func("closure").AnonFuncs[0]
+		sums := packageSummaries(nil, append(funcs, anon))
+		// Клон будівника — звичайна функція без оточення замикання.
+		if sum := sums[anon]; !sum.Fresh || sum.Builder {
+			t.Errorf("mode %v: packageSummaries(closure$1) Fresh, Builder = %v, %v, want true, false", mode, sum.Fresh, sum.Builder)
+		}
 		tests := []struct {
 			fn      string
 			fresh   bool
