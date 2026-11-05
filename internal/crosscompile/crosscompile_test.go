@@ -15,6 +15,7 @@ import (
 	"github.com/xgo-dev/llgo/internal/lto"
 	"github.com/xgo-dev/llgo/internal/optlevel"
 	"github.com/xgo-dev/llgo/internal/xtool/llvm"
+	gollvm "github.com/xgo-dev/llvm"
 )
 
 const (
@@ -23,6 +24,17 @@ const (
 	includePrefix     = "-I"
 	libPrefix         = "-L"
 )
+
+// ESP clang компілює IR, який генерує компілятор, тому його мажорна версія
+// має збігатися з версією LLVM, з якою злінковано компілятор: старший clang
+// не розбирає новий синтаксис IR (наприклад, `double +inf` з LLVM 23).
+func TestESPClangMatchesLLVMMajor(t *testing.T) {
+	espMajor, _, _ := strings.Cut(espClangVersion, ".")
+	llvmMajor, _, _ := strings.Cut(gollvm.Version, ".")
+	if espMajor != llvmMajor {
+		t.Errorf("ESP Clang %s, LLVM %s: major versions differ", espClangVersion, gollvm.Version)
+	}
+}
 
 func TestESPClangHostDownload(t *testing.T) {
 	tests := []struct {
