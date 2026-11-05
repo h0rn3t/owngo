@@ -97,6 +97,12 @@ func kept(depth int) int {
 	if !regexp.MustCompile(`__owngo_sites\$ctor.*section "\.init_array"|@llvm\.global_ctors = appending .*__owngo_sites\$ctor`).MatchString(ir) {
 		t.Error("module does not run foo.__owngo_sites$ctor as a constructor")
 	}
+	// Запис .init_array ніхто не використовує: без llvm.compiler.used його
+	// викидає GlobalDCE під -lto, і таблиця мовчки зникає.
+	if strings.Contains(ir, `@"foo.__owngo_sites$init" =`) &&
+		!regexp.MustCompile(`@llvm\.compiler\.used = appending global .*@"foo\.__owngo_sites\$init"`).MatchString(ir) {
+		t.Error("foo.__owngo_sites$init is not in llvm.compiler.used, want it kept under LTO")
+	}
 
 	off := compileOwnGo(t, src, Options{OwnGoFree: true}).String()
 	for _, s := range []string{"__owngo_site", "RegisterSites", "atomicrmw"} {
