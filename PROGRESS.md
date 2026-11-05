@@ -1081,3 +1081,11 @@
   - P-NEW-05.1–05.4 спираються лише на P6.5–P6.8, P8.4, P8.5 — план пропонує зняти умову «регіони після P-NEW-02»; до рішення умова лишається.
 - Коду не змінено, тести не запускались.
 - Лишилось: вибір програм корпусу C і рішення про залежність D від C; P11.4 чекає вибору сервісу; P-NEW-07 (етап E) не розписаний; типовий профіль `owngo`; PR S3; `bytes/imconcat`.
+
+## 2026-11-05 — P-NEW-02.0 Лічильники операцій рантайму
+
+- Тест спершу (`407aae61f`): фікстура `owngo/opstat` під `owngo,owngostat` — вісім горутин по n ітерацій (`AllocCounted`/`Inc`/два `DecAccounted`, ланцюг двох вузлів під `DecCyclic`, `IncShared`/два `DecShared`, `AllocRoot`/`FreeRoot`, `NoteAlloc`/`FreeAccounted`), різниця `OpCount` між знімками порівнюється точно. До реалізації — `undefined symbol: …runtime.OpCount`, код 1.
+- Рантайм: номери операцій у `account_owngo.go`; `opstat_owngo.go` (`owngo && owngostat`) — лічильники в шарді потоку з тим самим індексом, що облік S2 (`myShardIndex`), `OpCount`, рядки `owngo ops <назва> <n>` у `ReportExit`; `opstat_off_owngo.go` — порожні `countOp`/`reportOps`. Рахується кожен виклик: `alloc` (`AllocU`, отже й `AllocZ` і `AllocCounted`), `alloc_root`, `alloc_counted`, `inc`, `dec_accounted`, `dec_cyclic`, `cyclic_visit` (вузли trial deletion, крім кореня), `inc_shared`, `dec_shared`, `free_accounted`, `free_root`, `note_alloc_<категорія>`. Під `owngoasan` купу веде `z_nogc.go` upstream — `alloc`, `alloc_root`, `free_root` там не рахуються (записано в `PLAN.md`).
+- Прийняття: `llgo run -tags owngo,owngostat ./owngo/opstat` — код 0, `opstat-ok 100000`. `owngo/cyclic` під `-tags owngo` — код 0, рядків `owngo ops` немає. `LLGO_ROOT=… go test -count=1 ./cl/ -run OwnGo` з чистим `~/.cache/llgo` — `ok` (40 `PASS`). `owngo/asan/clean` під `-O0 -asan -tags owngo` з `detect_leaks=0` — код 0 без тексту ASan. `go vet -tags owngo,nogc[,owngostat] ./internal/runtime` (модуль `runtime`) — без нових знахідок.
+- binary-trees `18`, `-tags owngo -O2 -lto thin`, по п'ять прогонів з чергуванням (`rusage`): wall до 0.920 с (0.870–0.966), після 0.921 с (0.890–0.943); user 3.50 с проти 3.53 с — у межах розкиду; вивід обох однаковий.
+- Лишилось: P-NEW-02.1 (таблиця місць); вибір програм корпусу C і рішення про залежність D від C.

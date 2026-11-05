@@ -24,6 +24,7 @@ func owngoBase(ptr c.Pointer) c.Pointer
 // AllocU allocates uninitialized memory and returns a non-nil pointer or panics.
 // Zero-byte requests return the shared zerobase without allocating.
 func AllocU(size uintptr) unsafe.Pointer {
+	countOp(opAlloc)
 	if size == 0 {
 		return unsafe.Pointer(&zerobase)
 	}
@@ -43,6 +44,7 @@ func AllocZ(size uintptr) unsafe.Pointer {
 }
 
 func AllocRoot(size uintptr) unsafe.Pointer {
+	countOp(opAllocRoot)
 	if size == 0 {
 		return unsafe.Pointer(&zerobase)
 	}
@@ -56,6 +58,7 @@ func AllocRoot(size uintptr) unsafe.Pointer {
 // FreeRoot звільняє блок AllocRoot. nil і zerobase нічого не звільняють, як
 // free(nil): рядок з порожнього зрізу має data == nil.
 func FreeRoot(ptr unsafe.Pointer) {
+	countOp(opFreeRoot)
 	if ptr == nil || ptr == unsafe.Pointer(&zerobase) {
 		return
 	}

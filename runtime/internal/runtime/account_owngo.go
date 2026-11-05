@@ -46,14 +46,37 @@ var (
 //llgointernal:tls
 var currentAccountShard uint32
 
-func myAccountShard() *accountShard {
+// myShardIndex — номер шарду потоку, спільний для обліку і лічильників операцій.
+func myShardIndex() uint32 {
 	i := currentAccountShard
 	if i == 0 {
 		i = atomic.Add(&nextAccountShard, 1)%accountShardCount + 1
 		currentAccountShard = i
 	}
-	return &accountShards[(i-1)%accountShardCount]
+	return (i - 1) % accountShardCount
 }
+
+func myAccountShard() *accountShard {
+	return &accountShards[myShardIndex()]
+}
+
+// Операції, які рахує тег owngostat (countOp). Номер opNoteAlloc+cat —
+// виклик NoteAlloc категорії cat. Рахується кожен виклик, і з nil чи zerobase.
+const (
+	opAlloc int32 = iota
+	opAllocRoot
+	opAllocCounted
+	opInc
+	opDecAccounted
+	opDecCyclic
+	opCyclicVisit // вузол, крім кореня, відвіданий trial deletion
+	opIncShared
+	opDecShared
+	opFreeAccounted
+	opFreeRoot
+	opNoteAlloc
+	opCount = opNoteAlloc + catCount
+)
 
 // NoteAlloc додає size байтів до живих місць категорії cat.
 // Нульовий розмір і категорія поза 0…5 нічого не змінюють.
@@ -61,6 +84,7 @@ func NoteAlloc(size uintptr, cat int32) {
 	if size == 0 || cat < 0 || cat >= catCount {
 		return
 	}
+	countOp(opNoteAlloc + cat)
 	atomic.Add(&myAccountShard().live[cat], uint64(size))
 }
 
@@ -80,6 +104,7 @@ func noteFree(size uintptr, cat int32) {
 // із живих у звільнені. Нульовий розмір і категорія поза 0…5 блок звільняють,
 // лічильники не чіпають. zerobase лишається.
 func FreeAccounted(ptr unsafe.Pointer, size uintptr, cat int32) {
+	countOp(opFreeAccounted)
 	if !isZeroBase(ptr) {
 		FreeRoot(ptr)
 	}
@@ -91,6 +116,7 @@ func FreeAccounted(ptr unsafe.Pointer, size uintptr, cat int32) {
 // Нульовий size дає спільний zerobase, як AllocU. Слово не атомарне
 // і в розмір NoteAlloc не входить.
 func AllocCounted(size uintptr) unsafe.Pointer {
+	countOp(opAllocCounted)
 	if size == 0 {
 		return unsafe.Pointer(&zerobase)
 	}
@@ -102,6 +128,7 @@ func AllocCounted(size uintptr) unsafe.Pointer {
 
 // Inc збільшує слово перед ptr на одиницю. zerobase і nil лишаються.
 func Inc(ptr unsafe.Pointer) {
+	countOp(opInc)
 	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
@@ -114,6 +141,7 @@ func Inc(ptr unsafe.Pointer) {
 // FreeAccounted з категорією CatRCLocal. FreeAccounted на ptr не кличеться:
 // це середина блока. zerobase нічого не звільняє. Слово не атомарне.
 func DecAccounted(ptr unsafe.Pointer, size uintptr) {
+	countOp(opDecAccounted)
 	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
@@ -155,6 +183,7 @@ type CyclicEdge struct {
 // списком оброблених від останнього: слово вузла знову стає лічильником
 // раніше, ніж відновлюється ребро, яке довело його до нуля.
 func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
+	countOp(opDecCyclic)
 	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
@@ -177,6 +206,7 @@ func DecCyclic(ptr unsafe.Pointer, desc *CyclicDesc) {
 	var work, done uintptr
 	work = trialEdges(ptr, desc, ptr, table, work)
 	for work != 0 {
+		countOp(opCyclicVisit)
 		node := unsafe.Pointer(work)
 		w := countWord(node)
 		work = *w &^ cyclicIndexMask
@@ -301,6 +331,7 @@ type SharedEdge struct {
 // IncShared атомарно збільшує слово перед ptr на одиницю. zerobase і nil
 // лишаються.
 func IncShared(ptr unsafe.Pointer) {
+	countOp(opIncShared)
 	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
@@ -321,6 +352,7 @@ func IncShared(ptr unsafe.Pointer) {
 // тримає посилання стеку роботи, а три нижні біти — індекс дескриптора
 // в таблиці досяжних з desc дескрипторів.
 func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
+	countOp(opDecShared)
 	if ptr == nil || isZeroBase(ptr) {
 		return
 	}
@@ -453,7 +485,8 @@ func Live(cat int32) uint64 {
 }
 
 // ReportExit друкує байти, звільнені FreeAccounted, і байти, що дожили
-// до виходу, за категорією місця.
+// до виходу, за категорією місця. З тегом owngostat далі йдуть рядки
+// owngo ops з кількістю кожної операції.
 func ReportExit() {
 	freed := Freed()
 	var live [catCount]uint64
@@ -487,4 +520,5 @@ func ReportExit() {
 	if !printed {
 		println("owngo live", 0)
 	}
+	reportOps()
 }
