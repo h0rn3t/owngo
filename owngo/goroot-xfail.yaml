@@ -1,0 +1,13 @@
+# Випадки GOROOT/test, які під тегом owngo не можуть пройти за задумом: owngo
+# не має трасувального збирача (INTENT.md). Workflow owngo.yml додає ці записи
+# до test/goroot/xfail.yaml; підстави — owngo/REPORT-PHASE11.md.
+xfails:
+  - directive: run
+    case: init1.go
+    reason: "owngo: no tracing collector, so runtime.NumGC never grows"
+  - directive: run
+    case: mallocfin.go
+    reason: "owngo: no tracing collector, so runtime.SetFinalizer finalizers never run"
+  - directive: run
+    case: tinyfin.go
+    reason: "owngo: no tracing collector, so runtime.SetFinalizer finalizers never run"
