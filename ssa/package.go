@@ -1018,6 +1018,11 @@ func (p Package) markLLVMUsed(v llvm.Value) {
 	p.llvmUsedValues = append(p.llvmUsedValues, llvm.ConstBitCast(v, elemTyp))
 }
 
+// MarkLLVMUsed keeps v alive through optimization and LTO via llvm.compiler.used.
+func (p Package) MarkLLVMUsed(v llvm.Value) {
+	p.markLLVMUsed(v)
+}
+
 func (p Package) MaterializePreserveSyms() {
 	if len(p.llvmUsedValues) == 0 {
 		return

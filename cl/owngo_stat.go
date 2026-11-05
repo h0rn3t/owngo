@@ -147,6 +147,8 @@ func (p *context) finishOwnGoSites() {
 		entry.SetGlobalConstant(true)
 		entry.SetSection(".init_array")
 		entry.SetVisibility(llvm.HiddenVisibility)
+		// Запис ніхто не читає: без compiler.used його викидає GlobalDCE під -lto.
+		p.pkg.MarkLLVMUsed(entry)
 		return
 	}
 	ctx := mod.Context()
