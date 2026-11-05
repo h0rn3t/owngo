@@ -266,6 +266,12 @@ type context struct {
 	ownGoShared          map[ssa.Instruction]census.Shared
 	ownGoGoShared        map[*ssa.Go][]ssa.Value
 	ownGoSharedDescs     map[ssa.Instruction]llssa.Expr
+	// Регіони P-NEW-05.4: корені пакета, будівники з клонами, регіон
+	// кожного кореня поточної функції і параметр регіону тіла клону.
+	ownGoRegions     map[ssa.Instruction]struct{}
+	ownGoBuilders    map[*ssa.Function]bool
+	ownGoRegionOf    map[ssa.Value]llssa.Expr
+	ownGoRegionParam llssa.Expr
 	// ownGoGoSites — місця, яким рутина поточного go ставить DecShared.
 	ownGoGoSites []ssa.Value
 	// ownGoGoCtx — замикання поточного go, контекст якого звільняє рутина;
@@ -826,7 +832,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 		dbgEnabled := p.options.Debug
 		dbgSymsEnabled := p.options.DebugSymbols && (f == nil || f.Origin() == nil)
-		p.inits = append(p.inits, func() {
+		body := func(fn llssa.Function) {
 			oldFn, oldGoFn, oldMethodNilDerefChecks, oldCallerFrameMark := p.fn, p.goFn, p.methodNilDerefChecks, p.callerFrameMark
 			oldRecvNilDerefChecks := p.recvNilDerefChecks
 			oldLocalityFunction := p.locality.function
@@ -876,6 +882,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			p.bvals = make(map[ssa.Value]llssa.Expr)
 			p.ownGoFreeAfter, p.ownGoFreeEntry = ownGoFreeAfter(f, p.ownGoUses, false)
 			p.ownGoDecAfter, p.ownGoDecEntry = ownGoFreeAfter(f, p.ownGoDecUses, true)
+			p.ownGoRegionOf = nil
 			p.verifyOwnGo(f)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
 			p.prepareCooperativeSafepoints(f, isCgo)
@@ -909,12 +916,25 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			for _, phi := range p.phis {
 				phi()
 			}
-			for _, childInit := range childInits {
-				childInit()
+			// Анонімні функції компілює лише оригінал, не клон.
+			if !p.ownGoInRegionClone() {
+				for _, childInit := range childInits {
+					childInit()
+				}
 			}
 			p.panicSitePos = token.NoPos
 			b.EndBuild()
-		})
+		}
+		p.inits = append(p.inits, func() { body(fn) })
+		if p.ownGoBuilders[f] && f.Pkg == p.goPkg {
+			clone := p.ownGoRegionFunc(f)
+			clone.MakeBlocks(nblk)
+			p.inits = append(p.inits, func() {
+				p.ownGoRegionParam = clone.Param(0)
+				defer func() { p.ownGoRegionParam = llssa.Nil }()
+				body(clone)
+			})
+		}
 	}
 	return fn, goFunc
 }
@@ -1656,6 +1676,8 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		p.emitOwnGoInc(b, v)
 		if allocName, ok := p.ownGoAppendAlloc(v); ok {
 			ret = p.emitOwnedAppend(b, v, allocName)
+		} else if region, ok := p.ownGoRegionCall(b, v); ok {
+			ret = p.callOwnGoRegion(b, v, region)
 		} else {
 			ret = p.call(b, llssa.Call, &v.Call)
 		}
@@ -1857,7 +1879,9 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 			}
 			hoistToEntry = inLoop
 		}
-		if _, counted := p.ownGoCounted[v]; counted && p.prog.SizeOf(elem) > 0 {
+		if p.ownGoInRegionClone() && v.Heap {
+			ret = p.emitRegionAlloc(b, elem)
+		} else if _, counted := p.ownGoCounted[v]; counted && p.prog.SizeOf(elem) > 0 {
 			ret = p.emitAllocCounted(b, elem)
 		} else {
 			ret = b.AllocEx(elem, v.Heap, hoistToEntry)
@@ -2606,6 +2630,9 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 		fn := v.Parent()
 		for idx, param := range fn.Params {
 			if param == v {
+				if p.ownGoInRegionClone() {
+					idx++ // перший параметр клону — регіон
+				}
 				return b.Param(idx)
 			}
 		}

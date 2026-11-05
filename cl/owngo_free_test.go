@@ -525,15 +525,17 @@ func returned(depth int) *Tree {
 	if strings.Contains(newTree, "runtime.Inc") {
 		t.Error("foo.NewTree has runtime.Inc, want children moved into the fields")
 	}
+	// Викликач, що лише читає дерево, звільняє його регіон (P-NEW-05.4)
+	// замість DecCyclic.
 	for _, name := range []string{"foo.local", "foo.childAfter"} {
-		if !strings.Contains(mustNamedFunction(t, mod, name).String(), "runtime.DecCyclic") {
-			t.Errorf("%s has no runtime.DecCyclic", name)
+		if !strings.Contains(mustNamedFunction(t, mod, name).String(), "runtime.FreeRegion") {
+			t.Errorf("%s has no runtime.FreeRegion", name)
 		}
 	}
-	// DecCyclic звільняє дерево каскадом, тож стоїть після останнього читання дитини.
+	// Регіон звільняє все дерево разом, тож FreeRegion стоїть після останнього читання дитини.
 	body := mustNamedFunction(t, mod, "foo.childAfter").String()
-	if dec, load := strings.Index(body, "runtime.DecCyclic"), strings.LastIndex(body, "load ptr"); dec < load {
-		t.Errorf("foo.childAfter runtime.DecCyclic at %d before the last child load at %d", dec, load)
+	if free, load := strings.Index(body, "runtime.FreeRegion"), strings.LastIndex(body, "load ptr"); free < load {
+		t.Errorf("foo.childAfter runtime.FreeRegion at %d before the last child load at %d", free, load)
 	}
 	for _, name := range []string{"foo.stashed", "foo.returned"} {
 		if got := strings.Count(mustNamedFunction(t, mod, name).String(), "runtime.DecCyclic"); got != 0 {
@@ -584,11 +586,13 @@ func grafted(depth int) int {
 	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(mustNamedFunction(t, mod, "foo.counted").String(), "runtime.DecCyclic") {
-		t.Error("foo.counted has no runtime.DecCyclic")
+	// Count лише читає, тож дерево counted — у регіоні (P-NEW-05.4).
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.counted").String(), "runtime.FreeRegion") {
+		t.Error("foo.counted has no runtime.FreeRegion")
 	}
-	if strings.Contains(mustNamedFunction(t, mod, "foo.grafted").String(), "runtime.DecCyclic") {
-		t.Error("foo.grafted has runtime.DecCyclic, want the tree live after graft")
+	grafted := mustNamedFunction(t, mod, "foo.grafted").String()
+	if strings.Contains(grafted, "runtime.DecCyclic") || strings.Contains(grafted, "runtime.FreeRegion") {
+		t.Error("foo.grafted releases the tree, want it live after graft")
 	}
 }
 
@@ -653,8 +657,9 @@ func carried(n int) int {
 	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(mustNamedFunction(t, mod, "foo.trees").String(), "runtime.DecCyclic") {
-		t.Error("foo.trees has no runtime.DecCyclic in the loop body")
+	// Дерево trees лише читають — його регіон звільняється в тілі циклу (P-NEW-05.4).
+	if !strings.Contains(mustNamedFunction(t, mod, "foo.trees").String(), "runtime.FreeRegion") {
+		t.Error("foo.trees has no runtime.FreeRegion in the loop body")
 	}
 	if !strings.Contains(mustNamedFunction(t, mod, "foo.ints").String(), "runtime.FreeAccounted") {
 		t.Error("foo.ints has no runtime.FreeAccounted in the loop body")

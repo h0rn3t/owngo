@@ -9,7 +9,7 @@ import (
 )
 
 // ownGoOpCall — виклик операції рантайму, яку codegen ставить місцю.
-var ownGoOpCall = regexp.MustCompile(`call [^\n]*@"[^"]*runtime\.(AllocZ|AllocU|AllocCounted|NoteAlloc|FreeAccounted|DecAccounted|DecCyclic|Inc)"\(`)
+var ownGoOpCall = regexp.MustCompile(`call [^\n]*@"[^"]*runtime\.(AllocZ|AllocU|AllocCounted|NoteAlloc|FreeAccounted|DecAccounted|DecCyclic|Inc|RegionCreate|RegionAlloc|FreeRegion)"\(`)
 
 // TestOwnGoStatSites — P-NEW-02.1: під OwnGoStat кожна операція рантайму
 // місця static, rc-local і cyclic отримує свій лічильник, а таблиця пакета
@@ -49,12 +49,21 @@ func closureUse() int {
 	f := func() int { return *p }
 	return f() + *p
 }
+
+func kept(depth int) int {
+	a := NewTree(depth)
+	a.Left = nil
+	if a.Right == nil {
+		return 1
+	}
+	return 2
+}
 `
 	mod := compileOwnGo(t, src, Options{OwnGoFree: true, OwnGoStat: true})
 	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"foo.NewTree", "foo.local", "foo.staticNew", "foo.closureUse"} {
+	for _, name := range []string{"foo.NewTree", "foo.NewTree$region", "foo.local", "foo.staticNew", "foo.closureUse", "foo.kept"} {
 		body := mustNamedFunction(t, mod, name).String()
 		ops := len(ownGoOpCall.FindAllString(body, -1))
 		counters := strings.Count(body, `atomicrmw add ptr @"foo.__owngo_site$`)
@@ -70,7 +79,12 @@ func closureUse() int {
 		`:29 rc-local [^ "]+ alloc_counted`,
 		`:29 rc-local [^ "]+ dec_accounted`,
 		`:9 cyclic [^ "]+ alloc_counted`,
-		`:15 cyclic - dec_cyclic`,
+		// local лише читає дерево — корінь регіону (P-NEW-05.4); kept пише
+		// в нього й лишається на DecCyclic.
+		`:9 cyclic [^ "]+ alloc_region`,
+		`:15 cyclic - region_create`,
+		`:15 cyclic - free_region`,
+		`:36 cyclic - dec_cyclic`,
 	} {
 		if !regexp.MustCompile(row + `"`).MatchString(ir) {
 			t.Errorf("site table has no row matching %q", row)

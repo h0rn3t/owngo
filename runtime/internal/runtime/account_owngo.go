@@ -79,7 +79,15 @@ const (
 	opFreeAccounted
 	opFreeRoot
 	opNoteAlloc
-	opCount = opNoteAlloc + catCount
+)
+
+// Операції регіону P-NEW-05.4 — після рядків NoteAlloc, щоб номери
+// попередніх не зсунулись.
+const (
+	opRegionCreate = opNoteAlloc + catCount + iota
+	opAllocRegion
+	opFreeRegion
+	opCount
 )
 
 // NoteAlloc додає size байтів до живих місць категорії cat.

@@ -46,8 +46,11 @@ type Placement struct {
 	Shared     map[ssa.Instruction]Shared
 	GoShared   map[*ssa.Go][]ssa.Value
 	// Regions — виклики будівників, які стають коренями регіону (P-NEW-05.2).
-	// Codegen їх поки не змінює.
 	Regions map[ssa.Instruction]struct{}
+	// Builders — будівники цих функцій і будівники, яких вони кличуть, зокрема
+	// з інших пакетів (P-NEW-05.1): codegen дає першим клон F$region, а в
+	// клоні кличе клони других.
+	Builders map[*ssa.Function]bool
 }
 
 // PlaceAll — Place разом з місцями спільної втечі через go (P9.3).
@@ -61,6 +64,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		shared     map[ssa.Instruction]Shared
 		goShared   map[*ssa.Go][]ssa.Value
 		regions    map[ssa.Instruction]struct{}
+		builders   map[*ssa.Function]bool
 	)
 	if len(funcs) == 0 {
 		return Placement{}
@@ -74,6 +78,23 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 	for _, fn := range funcs {
 		if fn == nil || len(fn.Blocks) == 0 {
 			continue
+		}
+		if sum := ctx.sums[fn]; sum != nil && sum.Builder {
+			if builders == nil {
+				builders = map[*ssa.Function]bool{}
+			}
+			builders[fn] = true
+			for _, block := range fn.Blocks {
+				for _, instr := range block.Instrs {
+					call, ok := instr.(*ssa.Call)
+					if !ok || call.Call.StaticCallee() == nil {
+						continue
+					}
+					if sum := summaryOf(ctx, call.Call.StaticCallee()); sum != nil && sum.Builder {
+						builders[call.Call.StaticCallee()] = true
+					}
+				}
+			}
 		}
 		msg, pts, contents := messages(fn, ifaceStrict, nil, ctx)
 		ctx.blockDec(exitSites(fn, pts, contents))
@@ -178,6 +199,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		Shared:     shared,
 		GoShared:   goShared,
 		Regions:    regions,
+		Builders:   builders,
 	}
 }
 

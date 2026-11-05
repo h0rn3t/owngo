@@ -45,6 +45,7 @@ const regionHeader = (unsafe.Sizeof(region{}) + regionAlign - 1) &^ (regionAlign
 
 // RegionCreate повертає новий порожній регіон.
 func RegionCreate() unsafe.Pointer {
+	countOp(opRegionCreate)
 	if regionPerObject {
 		r := (*region)(AllocRoot(unsafe.Sizeof(region{})))
 		*r = region{}
@@ -67,6 +68,7 @@ func RegionCreate() unsafe.Pointer {
 // пам'яті отримують байти й об'єкти, коли регіон бере новий шматок чи
 // блок, і в FreeRegion.
 func RegionAlloc(rp unsafe.Pointer, size uintptr) unsafe.Pointer {
+	countOp(opAllocRegion)
 	if size == 0 {
 		return unsafe.Pointer(&zerobase)
 	}
@@ -110,6 +112,7 @@ func (r *region) allocSlow(size, n uintptr) unsafe.Pointer {
 // FreeRegion звільняє всі об'єкти регіону r і сам регіон і переносить
 // байти користувача з Live(CatRegion) у Freed. nil нічого не робить.
 func FreeRegion(rp unsafe.Pointer) {
+	countOp(opFreeRegion)
 	if rp == nil {
 		return
 	}

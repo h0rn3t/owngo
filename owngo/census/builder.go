@@ -25,8 +25,10 @@ func builderResults(funcs []*ssa.Function, fresh map[*ssa.Function]bool) map[*ss
 		}
 		return out
 	}
+	// Клон будівника (P-NEW-05.4) — звичайна функція: оточення замикання
+	// йому немає звідки взяти.
 	for fn := range fresh {
-		if !returnsInterior(fn) {
+		if !returnsInterior(fn) && len(fn.FreeVars) == 0 {
 			out[fn] = true
 		}
 	}

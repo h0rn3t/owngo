@@ -66,18 +66,23 @@ func child(n int) {
 	done := make(chan struct{})
 	s := 0
 	for range n {
-		s += staticNew() + closureUse() + local(1) + capture(done)
+		s += staticNew() + closureUse() + local(1) + capture(done) + cyclicKept(1)
 	}
 	println("opsite-child", s)
 }
 
 // want — рядки цього файлу: «рядок категорія причина операція» → разів за
-// ітерацію дитини. NewTree(1) дає три вузли; у closureUse два купові Alloc
-// на одному рядку — слот змінної і new(int).
+// ітерацію дитини. NewTree(1) дає три вузли: у local — у регіоні клону
+// NewTree$region (P-NEW-05.4), у cyclicKept — AllocCounted під DecCyclic.
+// У closureUse два купові Alloc на одному рядку — слот змінної і new(int).
 var want = map[string]uint64{
 	"24 cyclic return alloc_counted":    1,
 	"26 cyclic return alloc_counted":    2,
-	"30 cyclic - dec_cyclic":            1,
+	"24 cyclic return alloc_region":     1,
+	"26 cyclic return alloc_region":     2,
+	"30 cyclic - region_create":         1,
+	"30 cyclic - free_region":           1,
+	"189 cyclic - dec_cyclic":           1,
 	"38 static - alloc":                 1,
 	"38 static - note_alloc":            1,
 	"38 static - free_accounted":        1,
@@ -175,4 +180,16 @@ func check(report string, n uint64) error {
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "opsite: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// cyclicKept — дерево, у яке пишуть після побудови, не стає регіоном
+// (P-NEW-05.2) і лишається на DecCyclic. Лист a.Left і так має Left == nil,
+// тож запис нічого не відриває.
+func cyclicKept(depth int) int {
+	a := NewTree(depth)
+	a.Left.Left = nil
+	if a.Right == nil {
+		return 1
+	}
+	return 2
 }

@@ -38,6 +38,8 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 	p.ownGoInc = place.Inc
 	p.ownGoShared = place.Shared
 	p.ownGoGoShared = place.GoShared
+	p.ownGoRegions = place.Regions
+	p.ownGoBuilders = place.Builders
 	p.ownGoLabel = cats
 	if len(cats) == 0 {
 		return
@@ -393,6 +395,9 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 		// Свіжий результат уже облікував викликаний код.
 		return
 	}
+	if _, alloc := instr.(*ssa.Alloc); alloc && p.ownGoInRegionClone() {
+		return // байти регіону облікує RegionAlloc
+	}
 	p.countOwnGoSite(b, val, "note_alloc")
 	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, p.ownGoSizeExpr(b, val), cat)
 }
@@ -432,6 +437,11 @@ func (p *context) emitOwnGoFreeSites(b llssa.Builder, sites []ssa.Value) {
 
 func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 	for _, site := range sites {
+		if region, ok := p.ownGoRegionOf[site]; ok {
+			p.countOwnGoSite(b, site, "free_region")
+			p.callFreeRegion(b, region)
+			continue
+		}
 		ptr := p.ownGoFreePtr(b, site)
 		if ptr.IsNil() {
 			continue

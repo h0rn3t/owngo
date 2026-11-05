@@ -88,6 +88,9 @@ func (p *context) countOwnGoAlloc(b llssa.Builder, instr ssa.Instruction) {
 		if n, _ := p.ownGoSiteSize(val); n > 0 && p.isOwnGoCounted(instr) {
 			op = "alloc_counted"
 		}
+		if p.ownGoInRegionClone() {
+			op = "alloc_region"
+		}
 	case *ssa.Call:
 		name, ok := p.ownGoAppendAlloc(instr)
 		if !ok {

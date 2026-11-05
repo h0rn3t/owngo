@@ -212,7 +212,7 @@ func TestOwnGoRegionCodegen(t *testing.T) {
 	}
 	for _, name := range []string{"foo.counted", "foo.childAfter", "foo.loop"} {
 		body := mustNamedFunction(t, mod, name).String()
-		for _, want := range []string{"runtime.RegionCreate", `@"foo.NewTree$region"`, "runtime.FreeRegion"} {
+		for _, want := range []string{"runtime.RegionCreate", `call ptr @"foo.NewTree$region"`, "runtime.FreeRegion"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s has no %s", name, want)
 			}
@@ -222,10 +222,13 @@ func TestOwnGoRegionCodegen(t *testing.T) {
 		}
 	}
 	clone := mustNamedFunction(t, mod, "foo.NewTree$region").String()
-	for _, want := range []string{"runtime.RegionAlloc", `@"foo.NewTree$region"`} {
+	for _, want := range []string{"runtime.RegionAlloc", `call ptr @"foo.NewTree$region"`} {
 		if !strings.Contains(clone, want) {
 			t.Errorf("foo.NewTree$region has no %s", want)
 		}
+	}
+	if strings.Contains(clone, "@foo.NewTree(") {
+		t.Error("foo.NewTree$region calls foo.NewTree, want the children in the same region")
 	}
 	if strings.Contains(clone, "runtime.AllocCounted") {
 		t.Error("foo.NewTree$region has runtime.AllocCounted, want RegionAlloc")
@@ -238,6 +241,8 @@ func TestOwnGoRegionCodegen(t *testing.T) {
 		"foo.grafted", "foo.stashed", "foo.returned", "foo.returnsLeft", "foo.childGo",
 		"foo.childChan", "foo.childGlobal", "foo.childUnsafe", "foo.writeNil", "foo.carried",
 		"foo.deferWrite", "foo.writeChild", "foo.aliased", "foo.notBuilder",
+		// Корінь, який читає defer, точки смерті не має: регіон не звільнився б.
+		"foo.deferred",
 	} {
 		body := mustNamedFunction(t, mod, name).String()
 		for _, unwanted := range []string{"runtime.RegionCreate", "runtime.FreeRegion", "$region"} {
