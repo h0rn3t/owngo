@@ -725,7 +725,7 @@ M:N у ці задачі не входить.
     - `go test -count=1 ./cl/ -run OwnGo` зелений;
     - `GOROOT/test` з `-llgo-flags "-tags owngo"` (P11.3): множина `PASS` не менша, ніж на SHA до зміни; під ASan жодного `heap-use-after-free`, `double-free` чи `attempting free`.
 
-- [ ] **P-NEW-06 Замір binary-trees з регіонами.** `owngo/bench/binarytrees` (Go #2 без змін) під `owngo`:
+- [x] **P-NEW-06 Замір binary-trees з регіонами.** `owngo/bench/binarytrees` (Go #2 без змін) під `owngo`:
   - дерева робітників і `stretch tree` йдуть у регіони;
   - `longLivedTree` лишається `cyclic: go`.
 
