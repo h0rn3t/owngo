@@ -1,23 +1,188 @@
-# Етап C — зведення володіння, RC elision, стек
+# База етапу C (P-NEW-02.2)
 
-База етапу (корпус, `owngo ops`, розклад причин) — задача P-NEW-02.2, ще не зроблена: програми корпусу обирає розробник. Поки що тут лише замір вартості верифікатора P-NEW-03.1.
+Звіт фіксує базу, від якої міряються задачі етапу C (`PLAN.md`, P-NEW-02.3–04.3), і вирішує, які з них входять. Сирі дані лежать в `owngo/bench/stagec/`:
 
-## P-NEW-03.1 Верифікатор володіння: холодна збірка корпусу
+- `*.json` — вивід `compare.py`;
+- `*.stat` — stderr збірки `owngostat` (`owngo freed/live/ops/site`);
+- `goroot.txt` — розбір `GOROOT/test`.
 
-Верифікатор (`census.Verify`, з `cl` на кожну функцію з `owngo`) працює над SSA до codegen і бере рішення `cl` як є: читачів місць з `Placement` і точки, де `ownGoFreeAfter` ставить `FreeAccounted` чи `Dec*`.
+## Умови
 
-Холодна збірка — кожна з власним порожнім `XDG_CACHE_HOME` (кеш llgo і go), `-tags owngo -O2 -lto thin` (профіль треку), три кола з чергуванням «до» і «після». «До» — llgo з `0203ec9c3` (без верифікатора), «після» — той самий код з верифікатором. Рантайм в обох — з робочого дерева. Intel Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23.1.5, Linux 6.8.
+| | |
+| --- | --- |
+| SHA | заміри часу — `7c4204694`; лічильники — `cec42d3a3` (той самий компілятор плюс виправлення таблиці місць під LTO, див. нижче) |
+| CPU | Intel Xeon Gold 6240R @ 2.40GHz, 8 ядер (AVX-512) |
+| Go | go1.27.1 linux/amd64, `GOAMD64=v2` |
+| LLVM / clang | 23.1.5 (Debian) |
+| Rust | rustc 1.85.1, `-C target-cpu=ivybridge`, `codegen-units=1` |
+| C | gcc 14.2.0, `-O3 -fomit-frame-pointer -march=ivybridge`; libomp з LLVM 23; PCRE2 10.46 (`libpcre2-dev`, заголовки розпаковано в `~/.cache/owngo-pcre2`) |
+| Час | `compare.py`: 10 прогонів, варіанти чергуються, медіана wall; профіль треку — `-tags owngo -O2 -lto thin` |
+| Лічильники | `llgo build -tags owngo,owngostat -O2 -lto thin`, один прогін на тих самих входах |
 
-| Програма | До, с (мін–макс) | Після, с (мін–макс) |
+Корпус складається з трьох програм, які обрав розробник 2026-11-05, і трьох програм S1.1:
+
+| Програма | Варіант Go | Відхилення |
 | --- | --- | --- |
-| binarytrees | 27.3 (26.8–28.5) | 27.2 (26.7–28.3) |
-| fannkuchredux | 25.5 (25.5–25.9) | 25.5 (25.3–25.6) |
-| mandelbrot | 26.0 (26.0–26.3) | 25.7 (25.5–26.4) |
+| k-nucleotide | Go #3 | Go #7 не проходить `go vet` (`stringintconv` на `string(0)`) |
+| regex-redux | Go #3 (stdlib `regexp`) | Go #5 і #4 — cgo PCRE |
+| reverse-complement | Go #6 | — |
+| binary-trees, fannkuch-redux, mandelbrot | S1.1 | — |
 
-Різниця в межах розкиду: прохід лишається в типовій збірці `owngo` без окремого рішення. Усі 18 збірок — код 0, без помилки верифікатора.
+Вхід трьох нових програм — вивід `owngo/bench/fasta N` (Go #2).
 
-## P-NEW-03.1: прогони без помилки верифікатора
+## Час
 
-- `GOROOT/test` режиму `ci` (`.`, `fixedbugs`, 830 випадків) під `-tags owngo`, xfail як у `owngo.yml`, два шарди: 803 `pass`, 3 `expected-fail` (`init1.go`, `mallocfin.go`, `tinyfin.go`), 3 `host-skip`, 20 `not-applicable`, 1 `unexpected-fail` — `fixedbugs/issue14636.go`: падає еталонний `go run` (`cannot create a.out: permission denied`), як і без тегу. Тексту верифікатора (`release of`, `inc without pair`) у журналах немає.
-- `owngo/fixtures.sh` — 0 з 60 падінь (три відомі, як раніше); `go test ./cl/ -run OwnGo` — `ok`; корпус — таблиця вище.
-- Перевірка, що прохід справді ловить: тимчасово подвоєне звільнення в `ownGoFreeAfter` (не закомічено) зупиняє збірку рантайму на `internal/abi.NewName`: `double release of t12 = new [10]byte (nameLen) on path b4 -> b6 -> b8 -> b10`.
+`compare.py` повернув код 0 для всіх трьох програм. Вивід кожного варіанта побайтно збігся з очікуваним (`testdata`).
+
+| Програма, N | go | llgo | owngo `-Os` | **owngo thin** | owngo full | Rust | C |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| k-nucleotide, 25 000 000 | 4.06 | 6.00 | 6.39 | **5.33** | 5.51 | 1.41 (#7) | 3.61 (#1) |
+| regex-redux, 5 000 000 | 18.70 | 86.40 | 83.55 | **46.80** | 45.78 | 0.84 (#7) | 0.82 (#5) |
+| reverse-complement, 100 000 001 | 3.01 | 4.11 | 3.58 | **2.97** | 3.00 | 1.12 (#1) | 1.85 (#7) |
+
+Медіана wall, секунди. Пікова RSS варіанта owngo thin і відношення до `go`:
+
+| Програма | owngo thin, МБ | до `go` |
+| --- | ---: | ---: |
+| k-nucleotide | 151 | 1.06× |
+| regex-redux | 1456 | 3.4× |
+| reverse-complement | 2136 | 1.25× |
+
+Повні таблиці (user, sys, розмір, час збірки) — у `*.json`. Час binary-trees, fannkuch-redux і mandelbrot — у `REPORT-BENCH.md` (P-NEW-01, P-NEW-06).
+
+## Операції на корпусі
+
+Рядки `owngo ops` під owngo thin; нульові пропущено. RC — це сума `inc + dec_accounted + dec_cyclic + inc_shared + dec_shared`.
+
+| Програма | alloc | alloc_counted | RC | free_accounted | alloc_region | `owngo live` на виході, байти |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| k-nucleotide | 360 379 | 29 | **1** | 67 083 | 0 | rc-local 1 137 707; cyclic 3 296; pinned 1 024; rc-shared 563 |
+| regex-redux | 1 381 884 776 | 151 | **44** | 1 372 223 954 | 0 | **static 77 072 824**; rc-local 15 624; cyclic 18 928 |
+| reverse-complement | 754 719 | 7 | **0** | 249 050 | 0 | **rc-shared 125 879 195**; cyclic 343 544 |
+| binary-trees 21 | 4 200 162 | 4 194 315 | **54** | 68 | 609 572 191 | rc-local 6 412; pinned 1 408 |
+| fannkuch-redux 12 | 3 818 | 16 | **25** | 297 | 0 | rc-local 3 096 |
+| mandelbrot 16000 | 3 550 | 16 | **25** | 33 | 0 | rc-local 3 095 |
+
+Гіпотезу `PLAN.md` («корпус майже не навантажує RC») підтверджено й для трьох нових програм. На всьому корпусі `Inc` — 0, `Dec*` — не більше 54 на програму. Вартість лежить не в RC, а в купових алокаціях:
+
+- **regex-redux.** 1.38 млрд алокацій `static`, і кожна має `FreeAccounted`. З них 1 356 428 352 — один рядок, `regexp/exec.go:307` (`m.pool = append(m.pool, t)`), ще 15 790 855 — `exec.go:287` (той самий `append`). go/ssa дає для `append(s, x)` тимчасовий масив `new [1]*thread (varargs)`, і llgo кладе його в купу. `gc` такого масиву не створює.
+- **k-nucleotide.** 282 445 алокацій `rc-local return` у `main.go:91/108`: `n := counter(1); counts[key] = &n`, вказівник лежить у мапі. Ще 2 083 334 рахунки `NoteAlloc` у `main.go:198` (`append` у `data`).
+- **reverse-complement.** 249 030 алокацій `static` з позицією `:0` (місце без позиції в SSA). 16.7 млн `NoteAlloc` `rc-shared channel` у `main.go:119` (`append` у буфер, який далі йде каналом).
+
+## `GOROOT/test` `// run`
+
+Режим: `-tags owngo,owngostat`, `-directive-mode ci -dirs .,fixedbugs`, два шарди. З 830 випадків рядки `owngo ops` дали 803; решта не дійшли до виконання. Під `owngostat` кожен випадок дає `FAIL`, бо stderr не збігається з еталоном. Рядки беруться з логу випадку, тож на базу це не впливає.
+
+Сума `owngo ops` (нульові пропущено):
+
+| alloc | alloc_root | alloc_counted | inc | dec_accounted | dec_cyclic | inc_shared | dec_shared | free_accounted | free_root |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 50 733 027 | 46 674 | 2 773 058 | **14** | 124 646 | 9 | 32 052 | 33 867 | 9 325 325 | 7 597 647 |
+
+`note_alloc` за категорією: static 8 569 268, rc-local 7 154 066, rc-shared 5 153 001, pinned 2 103 432, cyclic 1 549 849. `region_create`, `alloc_region` і `free_region` — по 4.
+
+20 програм з найбільшим `Inc + Dec*`:
+
+| Програма | Inc+Dec* | inc | dec_accounted | inc_shared | dec_shared | alloc |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| rangegen.go | 87 055 | 0 | 87 055 | 0 | 0 | 2 239 610 |
+| gcgort.go | 64 577 | 0 | 1 216 | 30 880 | 32 481 | 379 189 |
+| fixedbugs/issue16037_run.go | 20 069 | 0 | 20 063 | 2 | 4 | 721 280 |
+| winbatch.go | 5 112 | 0 | 5 112 | 0 | 0 | 207 338 |
+| nosplit.go | 2 443 | 6 | 2 167 | 90 | 180 | 55 155 |
+| divmod.go | 2 084 | 0 | 2 084 | 0 | 0 | 413 805 |
+| fixedbugs/issue52127.go | 1 848 | 0 | 1 842 | 2 | 4 | 16 645 |
+| fixedbugs/issue19113.go | 1 280 | 0 | 1 280 | 0 | 0 | 33 583 |
+| fixedbugs/issue19658.go | 661 | 0 | 543 | 40 | 78 | 15 878 |
+| linkobj.go | 603 | 0 | 531 | 24 | 48 | 13 734 |
+| fixedbugs/issue30116.go | 567 | 0 | 567 | 0 | 0 | 51 716 |
+| fixedbugs/issue79186.go | 513 | 0 | 0 | 256 | 257 | 500 233 |
+| fixedbugs/issue9110.go | 420 | 0 | 0 | 200 | 220 | 6 161 |
+| fixedbugs/issue39541.go | 402 | 0 | 0 | 200 | 202 | 8 002 188 |
+| fixedbugs/issue30116u.go | 349 | 0 | 349 | 0 | 0 | 37 368 |
+| fixedbugs/issue22662b.go | 330 | 0 | 270 | 20 | 40 | 12 232 |
+| linkmain_run.go | 269 | 0 | 211 | 20 | 38 | 11 625 |
+| fixedbugs/issue59411.go | 200 | 0 | 200 | 0 | 0 | 61 839 |
+| fixedbugs/bug369.go | 184 | 0 | 154 | 10 | 20 | 10 249 |
+| fixedbugs/issue13160.go | 147 | 0 | 0 | 64 | 83 | 804 006 |
+
+`Inc` на всьому `GOROOT/test` — 14. Чотирнадцять разів на 50.7 млн алокацій: 8 у `regexp/onepass.go:165`, 6 у вузлах `cyclic`. `Dec*` — це майже лише `rc-local closure` (122 874) і пари `go` `inc_shared`/`dec_shared` (32 052 / 33 867).
+
+## Розклад причин
+
+Рядки `owngo site`, згруповані за категорією і причиною, сума за всіма операціями місця:
+
+| Категорія, причина | Корпус | `GOROOT/test` |
+| --- | ---: | ---: |
+| static, — | 4 136 627 256 | 19 445 676 |
+| rc-local, call | 1 372 219 826 | 4 396 197 |
+| cyclic, return (регіони binary-trees) | 617 965 299 | 3 072 234 |
+| rc-local, return | 31 510 396 | 8 297 901 |
+| rc-shared, channel | 16 668 751 | 2 000 318 |
+| unplaced (`AllocZ` поза `Place`) | 42 427 | 10 001 809 |
+| static, append | 0 | 10 590 577 |
+| pinned, unsafe | 86 | 4 451 034 |
+| rc-shared, global | 335 | 4 298 556 |
+
+Ті самі причини лише за операціями `Inc`/`Dec*`:
+
+| Категорія, причина, операція | Корпус | `GOROOT/test` |
+| --- | ---: | ---: |
+| rc-local closure dec_accounted | 141 | 122 874 |
+| rc-shared go inc_shared / dec_shared | 40 / 76 | 32 052 / 33 867 |
+| static — dec_accounted | 0 | 1 233 |
+| rc-local shared inc | 0 | 8 |
+
+**За байтами `owngo live`.** Таблиця місць не знає байтів на виході, тож розклад за байтами можливий лише за категорією (таблиця «Операції на корпусі»). Три найбільші залишки такі:
+
+- **reverse-complement: `rc-shared` 125.9 МБ.** Буфери, що пройшли каналом. За моделлю `rc-shared` живе до виходу (`PLAN.md`, фаза 3).
+- **regex-redux: `static` 77.1 МБ.** Це вада, а не правило, див. нижче.
+- **k-nucleotide: `rc-local` 1.1 МБ.** `counter` у мапі (`rc-local return`).
+
+`rc-local return`, `move` і `call` `Dec` не отримують: це правило моделі (`PROGRESS.md`, «Слово лічильника без `Dec`»).
+
+### Знахідка: `static` без `FreeAccounted` у циклі з раннім `break`
+
+`regexp/exec.go:191` (`var flag lazyFlag` у `machine.match`) — 9 634 103 алокації `static`, і жодного `free_accounted`. `9 634 103 × 8 = 77 072 824` — це рівно `owngo live static` regex-redux на виході.
+
+Мінімальне відтворення, яке й без `owngostat` залишає 8 байтів на виклик:
+
+```go
+func topBreak(m *machine, k int) {
+	var flag uint64
+	for {
+		if m.matched {
+			break // вихід до використання адреси в цій ітерації
+		}
+		m.step(&flag)
+		if k == 0 {
+			break
+		}
+		k--
+	}
+}
+```
+
+Ось чому це стається. `deaths` (`cl/owngo_free.go`) ставить free на ребрі лише на вхід наступника з одним попередником (`len(succ.Preds) == 1`). Тут вихідний блок має двох попередників, голову циклу і тіло, і значення живе на виході з обох. Тому free не стає ніде. Цикл без верхнього `break`, ініціалізація гілкою і ранній `return` звільняються.
+
+Вада є й на `f8be5a947` (до P-NEW-03.1 і P-NEW-05), тож це не регресія. Виправлення в P-NEW-02.2 не входить: у `PLAN.md` воно записане окремою задачею P-NEW-03.3.
+
+### Виправлено в цій задачі: таблиця місць під LTO
+
+Під `-lto thin` і `-lto full` рядків `owngo site` не було зовсім. Запис `.init_array` конструктора таблиці (`__owngo_sites$init`) ніхто не використовує, тож GlobalDCE його видаляв.
+
+Тепер запис стоїть у `llvm.compiler.used` (`ssa.Package.MarkLLVMUsed`). Тест — `TestOwnGoStatSites`. Перевірка: knucleotide під thin дає 224 рядки, `owngo/opsite` під thin і full — `opsite-ok 1000`.
+
+## Які задачі входять
+
+Умова входу P-NEW-02.3, 02.4 і 03.2: причина задачі — серед трьох найбільших. Ці задачі прибирають `Inc` і `Dec`, тож міра — операції `Inc`/`Dec*` причини. Задачі P-NEW-04.x міряються купою, і P-NEW-04.1 умови входу не має.
+
+| Задача | Рішення | Число |
+| --- | --- | --- |
+| P-NEW-02.3 Параметр, що споживає | **не входить** | `Inc` на корпусі — 0, на `GOROOT/test` — 14 на 50.7 млн алокацій. `rc-local call`/`move` — друга причина за операціями корпусу, але це облік `NoteAlloc` на `exec.go:307` (1 372 219 801), а не `Inc`/`Dec`. Прибрати там нічого. |
+| P-NEW-02.4 Параметр у результаті | **не входить** | `rc-local return` — це свіжий результат, а не аліас параметра. `Inc` і `Dec` на цій причині — 0 на корпусі і 0 на `GOROOT/test`. |
+| P-NEW-03.2 Парні `Inc`/`Dec` | **не входить** | Рядків `owngo site` з `inc` усього 4, сума 14 (`GOROOT/test`), на корпусі — 0. |
+| P-NEW-04.1 Розрив стека на корпусі | **входить** (без умови) | Купа — головна вартість: `static —` дає 4.14 млрд операцій на корпусі (1-ша причина), `static append` — 10.6 млн на `GOROOT/test`. |
+| P-NEW-04.2 `static` на стек | **вирішує P-NEW-04.1**; попередньо входить | `static —` — перша причина і на корпусі, і на `GOROOT/test` (8 730 339 алокацій). |
+| P-NEW-04.3 Масив аргументів і замикання | **вирішує P-NEW-04.1**; попередньо входить | Тимчасовий масив `append` (`new [1]T (varargs)`) — 1 372 219 207 з 1 381 884 776 алокацій regex-redux (99.3%). Масив позичає builtin `append`, а не функція зі зведенням; P-NEW-04.1 має вирішити, чи це та сама категорія розриву. |
+| P-NEW-03.3 (нова) `free` на ребрі злиття | **входить** (вада, без умови) | 77 072 824 байти `static` на виході regex-redux. |

@@ -1,0 +1,727 @@
+{
+  "program": "knucleotide",
+  "n": 25000000,
+  "runs": 10,
+  "profiles": false,
+  "env": {
+    "sha": "7c42046940233fd90c205067d73754b1a3694836",
+    "dirty": false,
+    "go": "go version go1.27.1 linux/amd64",
+    "llvm": "23.1.5",
+    "clang": "Debian clang version 23.1.5 (++20261028083851+a738f2737189-1~exp1~20261028203959.90)",
+    "rustc": "rustc 1.85.1 (4eb161250 2025-03-15) (built from a source tarball)",
+    "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+    "isa": [
+      "sse4_2",
+      "popcnt",
+      "avx",
+      "avx2",
+      "fma",
+      "bmi2",
+      "avx512f"
+    ],
+    "cores": 8,
+    "ulimit": "time(seconds)        unlimited\nfile(blocks)         unlimited\ndata(kbytes)         unlimited\nstack(kbytes)        8192\ncoredump(blocks)     unlimited\nmemory(kbytes)       unlimited\nlocked memory(kbytes) 8192\nprocess              unlimited\nnofiles              524288\nvmemory(kbytes)      unlimited\nlocks                unlimited\nrtprio               0",
+    "go_env": {
+      "GOAMD64": "v2"
+    },
+    "rust_env": {
+      "RUSTFLAGS": "-C target-cpu=ivybridge"
+    },
+    "c_flags": [
+      "-O3",
+      "-fomit-frame-pointer",
+      "-march=ivybridge"
+    ],
+    "libomp_root": "/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23",
+    "pcre2_root": "/home/coder/.cache/owngo-pcre2/root/usr"
+  },
+  "tables": [
+    {
+      "name": "main",
+      "pkg": "knucleotide",
+      "variants": [
+        {
+          "key": "go",
+          "label": "knucleotide, go, GOAMD64=v2",
+          "exe": "knucleotide-go",
+          "build_s": 5.6,
+          "size_kb": 2358,
+          "runs": [
+            {
+              "wall": 4.617,
+              "user": 18.002,
+              "sys": 0.164,
+              "rss_mb": 142.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.053,
+              "user": 15.812,
+              "sys": 0.164,
+              "rss_mb": 142.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.108,
+              "user": 15.528,
+              "sys": 0.151,
+              "rss_mb": 142.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.933,
+              "user": 15.551,
+              "sys": 0.14,
+              "rss_mb": 142.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.059,
+              "user": 16.501,
+              "sys": 0.179,
+              "rss_mb": 142.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.052,
+              "user": 15.667,
+              "sys": 0.158,
+              "rss_mb": 142.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.361,
+              "user": 16.442,
+              "sys": 0.198,
+              "rss_mb": 142.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.906,
+              "user": 15.613,
+              "sys": 0.169,
+              "rss_mb": 142.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.836,
+              "user": 15.517,
+              "sys": 0.16,
+              "rss_mb": 142.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 4.275,
+              "user": 16.08,
+              "sys": 0.167,
+              "rss_mb": 142.4,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 4.056,
+          "min": 3.836,
+          "max": 4.617,
+          "user_median": 15.739,
+          "sys_median": 0.164,
+          "peak_rss_mb": 142.6
+        },
+        {
+          "key": "llgo",
+          "label": "knucleotide, llgo",
+          "exe": "knucleotide-llgo",
+          "build_s": 24.0,
+          "size_kb": 2572,
+          "runs": [
+            {
+              "wall": 6.058,
+              "user": 27.022,
+              "sys": 0.142,
+              "rss_mb": 155.9,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.098,
+              "user": 31.218,
+              "sys": 0.139,
+              "rss_mb": 156.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.005,
+              "user": 28.201,
+              "sys": 0.164,
+              "rss_mb": 155.9,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.002,
+              "user": 32.532,
+              "sys": 0.14,
+              "rss_mb": 156.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.754,
+              "user": 30.958,
+              "sys": 0.145,
+              "rss_mb": 155.9,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.999,
+              "user": 31.244,
+              "sys": 0.145,
+              "rss_mb": 155.8,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.248,
+              "user": 31.079,
+              "sys": 0.14,
+              "rss_mb": 156.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.957,
+              "user": 28.964,
+              "sys": 0.159,
+              "rss_mb": 155.8,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.92,
+              "user": 29.012,
+              "sys": 0.157,
+              "rss_mb": 155.9,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.83,
+              "user": 29.707,
+              "sys": 0.163,
+              "rss_mb": 155.9,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 6.0,
+          "min": 5.754,
+          "max": 6.248,
+          "user_median": 30.332,
+          "sys_median": 0.145,
+          "peak_rss_mb": 156.1
+        },
+        {
+          "key": "owngo",
+          "label": "knucleotide, llgo -tags owngo (-Os)",
+          "exe": "knucleotide-owngo",
+          "build_s": 25.5,
+          "size_kb": 2596,
+          "runs": [
+            {
+              "wall": 6.494,
+              "user": 29.329,
+              "sys": 0.148,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.294,
+              "user": 28.426,
+              "sys": 0.146,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.055,
+              "user": 28.418,
+              "sys": 0.143,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.431,
+              "user": 29.396,
+              "sys": 0.141,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.324,
+              "user": 29.472,
+              "sys": 0.156,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.085,
+              "user": 28.509,
+              "sys": 0.162,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.41,
+              "user": 29.088,
+              "sys": 0.155,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.43,
+              "user": 29.274,
+              "sys": 0.162,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.471,
+              "user": 30.124,
+              "sys": 0.143,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.38,
+              "user": 28.808,
+              "sys": 0.142,
+              "rss_mb": 150.1,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 6.395,
+          "min": 6.055,
+          "max": 6.494,
+          "user_median": 29.181,
+          "sys_median": 0.147,
+          "peak_rss_mb": 150.5
+        },
+        {
+          "key": "owngo-thin",
+          "label": "knucleotide, llgo -tags owngo -O2 -lto thin",
+          "exe": "knucleotide-owngo-thin",
+          "build_s": 25.5,
+          "size_kb": 2738,
+          "runs": [
+            {
+              "wall": 5.345,
+              "user": 24.871,
+              "sys": 0.15,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.64,
+              "user": 25.017,
+              "sys": 0.154,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.222,
+              "user": 24.493,
+              "sys": 0.147,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.695,
+              "user": 25.979,
+              "sys": 0.163,
+              "rss_mb": 150.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.323,
+              "user": 25.035,
+              "sys": 0.168,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.105,
+              "user": 24.367,
+              "sys": 0.167,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.509,
+              "user": 25.349,
+              "sys": 0.164,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.095,
+              "user": 24.535,
+              "sys": 0.157,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.468,
+              "user": 25.409,
+              "sys": 0.144,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.163,
+              "user": 24.926,
+              "sys": 0.155,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 5.334,
+          "min": 5.095,
+          "max": 5.695,
+          "user_median": 24.971,
+          "sys_median": 0.156,
+          "peak_rss_mb": 150.6
+        },
+        {
+          "key": "owngo-lto",
+          "label": "knucleotide, llgo -tags owngo -O2 -lto full",
+          "exe": "knucleotide-owngo-lto",
+          "build_s": 47.5,
+          "size_kb": 2450,
+          "runs": [
+            {
+              "wall": 6.052,
+              "user": 27.009,
+              "sys": 0.139,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.532,
+              "user": 25.519,
+              "sys": 0.126,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.43,
+              "user": 25.43,
+              "sys": 0.138,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.567,
+              "user": 26.17,
+              "sys": 0.139,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.537,
+              "user": 25.456,
+              "sys": 0.146,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.481,
+              "user": 25.183,
+              "sys": 0.139,
+              "rss_mb": 150.5,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.412,
+              "user": 25.242,
+              "sys": 0.141,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.435,
+              "user": 25.282,
+              "sys": 0.132,
+              "rss_mb": 150.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.531,
+              "user": 25.817,
+              "sys": 0.144,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 5.49,
+              "user": 25.339,
+              "sys": 0.135,
+              "rss_mb": 150.4,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 5.511,
+          "min": 5.412,
+          "max": 6.052,
+          "user_median": 25.443,
+          "sys_median": 0.139,
+          "peak_rss_mb": 150.5
+        },
+        {
+          "key": "rust",
+          "label": "Rust #7, hashbrown + tokio-threadpool",
+          "exe": "knucleotiderust",
+          "runs": [
+            {
+              "wall": 1.418,
+              "user": 4.914,
+              "sys": 0.158,
+              "rss_mb": 131.3,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.705,
+              "user": 5.362,
+              "sys": 0.146,
+              "rss_mb": 130.6,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.403,
+              "user": 5.12,
+              "sys": 0.13,
+              "rss_mb": 130.3,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.377,
+              "user": 4.836,
+              "sys": 0.142,
+              "rss_mb": 130.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.372,
+              "user": 4.967,
+              "sys": 0.133,
+              "rss_mb": 130.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.787,
+              "user": 5.312,
+              "sys": 0.144,
+              "rss_mb": 129.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.462,
+              "user": 5.194,
+              "sys": 0.131,
+              "rss_mb": 129.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.41,
+              "user": 4.996,
+              "sys": 0.14,
+              "rss_mb": 130.2,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.492,
+              "user": 5.05,
+              "sys": 0.14,
+              "rss_mb": 130.4,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.382,
+              "user": 4.875,
+              "sys": 0.142,
+              "rss_mb": 131.2,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 1.414,
+          "min": 1.372,
+          "max": 1.787,
+          "user_median": 5.023,
+          "sys_median": 0.141,
+          "peak_rss_mb": 131.3
+        },
+        {
+          "key": "c",
+          "label": "C #1, khash + OpenMP",
+          "exe": "knucleotidec",
+          "args": [],
+          "cflags": [
+            "-O3",
+            "-fomit-frame-pointer",
+            "-march=ivybridge",
+            "-fopenmp",
+            "-idirafter",
+            "/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib/clang/23/include",
+            "-L/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib",
+            "-Wl,-rpath,/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib",
+            "-Iowngo/bench/knucleotidec/Include"
+          ],
+          "runs": [
+            {
+              "wall": 3.691,
+              "user": 13.65,
+              "sys": 0.211,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.719,
+              "user": 14.021,
+              "sys": 0.213,
+              "rss_mb": 130.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.612,
+              "user": 13.855,
+              "sys": 0.193,
+              "rss_mb": 130.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.551,
+              "user": 13.544,
+              "sys": 0.23,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.659,
+              "user": 13.736,
+              "sys": 0.234,
+              "rss_mb": 130.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.519,
+              "user": 13.662,
+              "sys": 0.174,
+              "rss_mb": 130.1,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.513,
+              "user": 13.472,
+              "sys": 0.208,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.657,
+              "user": 13.474,
+              "sys": 0.197,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.613,
+              "user": 13.917,
+              "sys": 0.211,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.595,
+              "user": 13.868,
+              "sys": 0.197,
+              "rss_mb": 130.0,
+              "exit": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 3.612,
+          "min": 3.513,
+          "max": 3.719,
+          "user_median": 13.699,
+          "sys_median": 0.209,
+          "peak_rss_mb": 130.1
+        }
+      ]
+    }
+  ]
+}

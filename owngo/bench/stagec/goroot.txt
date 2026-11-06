@@ -1,0 +1,83 @@
+cases 830, with owngo ops 803
+sum ops:
+  alloc                  50733027
+  alloc_root             46674
+  alloc_counted          2773058
+  inc                    14
+  dec_accounted          124646
+  dec_cyclic             9
+  cyclic_visit           3
+  inc_shared             32052
+  dec_shared             33867
+  free_accounted         9325325
+  free_root              7597647
+  note_alloc_static      8569268
+  note_alloc_rc-local    7154066
+  note_alloc_rc-shared   5153001
+  note_alloc_cyclic      1549849
+  note_alloc_pinned      2103432
+  note_alloc_implicit    0
+  region_create          4
+  alloc_region           4
+  free_region            4
+top 20 by inc+dec*:
+  rangegen.go                              rc      87055 inc         0 dec_acc     87055 dec_cyc        0 inc_sh        0 dec_sh        0 alloc   2239610
+  gcgort.go                                rc      64577 inc         0 dec_acc      1216 dec_cyc        0 inc_sh    30880 dec_sh    32481 alloc    379189
+  fixedbugs/issue16037_run.go              rc      20069 inc         0 dec_acc     20063 dec_cyc        0 inc_sh        2 dec_sh        4 alloc    721280
+  winbatch.go                              rc       5112 inc         0 dec_acc      5112 dec_cyc        0 inc_sh        0 dec_sh        0 alloc    207338
+  nosplit.go                               rc       2443 inc         6 dec_acc      2167 dec_cyc        0 inc_sh       90 dec_sh      180 alloc     55155
+  divmod.go                                rc       2084 inc         0 dec_acc      2084 dec_cyc        0 inc_sh        0 dec_sh        0 alloc    413805
+  fixedbugs/issue52127.go                  rc       1848 inc         0 dec_acc      1842 dec_cyc        0 inc_sh        2 dec_sh        4 alloc     16645
+  fixedbugs/issue19113.go                  rc       1280 inc         0 dec_acc      1280 dec_cyc        0 inc_sh        0 dec_sh        0 alloc     33583
+  fixedbugs/issue19658.go                  rc        661 inc         0 dec_acc       543 dec_cyc        0 inc_sh       40 dec_sh       78 alloc     15878
+  linkobj.go                               rc        603 inc         0 dec_acc       531 dec_cyc        0 inc_sh       24 dec_sh       48 alloc     13734
+  fixedbugs/issue30116.go                  rc        567 inc         0 dec_acc       567 dec_cyc        0 inc_sh        0 dec_sh        0 alloc     51716
+  fixedbugs/issue79186.go                  rc        513 inc         0 dec_acc         0 dec_cyc        0 inc_sh      256 dec_sh      257 alloc    500233
+  fixedbugs/issue9110.go                   rc        420 inc         0 dec_acc         0 dec_cyc        0 inc_sh      200 dec_sh      220 alloc      6161
+  fixedbugs/issue39541.go                  rc        402 inc         0 dec_acc         0 dec_cyc        0 inc_sh      200 dec_sh      202 alloc   8002188
+  fixedbugs/issue30116u.go                 rc        349 inc         0 dec_acc       349 dec_cyc        0 inc_sh        0 dec_sh        0 alloc     37368
+  fixedbugs/issue22662b.go                 rc        330 inc         0 dec_acc       270 dec_cyc        0 inc_sh       20 dec_sh       40 alloc     12232
+  linkmain_run.go                          rc        269 inc         0 dec_acc       211 dec_cyc        0 inc_sh       20 dec_sh       38 alloc     11625
+  fixedbugs/issue59411.go                  rc        200 inc         0 dec_acc       200 dec_cyc        0 inc_sh        0 dec_sh        0 alloc     61839
+  fixedbugs/bug369.go                      rc        184 inc         0 dec_acc       154 dec_cyc        0 inc_sh       10 dec_sh       20 alloc     10249
+  fixedbugs/issue13160.go                  rc        147 inc         0 dec_acc         0 dec_cyc        0 inc_sh       64 dec_sh       83 alloc    804006
+reasons (all cases):
+  unplaced   -          alloc              10001809
+  static     -          alloc              8730339
+  static     -          free_accounted     5769684
+  static     -          note_alloc         4944412
+  static     append     note_alloc         3590567
+  static     append     alloc              3500006
+  static     append     free_accounted     3500004
+  rc-local   return     note_alloc         3419594
+  rc-local   call       note_alloc         2791268
+  rc-local   return     alloc_counted      2609020
+  pinned     unsafe     alloc              2347602
+  rc-local   return     alloc              2269283
+  rc-shared  global     alloc              2156077
+  rc-shared  global     note_alloc         2142479
+  pinned     unsafe     note_alloc         2103432
+  rc-shared  shared     alloc              1998006
+  rc-shared  shared     note_alloc         1998006
+  rc-local   call       alloc              1604929
+  cyclic     return     note_alloc         1536132
+  cyclic     return     alloc              1536101
+  rc-local   move       alloc              1108243
+  rc-shared  channel    alloc              1000314
+  rc-shared  channel    note_alloc         1000004
+  rc-local   shared     note_alloc         770075
+  rc-local   shared     alloc              461301
+reasons, Inc/Dec only:
+  rc-local   closure    dec_accounted      122874
+  rc-shared  go         dec_shared         33867
+  rc-shared  go         inc_shared         32052
+  static     -          dec_accounted      1233
+  rc-local   shared     dec_accounted      539
+  cyclic     -          dec_cyclic         9
+  rc-local   shared     inc                8
+  cyclic     -          inc                6
+top inc sites:
+   /usr/local/go/src/regexp/onepass.go:165 rc-local shared 8
+   complit.go:63 cyclic - 4
+   bug336.go:56 cyclic - 1
+   bug336.go:58 cyclic - 1
