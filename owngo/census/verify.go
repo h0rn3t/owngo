@@ -12,13 +12,18 @@ import (
 
 // Ownership — рішення codegen про місця однієї функції: читачі місця
 // (Placement.StaticUses і DecUses), звільнення (FreeAccounted чи Dec*)
-// після інструкції або на вході блока і Inc на передачі чи записі.
+// після інструкції, на вході блока чи на розщепленому ребрі і Inc на
+// передачі чи записі.
 type Ownership struct {
 	Uses  map[ssa.Instruction][]ssa.Instruction
 	After map[ssa.Instruction][]ssa.Value
 	Entry map[*ssa.BasicBlock][]ssa.Value
+	Edge  map[BlockEdge][]ssa.Value
 	Inc   map[ssa.Instruction][]ssa.Value
 }
+
+// BlockEdge — ребро CFG з Pred у Succ.
+type BlockEdge struct{ Pred, Succ *ssa.BasicBlock }
 
 // OwnershipError — порушення володіння: що сталося з місцем Site у позиції Pos
 // і номери блоків шляху від визначення місця до порушення.
@@ -63,6 +68,9 @@ func Verify(fn *ssa.Function, own Ownership) []OwnershipError {
 		add(vals)
 	}
 	for _, vals := range own.Entry {
+		add(vals)
+	}
+	for _, vals := range own.Edge {
 		add(vals)
 	}
 	slices.SortFunc(sites, compareInstr)
@@ -114,6 +122,27 @@ func verifySite(fn *ssa.Function, site ssa.Instruction, own Ownership) []Ownersh
 	in := make([]siteState, len(fn.Blocks))
 	out := make([]siteState, len(fn.Blocks))
 	var found []OwnershipError
+	// edge — стан на ребрі p -> b після звільнень на ньому; double —
+	// звільнення на ребрі, де місце вже звільнене.
+	edge := func(p, b *ssa.BasicBlock) (st siteState, double bool) {
+		st = out[p.Index]
+		for range countVal(own.Edge[BlockEdge{p, b}], val) {
+			double = double || st.released
+			st = siteState{released: true}
+		}
+		return st, double
+	}
+	enter := func(b *ssa.BasicBlock, report bool) siteState {
+		var st siteState
+		for _, p := range b.Preds {
+			e, double := edge(p, b)
+			if double && report {
+				found = append(found, OwnershipError{"double release", val, blockPos(b), blockPath(val, p)})
+			}
+			st = st.or(e)
+		}
+		return st
+	}
 	transfer := func(b *ssa.BasicBlock, report bool) siteState {
 		st := in[b.Index]
 		release := func(pos token.Pos) {
@@ -128,7 +157,7 @@ func verifySite(fn *ssa.Function, site ssa.Instruction, own Ownership) []Ownersh
 		for _, instr := range b.Instrs {
 			if phi, ok := instr.(*ssa.Phi); ok {
 				// Читач phi бере значення на ребрі: стан — на виході попередника.
-				if report && users[phi] && phiReadsReleased(phi, val, users, out) {
+				if report && users[phi] && phiReadsReleased(phi, val, users, edge) {
 					found = append(found, OwnershipError{"use after release", val, phi.Pos(), blockPath(val, b)})
 				}
 				continue
@@ -147,11 +176,7 @@ func verifySite(fn *ssa.Function, site ssa.Instruction, own Ownership) []Ownersh
 	for changed := true; changed; {
 		changed = false
 		for _, b := range fn.Blocks {
-			var st siteState
-			for _, p := range b.Preds {
-				st = st.or(out[p.Index])
-			}
-			in[b.Index] = st
+			in[b.Index] = enter(b, false)
 			if next := transfer(b, false); next != out[b.Index] {
 				out[b.Index] = next
 				changed = true
@@ -159,20 +184,22 @@ func verifySite(fn *ssa.Function, site ssa.Instruction, own Ownership) []Ownersh
 		}
 	}
 	for _, b := range fn.Blocks {
+		enter(b, true)
 		transfer(b, true)
 	}
 	return found
 }
 
 // phiReadsReleased: ребро phi, що несе місце чи значення його читача,
-// приходить з попередника, де місце на якомусь шляху вже звільнене.
-func phiReadsReleased(phi *ssa.Phi, site ssa.Value, users map[ssa.Instruction]bool, out []siteState) bool {
-	for i, edge := range phi.Edges {
-		instr, _ := edge.(ssa.Instruction)
-		if edge != site && !users[instr] {
+// приходить з попередника, де місце на якомусь шляху вже звільнене, —
+// в ньому чи на самому ребрі.
+func phiReadsReleased(phi *ssa.Phi, site ssa.Value, users map[ssa.Instruction]bool, edge func(p, b *ssa.BasicBlock) (siteState, bool)) bool {
+	for i, v := range phi.Edges {
+		instr, _ := v.(ssa.Instruction)
+		if v != site && !users[instr] {
 			continue
 		}
-		if out[phi.Block().Preds[i].Index].released {
+		if st, _ := edge(phi.Block().Preds[i], phi.Block()); st.released {
 			return true
 		}
 	}

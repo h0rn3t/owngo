@@ -262,6 +262,9 @@ type context struct {
 	ownGoDecAfter        map[ssa.Instruction][]ssa.Value
 	ownGoFreeEntry       map[*ssa.BasicBlock][]ssa.Value
 	ownGoDecEntry        map[*ssa.BasicBlock][]ssa.Value
+	ownGoFreeEdge        map[census.BlockEdge][]ssa.Value
+	ownGoDecEdge         map[census.BlockEdge][]ssa.Value
+	ownGoEdgeBlocks      map[census.BlockEdge]llssa.BasicBlock
 	ownGoDescs           map[types.Type]llssa.Expr
 	ownGoShared          map[ssa.Instruction]census.Shared
 	ownGoGoShared        map[*ssa.Go][]ssa.Value
@@ -880,8 +883,9 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			}
 			p.prepareExportedLocalContext(f)
 			p.bvals = make(map[ssa.Value]llssa.Expr)
-			p.ownGoFreeAfter, p.ownGoFreeEntry = ownGoFreeAfter(f, p.ownGoUses, false)
-			p.ownGoDecAfter, p.ownGoDecEntry = ownGoFreeAfter(f, p.ownGoDecUses, true)
+			p.ownGoFreeAfter, p.ownGoFreeEntry, p.ownGoFreeEdge = ownGoFreeAfter(f, p.ownGoUses, false)
+			p.ownGoDecAfter, p.ownGoDecEntry, p.ownGoDecEdge = ownGoFreeAfter(f, p.ownGoDecUses, true)
+			p.ownGoEdgeBlocks = nil
 			p.ownGoRegionOf = nil
 			p.verifyOwnGo(f)
 			p.methodNilDerefChecks, p.recvNilDerefChecks = collectMethodNilDerefChecks(f, p.options.ReceiverNilChecks)
@@ -1633,6 +1637,9 @@ func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 		bblks := make([]llssa.BasicBlock, len(preds))
 		for i, pred := range preds {
 			bblks[i] = p.fn.Block(pred.Index)
+			if blk, ok := p.ownGoEdgeBlocks[census.BlockEdge{Pred: pred, Succ: v.Block()}]; ok {
+				bblks[i] = blk
+			}
 		}
 		edges := v.Edges
 		phi.AddIncoming(b, bblks, func(i int, blk llssa.BasicBlock) llssa.Expr {
@@ -2531,13 +2538,13 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		p.emitOwnGoFree(b, v)
 		b.Return(results...)
 	case *ssa.If:
-		fn := p.fn
 		cond := p.compileValue(b, v.Cond)
 		succs := v.Block().Succs
-		thenb := fn.Block(succs[0].Index)
-		elseb := fn.Block(succs[1].Index)
+		thenb := p.ownGoEdgeBlock(v.Block(), succs[0])
+		elseb := p.ownGoEdgeBlock(v.Block(), succs[1])
 		p.emitOwnGoFree(b, v)
 		b.If(cond, thenb, elseb)
+		p.emitOwnGoEdgeFree(b, v.Block())
 	case *ssa.MapUpdate:
 		m := p.compileValue(b, v.Map)
 		key := p.compileValue(b, v.Key)

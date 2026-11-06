@@ -204,12 +204,13 @@ func ssaPackageFuncs(pkg *ssa.Package) []*ssa.Function {
 // об'єкт уже не живий. Гілка, де читання лишається попереду, free не отримує:
 // об'єкт доживає до виходу процесу. defer тримає аргумент до RunDefers, тож
 // таке місце в цій фазі не звільняється.
-func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction, keepStored bool) (after map[ssa.Instruction][]ssa.Value, entry map[*ssa.BasicBlock][]ssa.Value) {
+func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction, keepStored bool) (after map[ssa.Instruction][]ssa.Value, entry map[*ssa.BasicBlock][]ssa.Value, edge map[census.BlockEdge][]ssa.Value) {
 	if fn == nil || len(fn.Blocks) == 0 || len(uses) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	out := map[ssa.Instruction][]ssa.Value{}
 	entry = map[*ssa.BasicBlock][]ssa.Value{}
+	edge = map[census.BlockEdge][]ssa.Value{}
 	for site, users := range uses {
 		if site == nil || site.Parent() != fn || deferred(users) {
 			continue
@@ -229,10 +230,15 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 				user[instr] = true
 			}
 		}
-		lasts, edges := deaths(fn, user, site)
-		for _, block := range edges {
+		lasts, entries, splits := deaths(fn, user, site)
+		for _, block := range entries {
 			if site.Block() != nil && site.Block().Dominates(block) {
 				entry[block] = append(entry[block], val)
+			}
+		}
+		for _, e := range splits {
+			if site.Block() != nil && site.Block().Dominates(e.Pred) {
+				edge[e] = append(edge[e], val)
 			}
 		}
 		for instr := range lasts {
@@ -250,7 +256,10 @@ func ownGoFreeAfter(fn *ssa.Function, uses map[ssa.Instruction][]ssa.Instruction
 	if len(entry) == 0 {
 		entry = nil
 	}
-	return out, entry
+	if len(edge) == 0 {
+		edge = nil
+	}
+	return out, entry, edge
 }
 
 // pointerStored звітує, що саме значення вказівника кладуть у пам'ять,
@@ -310,7 +319,7 @@ func deferred(users []ssa.Instruction) bool {
 // його не робить: кожне виконання site створює новий об'єкт, тож через
 // зворотне ребро циклу попередній об'єкт живим не лишається. Об'єкт, який
 // несе phi, має свого читача в заголовку і лишається живим.
-func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instruction) (map[ssa.Instruction]struct{}, []*ssa.BasicBlock) {
+func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instruction) (map[ssa.Instruction]struct{}, []*ssa.BasicBlock, []census.BlockEdge) {
 	n := len(fn.Blocks)
 	def := site.Block()
 	used := make([]bool, n)
@@ -362,21 +371,34 @@ func deaths(fn *ssa.Function, user map[ssa.Instruction]bool, site ssa.Instructio
 		}
 	}
 	// Значення, живе на виході блока, вмирає на ребрі в наступника, де воно
-	// вже мертве: останнє використання в циклі чи перед раннім return.
-	// Free стає на вхід наступника, якщо інших попередників у нього немає.
+	// вже мертве: останнє використання в циклі, перед раннім return чи
+	// перед виходом з циклу через кілька break. Free стає на вхід
+	// наступника, якщо значення живе на виході кожного його попередника,
+	// інакше — на розщеплене ребро з кожного такого попередника.
 	// Блок алокації сюди не йде: на його вході живе лише наступна алокація.
-	var edges []*ssa.BasicBlock
-	for _, block := range fn.Blocks {
-		if block == nil || !liveOut[block.Index] {
+	var entries []*ssa.BasicBlock
+	var splits []census.BlockEdge
+	for _, succ := range fn.Blocks {
+		if succ == nil || succ == def || liveIn[succ.Index] {
 			continue
 		}
-		for _, succ := range block.Succs {
-			if succ != nil && succ != def && !liveIn[succ.Index] && len(succ.Preds) == 1 {
-				edges = append(edges, succ)
+		var live []*ssa.BasicBlock
+		for _, pred := range succ.Preds {
+			if liveOut[pred.Index] && !slices.Contains(live, pred) {
+				live = append(live, pred)
+			}
+		}
+		switch {
+		case len(live) == 0:
+		case len(live) == len(succ.Preds):
+			entries = append(entries, succ)
+		default:
+			for _, pred := range live {
+				splits = append(splits, census.BlockEdge{Pred: pred, Succ: succ})
 			}
 		}
 	}
-	return out, edges
+	return out, entries, splits
 }
 
 func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
@@ -411,6 +433,40 @@ func (p *context) emitOwnGoFree(b llssa.Builder, instr ssa.Instruction) {
 func (p *context) emitOwnGoEntryFree(b llssa.Builder, block *ssa.BasicBlock) {
 	p.emitOwnGoFreeSites(b, p.ownGoFreeEntry[block])
 	p.emitOwnGoDecSites(b, p.ownGoDecEntry[block])
+}
+
+// ownGoEdgeBlock — блок, куди веде ребро pred -> succ: сам succ або новий
+// блок, що розщеплює ребро, якщо на ньому вмирає місце (P-NEW-03.3).
+func (p *context) ownGoEdgeBlock(pred, succ *ssa.BasicBlock) llssa.BasicBlock {
+	e := census.BlockEdge{Pred: pred, Succ: succ}
+	if p.ownGoFreeEdge[e] == nil && p.ownGoDecEdge[e] == nil {
+		return p.fn.Block(succ.Index)
+	}
+	if blk, ok := p.ownGoEdgeBlocks[e]; ok {
+		return blk
+	}
+	if p.ownGoEdgeBlocks == nil {
+		p.ownGoEdgeBlocks = map[census.BlockEdge]llssa.BasicBlock{}
+	}
+	blk := p.fn.MakeBlock()
+	p.ownGoEdgeBlocks[e] = blk
+	return blk
+}
+
+// emitOwnGoEdgeFree заповнює блоки ownGoEdgeBlock ребер з pred після його
+// термінатора: звільнення і перехід у наступника.
+func (p *context) emitOwnGoEdgeFree(b llssa.Builder, pred *ssa.BasicBlock) {
+	for i, succ := range pred.Succs {
+		e := census.BlockEdge{Pred: pred, Succ: succ}
+		blk, ok := p.ownGoEdgeBlocks[e]
+		if !ok || slices.Index(pred.Succs, succ) < i {
+			continue
+		}
+		b.SetBlock(blk)
+		p.emitOwnGoFreeSites(b, p.ownGoFreeEdge[e])
+		p.emitOwnGoDecSites(b, p.ownGoDecEdge[e])
+		b.Jump(p.fn.Block(succ.Index))
+	}
 }
 
 func (p *context) emitOwnGoFreeSites(b llssa.Builder, sites []ssa.Value) {
@@ -1042,6 +1098,7 @@ func (p *context) verifyOwnGo(f *ssa.Function) {
 		Uses:  map[ssa.Instruction][]ssa.Instruction{},
 		After: map[ssa.Instruction][]ssa.Value{},
 		Entry: map[*ssa.BasicBlock][]ssa.Value{},
+		Edge:  map[census.BlockEdge][]ssa.Value{},
 		Inc:   p.ownGoInc,
 	}
 	addSites := func(sites []ssa.Value) {
@@ -1060,6 +1117,12 @@ func (p *context) verifyOwnGo(f *ssa.Function) {
 	for _, m := range []map[*ssa.BasicBlock][]ssa.Value{p.ownGoFreeEntry, p.ownGoDecEntry} {
 		for block, sites := range m {
 			own.Entry[block] = append(own.Entry[block], sites...)
+			addSites(sites)
+		}
+	}
+	for _, m := range []map[census.BlockEdge][]ssa.Value{p.ownGoFreeEdge, p.ownGoDecEdge} {
+		for e, sites := range m {
+			own.Edge[e] = append(own.Edge[e], sites...)
 			addSites(sites)
 		}
 	}

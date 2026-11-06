@@ -167,6 +167,17 @@ func topBreak(m *machine, k int) {
 
 Вада є й на `f8be5a947` (до P-NEW-03.1 і P-NEW-05), тож це не регресія. Виправлення в P-NEW-02.2 не входить: у `PLAN.md` воно записане окремою задачею P-NEW-03.3.
 
+**Виправлено в P-NEW-03.3.** `deaths` тепер ставить free на вхід блока злиття, якщо значення живе на виході кожного попередника, а інакше — на розщеплене ребро з кожного живого попередника (новий блок між `If` і наступником, phi бере значення з нього). Повтор regex-redux (`-tags owngo,owngostat -O2 -lto thin`, вивід — як `expected-5000000.txt`; `bench/stagec/regexredux-merge.stat`):
+
+| | P-NEW-02.2 | P-NEW-03.3 |
+| --- | ---: | ---: |
+| `owngo live static` | 77 072 824 | **0** |
+| `owngo freed` | 10 977 778 507 | 11 054 851 355 |
+| `owngo ops free_accounted` | 1 372 223 954 | 1 381 858 057 (+9 634 103) |
+| `owngo ops dec_accounted` | 41 | 44 |
+
+Рядки `owngo site` змінились у двох місцях: `regexp/exec.go:191 static free_accounted 9 634 103` (нове) і `os/file_unix.go:144 rc-local closure dec_accounted 3` (замикання, яке теж вмирало на злитті). Решта рядків — ті самі.
+
 ### Виправлено в цій задачі: таблиця місць під LTO
 
 Під `-lto thin` і `-lto full` рядків `owngo site` не було зовсім. Запис `.init_array` конструктора таблиці (`__owngo_sites$init`) ніхто не використовує, тож GlobalDCE його видаляв.
