@@ -95,6 +95,10 @@ type Options struct {
 	// OwnGoStat (тег owngostat) з OwnGoFree дає кожній операції рантайму
 	// місця свій лічильник і таблицю пакета для рядків owngo site.
 	OwnGoStat bool
+	// OwnGoStack з OwnGoFree кладе місце static сталого розміру до 64 КиБ,
+	// чий об'єкт не переживає ітерацію, на стек замість AllocZ і
+	// FreeAccounted (census.Placement.Stack).
+	OwnGoStack bool
 	// OwnGoWarn отримує рядок попередження на кожне місце pinned пакета.
 	// Збірка дає його лише пакетам головного модуля; nil — без попереджень.
 	OwnGoWarn io.Writer
