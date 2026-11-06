@@ -97,7 +97,8 @@ type Options struct {
 	OwnGoStat bool
 	// OwnGoStack з OwnGoFree кладе місце static сталого розміру до 64 КиБ,
 	// чий об'єкт не переживає ітерацію, на стек замість AllocZ і
-	// FreeAccounted (census.Placement.Stack).
+	// FreeAccounted (census.Placement.Stack), а сталу невказівникового типу
+	// в інтерфейсі місця static — у незмінну глобальну змінну (P-NEW-04.4).
 	OwnGoStack bool
 	// OwnGoWarn отримує рядок попередження на кожне місце pinned пакета.
 	// Збірка дає його лише пакетам головного модуля; nil — без попереджень.
@@ -1975,6 +1976,10 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		t := p.type_(v.Type(), llssa.GoDecl)
 		if isUntypedNilConst(v.X) {
 			ret = p.prog.Nil(t)
+			break
+		}
+		if p.ownGoLabel[v] == ownGoConstLabel {
+			ret = b.MakeInterfaceConst(t, p.compileValue(b, v.X))
 			break
 		}
 		if unop, ok := v.X.(*ssa.UnOp); ok && unop.Op == token.MUL {

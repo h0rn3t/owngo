@@ -72,7 +72,7 @@ func (p *context) ownGoSiteText(site ssa.Value, op string) string {
 // виклику рантайму, що виділяє, alloc_counted для AllocCounted. append без
 // власного буфера виділяє лише при рості, тож не рахується.
 func (p *context) countOwnGoAlloc(b llssa.Builder, instr ssa.Instruction) {
-	if !p.options.OwnGoStat || !census.IsSite(instr) || p.ownGoLabel[instr] == "stack" {
+	if !p.options.OwnGoStat || !census.IsSite(instr) || p.ownGoLabel[instr] == "stack" || p.ownGoLabel[instr] == ownGoConstLabel {
 		return
 	}
 	val := instr.(ssa.Value)

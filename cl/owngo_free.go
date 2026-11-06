@@ -33,6 +33,7 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 	place := census.PlaceAll(funcs)
 	if p.options.OwnGoStack {
 		p.ownGoStackStatic(place)
+		ownGoConstIfaces(place)
 	}
 	cats := place.Cats
 	p.ownGoUses = place.StaticUses
@@ -108,6 +109,31 @@ func (p *context) ownGoStackStatic(place census.Placement) {
 		alloc.Heap = false
 		delete(place.StaticUses, alloc)
 		place.Cats[alloc] = "stack"
+	}
+}
+
+// ownGoConstLabel позначає місце MakeInterface сталої, чиє слово даних — незмінна
+// глобальна змінна (P-NEW-04.4).
+const ownGoConstLabel = "const"
+
+// ownGoConstIfaces знімає з купи MakeInterface сталої в місці static: codegen
+// бере слово даних з незмінної глобальної змінної (MakeInterfaceConst), і місце
+// не має ні NoteAlloc, ні FreeAccounted. Інші категорії лишаються: Dec чи
+// обхід звільнили б глобальну адресу.
+func ownGoConstIfaces(place census.Placement) {
+	for site, label := range place.Cats {
+		mi, ok := site.(*ssa.MakeInterface)
+		if !ok || isUntypedNilConst(mi.X) {
+			continue
+		}
+		if _, ok := mi.X.(*ssa.Const); !ok {
+			continue
+		}
+		if head, _, _ := strings.Cut(label, ":"); head != "static" {
+			continue
+		}
+		delete(place.StaticUses, site)
+		place.Cats[site] = ownGoConstLabel
 	}
 }
 

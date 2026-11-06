@@ -304,6 +304,30 @@ func (b Builder) makeInterface(tinter Type, x Expr, observable bool) (ret Expr) 
 	return Expr{b.unsafeInterface(rawIntf, typ.raw.Type, tabi, data), tinter}
 }
 
+// MakeInterfaceConst builds an interface from the constant x. A value that
+// MakeInterface would box gets its data word from a private constant global
+// instead of a heap copy; the caller guarantees nothing frees or writes that
+// word. Other values fall back to MakeInterface.
+func (b Builder) MakeInterfaceConst(tinter Type, x Expr) Expr {
+	prog := b.Prog
+	typ := x.Type
+	if !x.impl.IsConstant() || prog.SizeOf(typ) == 0 {
+		return b.MakeInterface(tinter, x)
+	}
+	if kind, _, _ := abi.DataKindOf(typ.raw.Type, 0, prog.is32Bits); directIfaceType(typ.raw.Type) && kind != abi.Indirect {
+		return b.MakeInterface(tinter, x)
+	}
+	global := llvm.AddGlobal(b.Pkg.mod, prog.storageType(typ), "")
+	global.SetInitializer(prog.toStorageConstant(typ, x.impl))
+	global.SetLinkage(llvm.PrivateLinkage)
+	global.SetGlobalConstant(true)
+	global.SetUnnamedAddr(true)
+	global.SetAlignment(int(prog.AlignOf(typ)))
+	b.recordUseIface(typ)
+	rawIntf := tinter.raw.Type.Underlying().(*types.Interface)
+	return Expr{b.unsafeInterface(rawIntf, typ.raw.Type, b.abiType(typ.raw.Type), global), tinter}
+}
+
 func (b Builder) MakeInterfaceFromPtr(tinter Type, ptr Expr) (ret Expr) {
 	rawIntf := tinter.raw.Type.Underlying().(*types.Interface)
 	prog := b.Prog
