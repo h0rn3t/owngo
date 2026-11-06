@@ -1,0 +1,94 @@
+site	2628	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:350
+site	242	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1829
+site	55	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:460
+site	55	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:463
+site	52	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:71
+site	37	heap	complit	rc-local	return	/usr/local/go/src/errors/errors.go:65
+site	34	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:414
+site	34	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:416
+site	34	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:418
+site	16	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/fault_unwind_llgo.go:93
+site	16	none	nopos	rc-shared	global	:0
+site	15	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1804
+site	9	none	-	rc-local	return	/home/coder/owngo/runtime/internal/runtime/map.go:313
+site	8	heap	closure	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:87
+site	8	none	-	rc-local	return	/home/coder/owngo/runtime/abi/type.go:343
+site	8	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/traceback_threads_llgo.go:19
+site	8	none	-	rc-local	shared	/home/coder/owngo/runtime/internal/thread/thread_unix.go:64
+site	8	none	-	rc-local	shared	/home/coder/owngo/runtime/internal/thread/thread_unix.go:78
+site	16	gap	var	rc-shared	go	/usr/local/go/src/sync/waitgroup.go:236
+site	8	heap	closure	rc-shared	go	/usr/local/go/src/sync/waitgroup.go:238
+site	8	gap	closure	static	-	/usr/local/go/src/sync/waitgroup.go:239
+site	6	none	-	rc-local	return	/home/coder/owngo/runtime/internal/ffi/pointer_array_default.go:27
+site	4	none	-	rc-local	return	/home/coder/owngo/runtime/internal/ffi/type.go:119
+site	4	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/reflect/type.go:1023
+site	4	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:2091
+site	4	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:595
+site	4	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:609
+site	3	gap	var	rc-local	closure	/usr/local/go/src/os/file_unix.go:144
+site	6	heap	complit	rc-local	return	/usr/local/go/src/os/file_unix.go:145
+site	3	none	nopos	unplaced	-	:0
+site	2	mixed	makeslice+var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:73
+site	2	none	-	rc-local	shared	/home/coder/owngo/runtime/internal/clite/signal/signal.go:30
+site	2	none	-	rc-local	return	/home/coder/owngo/runtime/internal/ffi/complex_type_default.go:8
+site	2	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:59
+site	2	gap	var	unplaced	-	/usr/local/go/src/sync/oncefunc.go:48
+site	2	heap	closure	unplaced	-	/usr/local/go/src/sync/oncefunc.go:57
+site	2	none	nopos	rc-local	shared	:0
+site	2	none	nopos	static	-	:0
+site	1	heap	var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:67
+site	1	gap	var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:69
+site	1	gap	var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:70
+site	1	gap	args	rc-local	shared	/home/coder/owngo/owngo/bench/mandelbrot/main.go:80
+site	1	heap	makeslice	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:81
+site	1	gap	var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:82
+site	1	heap	var	rc-shared	move	/home/coder/owngo/owngo/bench/mandelbrot/main.go:84
+site	1	heap	var	rc-shared	shared	/home/coder/owngo/owngo/bench/mandelbrot/main.go:85
+site	1	none	-	rc-local	closure	/home/coder/owngo/runtime/_patch/sync/pool.go:142
+site	1	none	-	static	-	/home/coder/owngo/runtime/_patch/sync/pool.go:143
+site	1	none	-	pinned	unsafe	/home/coder/owngo/runtime/_patch/sync/pool.go:146
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/clite/tls/tls_common.go:62
+site	1	none	-	cyclic	global	/home/coder/owngo/runtime/internal/ffi/type.go:77
+site	1	none	-	rc-shared	global	/home/coder/owngo/runtime/internal/ffi/type.go:80
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/internal/reflectlite/type.go:290
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/reflect/value.go:2363
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:53
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1645
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1649
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1660
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1663
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1880
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:813
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/symtab.go:840
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/lib/runtime/sync_pool_llgo.go:50
+site	1	none	-	rc-local	return	/home/coder/owngo/runtime/internal/runtime/map.go:332
+site	1	none	-	rc-shared	global	/home/coder/owngo/runtime/internal/runtime/panic.go:224
+site	1	none	-	pinned	unsafe	/home/coder/owngo/runtime/internal/runtime/z_string.go:123
+site	1	none	-	unplaced	-	/home/coder/owngo/runtime/internal/wordmap/map.go:69
+site	1	heap	new	rc-local	return	/usr/local/go/src/fmt/print.go:141
+site	1	none	-	rc-local	return	/usr/local/go/src/fmt/print.go:232
+site	1	heap	slicelit	rc-shared	global	/usr/local/go/src/internal/cpu/cpu_x86.go:73
+site	1	none	-	static	string	/usr/local/go/src/internal/strconv/atoi.go:231
+site	1	heap	var	rc-local	closure	/usr/local/go/src/sync/oncefunc.go:13
+site	1	heap	closure	rc-local	return	/usr/local/go/src/sync/oncefunc.go:21
+site	1	heap	var	rc-local	shared	/usr/local/go/src/syscall/rlimit.go:31
+site	1	none	complit	rc-shared	global	/usr/local/go/src/syscall/syscall_linux.go:1272
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/syscall/syscall_linux.go:1273
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/time/format.go:1618
+site	1	none	slicelit	rc-shared	global	/usr/local/go/src/unicode/graphic.go:23
+site	1	none	slicelit	rc-shared	global	/usr/local/go/src/unicode/graphic.go:29
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:10221
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:51
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:5399
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:7716
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:9
+site	1	heap	makemap	rc-shared	global	/usr/local/go/src/unicode/tables.go:9917
+total	3400	ops_alloc	3523
+verdict	gap	33
+verdict	heap	78
+verdict	mixed	2
+verdict	none	3287
+gap	var	24
+gap	closure	8
+gap	args	1
+strict	9

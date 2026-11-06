@@ -1,0 +1,126 @@
+owngo freed 24
+owngo live rc-local 2920
+owngo live rc-shared 125879195
+owngo live cyclic 353792
+owngo ops alloc 754811
+owngo ops alloc_root 19
+owngo ops alloc_counted 7
+owngo ops inc 0
+owngo ops dec_accounted 3
+owngo ops dec_cyclic 0
+owngo ops cyclic_visit 0
+owngo ops inc_shared 0
+owngo ops dec_shared 0
+owngo ops free_accounted 249031
+owngo ops free_root 249034
+owngo ops note_alloc_static 0
+owngo ops note_alloc_rc-local 89
+owngo ops note_alloc_rc-shared 16667722
+owngo ops note_alloc_cyclic 2108
+owngo ops note_alloc_pinned 0
+owngo ops note_alloc_implicit 0
+owngo ops region_create 0
+owngo ops alloc_region 0
+owngo ops free_region 0
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:119 rc-shared channel note_alloc 16666666
+owngo site :0 static - alloc 249030
+owngo site :0 static - free_accounted 249030
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:350 unplaced - alloc 2149
+owngo site /home/coder/owngo/runtime/internal/runtime/z_chan.go:204 cyclic return alloc 2097
+owngo site /home/coder/owngo/runtime/internal/runtime/z_chan.go:204 cyclic return note_alloc 2097
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:152 rc-shared channel alloc 1032
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:152 rc-shared channel note_alloc 1032
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1829 unplaced - alloc 97
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:71 unplaced - alloc 50
+owngo site /usr/local/go/src/errors/errors.go:65 rc-local return alloc 47
+owngo site /usr/local/go/src/errors/errors.go:65 rc-local return note_alloc 47
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:460 unplaced - alloc 45
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:463 unplaced - alloc 45
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:414 unplaced - alloc 26
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:416 unplaced - alloc 26
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:418 unplaced - alloc 26
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/fault_unwind_llgo.go:93 unplaced - alloc 18
+owngo site :0 rc-shared global alloc 16
+owngo site /home/coder/owngo/runtime/internal/runtime/z_chan.go:151 cyclic return alloc 11
+owngo site /home/coder/owngo/runtime/internal/runtime/z_chan.go:151 cyclic return note_alloc 11
+owngo site /home/coder/owngo/runtime/abi/type.go:343 rc-local return alloc 9
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/traceback_threads_llgo.go:19 unplaced - alloc 9
+owngo site /home/coder/owngo/runtime/internal/runtime/map.go:313 rc-local return alloc 9
+owngo site /home/coder/owngo/runtime/internal/runtime/map.go:313 rc-local return note_alloc 9
+owngo site /home/coder/owngo/runtime/internal/runtime/z_face.go:108 rc-shared global note_alloc 9
+owngo site /home/coder/owngo/runtime/internal/thread/thread_unix.go:64 rc-local shared alloc 9
+owngo site /home/coder/owngo/runtime/internal/thread/thread_unix.go:64 rc-local shared note_alloc 9
+owngo site /home/coder/owngo/runtime/internal/thread/thread_unix.go:78 rc-local shared alloc 9
+owngo site /home/coder/owngo/runtime/internal/thread/thread_unix.go:78 rc-local shared note_alloc 9
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:82 rc-shared go alloc 8
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1804 unplaced - alloc 7
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:126 rc-shared channel alloc 6
+owngo site /usr/local/go/src/os/file_unix.go:145 rc-local return note_alloc 6
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:2091 unplaced - alloc 5
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:165 rc-shared channel alloc 3
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:165 rc-shared channel note_alloc 3
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:99 rc-shared channel alloc 3
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:595 unplaced - alloc 3
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:609 unplaced - alloc 3
+owngo site /usr/local/go/src/os/file_unix.go:144 rc-local closure alloc_counted 3
+owngo site /usr/local/go/src/os/file_unix.go:144 rc-local closure dec_accounted 3
+owngo site /usr/local/go/src/os/file_unix.go:144 rc-local closure note_alloc 3
+owngo site /usr/local/go/src/os/file_unix.go:145 rc-local return alloc 3
+owngo site /usr/local/go/src/os/file_unix.go:145 rc-local return alloc_counted 3
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:124 rc-shared channel note_alloc 2
+owngo site /home/coder/owngo/runtime/internal/clite/signal/signal.go:30 rc-local shared alloc 2
+owngo site /home/coder/owngo/runtime/internal/clite/signal/signal.go:30 rc-local shared note_alloc 2
+owngo site /usr/local/go/src/sync/oncefunc.go:48 unplaced - alloc 2
+owngo site /usr/local/go/src/sync/oncefunc.go:57 unplaced - alloc 2
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:111 rc-shared channel note_alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:77 rc-shared channel alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:77 rc-shared channel note_alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:79 rc-shared go alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:80 static - alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:80 static - free_accounted 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:86 rc-shared go alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:87 rc-shared go alloc 1
+owngo site /home/coder/owngo/owngo/bench/revcomp/main.go:92 rc-shared channel alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/internal/reflectlite/type.go:290 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:53 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/link_linux_llgo.go:59 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1645 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1649 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1660 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1663 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:1880 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:813 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/lib/runtime/symtab.go:840 unplaced - alloc 1
+owngo site /home/coder/owngo/runtime/internal/runtime/map.go:332 rc-local return alloc 1
+owngo site /home/coder/owngo/runtime/internal/runtime/map.go:332 rc-local return note_alloc 1
+owngo site /home/coder/owngo/runtime/internal/runtime/panic.go:224 rc-shared global alloc 1
+owngo site /home/coder/owngo/runtime/internal/runtime/z_string.go:123 pinned unsafe alloc 1
+owngo site /usr/local/go/src/bufio/bufio.go:56 rc-local return alloc 1
+owngo site /usr/local/go/src/bufio/bufio.go:56 rc-local return note_alloc 1
+owngo site /usr/local/go/src/bufio/bufio.go:57 rc-local move alloc 1
+owngo site /usr/local/go/src/bufio/scan.go:304 rc-shared global alloc 1
+owngo site /usr/local/go/src/bufio/scan.go:304 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/internal/cpu/cpu_x86.go:107 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/internal/cpu/cpu_x86.go:73 rc-shared global alloc 1
+owngo site /usr/local/go/src/internal/cpu/cpu_x86.go:73 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/internal/cpu/cpu_x86.go:87 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/internal/cpu/cpu_x86.go:97 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/sync/oncefunc.go:13 rc-local closure alloc_counted 1
+owngo site /usr/local/go/src/sync/oncefunc.go:13 rc-local closure note_alloc 1
+owngo site /usr/local/go/src/sync/oncefunc.go:21 rc-local return alloc 1
+owngo site /usr/local/go/src/syscall/rlimit.go:31 rc-local shared alloc 1
+owngo site /usr/local/go/src/syscall/rlimit.go:31 rc-local shared note_alloc 1
+owngo site /usr/local/go/src/syscall/syscall_linux.go:1272 rc-shared global alloc 1
+owngo site /usr/local/go/src/syscall/syscall_linux.go:1272 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/syscall/syscall_linux.go:1273 rc-shared global alloc 1
+owngo site /usr/local/go/src/time/format.go:1618 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/graphic.go:23 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/graphic.go:23 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/unicode/graphic.go:29 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/graphic.go:29 rc-shared global note_alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:10221 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:51 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:5399 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:7716 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:9 rc-shared global alloc 1
+owngo site /usr/local/go/src/unicode/tables.go:9917 rc-shared global alloc 1
