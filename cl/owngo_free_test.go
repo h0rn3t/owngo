@@ -712,6 +712,76 @@ func earlyReturn(ok bool) int {
 	}
 }
 
+// TestOwnGoFreeMergeDeath — P-NEW-03.3: місце, мертве на вході блока злиття,
+// звільняється на цьому вході, коли воно живе на виході кожного попередника
+// (topBreak: break у голові циклу і в тілі, phi у блоці виходу), і на
+// розщепленому ребрі, коли на одному з попередників воно вже мертве
+// (ifUse: ребро з блока алокації в блок злиття; breakSet: break у голові і
+// break з окремого блока, де місце звільнене на вході).
+func TestOwnGoFreeMergeDeath(t *testing.T) {
+	const src = `package foo
+
+func fill(t *[8]int, i int) { t[i&7] = i }
+
+func topBreak(n int) int {
+	var flag [8]int
+	acc := 0
+	for i := 0; ; i++ {
+		if i >= n {
+			break
+		}
+		fill(&flag, i)
+		acc += flag[i&7]
+		if acc > 5 {
+			break
+		}
+	}
+	return acc
+}
+
+func breakSet(n int) int {
+	var flag [8]int
+	acc := 0
+	for i := 0; ; i++ {
+		if i >= n {
+			break
+		}
+		fill(&flag, i)
+		if flag[i&7] > 5 {
+			acc = -1
+			break
+		}
+		acc += flag[i&7]
+	}
+	return acc
+}
+
+func ifUse(n int) int {
+	var t [8]int
+	fill(&t, n)
+	x := 0
+	if n > 0 {
+		x = t[1]
+	}
+	return x
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	frees := map[string]int{
+		"foo.topBreak": 1,
+		"foo.breakSet": 2,
+		"foo.ifUse":    2,
+	}
+	for name, want := range frees {
+		if got := accountedFrees(mustNamedFunction(t, mod, name).String()); got != want {
+			t.Errorf("%s accounted frees = %d, want %d", name, got, want)
+		}
+	}
+}
+
 // TestOwnGoInteriorDec — P8.4: похідний вказівник, що лишається в функції
 // бази, місця не блокує, і Dec стоїть після останнього вживання p := &s.f,
 // а не після останнього s. Похідний вказівник, що повертається, Dec забирає.

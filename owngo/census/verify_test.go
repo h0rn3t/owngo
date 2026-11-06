@@ -76,6 +76,17 @@ func TestVerify(t *testing.T) {
 			want: []string{"use after release", "use after release", "double release"},
 		},
 		{
+			name: "release on edge then use",
+			fn:   static,
+			own: Ownership{
+				Uses:  uses,
+				After: map[ssa.Instruction][]ssa.Value{load: {site}},
+				Edge:  map[BlockEdge][]ssa.Value{{Pred: store.Block(), Succ: load.Block()}: {site}},
+			},
+			// Ребро без гілки c: читання і звільнення після нього — вдруге.
+			want: []string{"use after release", "double release"},
+		},
+		{
 			name: "inc without pair",
 			fn:   passed,
 			own:  Ownership{Inc: map[ssa.Instruction][]ssa.Value{call: {node}}},
