@@ -35,9 +35,9 @@ func local(depth int) int {
 }
 
 func staticNew() int {
-	p := new(int)
-	*p = 1
-	return *p
+	p := new([heapSize]byte)
+	p[0] = 1
+	return int(p[0])
 }
 
 func closureUse() int {
@@ -193,3 +193,7 @@ func cyclicKept(depth int) int {
 	}
 	return 2
 }
+
+// heapSize — понад межу стека 64 КиБ (P-NEW-04.2): місце static рядка 38
+// лишається в купі й має alloc, note_alloc і free_accounted.
+const heapSize = 64<<10 + 8

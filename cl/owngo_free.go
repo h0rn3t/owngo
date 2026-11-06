@@ -31,6 +31,9 @@ func (p *context) prepareOwnGoFree(pkg *ssa.Package) {
 	funcs := ssaPackageFuncs(pkg)
 	p.ownGoStackPuns(funcs)
 	place := census.PlaceAll(funcs)
+	if p.options.OwnGoStack {
+		p.ownGoStackStatic(place)
+	}
 	cats := place.Cats
 	p.ownGoUses = place.StaticUses
 	p.ownGoDecUses = place.DecUses
@@ -82,6 +85,29 @@ func (p *context) ownGoStackPuns(funcs []*ssa.Function) {
 				}
 			}
 		}
+	}
+}
+
+// ownGoMaxImplicitStack — межа gc для неявної алокації на стеку
+// (ir.MaxImplicitStackVarSize).
+const ownGoMaxImplicitStack = 64 << 10
+
+// ownGoStackStatic переводить місця place.Stack розміром до межі gc на стек
+// (P-NEW-04.2): без Heap AllocEx дає alloca у вхідному блоці й обнулення на
+// місці, а місце лишає static і не отримує ні NoteAlloc, ні FreeAccounted.
+func (p *context) ownGoStackStatic(place census.Placement) {
+	for alloc := range place.Stack {
+		fn := alloc.Parent()
+		if fn.TypeParams().Len() > len(fn.TypeArgs()) {
+			continue // тіло узагальненої функції: розміри типів невідомі
+		}
+		size := p.prog.SizeOf(p.type_(alloc.Type().(*types.Pointer).Elem(), llssa.GoDecl))
+		if size == 0 || size > ownGoMaxImplicitStack {
+			continue
+		}
+		alloc.Heap = false
+		delete(place.StaticUses, alloc)
+		place.Cats[alloc] = "stack"
 	}
 }
 

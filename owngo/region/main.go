@@ -216,8 +216,8 @@ func goroutines() {
 			want += uint64(rounds) * uint64(1+(g+j)%64)
 		}
 	}
-	// blocks — static, звільняється після останнього раунду, до finished.
-	want += workers * allocs * uint64(unsafe.Sizeof(block{}))
+	// blocks — static сталого розміру, лежить на стеку горутини (P-NEW-04.2)
+	// і Freed не змінює.
 	var wg sync.WaitGroup
 	for g := range workers {
 		wg.Go(func() {

@@ -51,6 +51,10 @@ type Placement struct {
 	// з інших пакетів (P-NEW-05.1): codegen дає першим клон F$region, а в
 	// клоні кличе клони других.
 	Builders map[*ssa.Function]bool
+	// Stack — купові Alloc static, яким вистачає кадру функції (P-NEW-04.2):
+	// об'єкт не переживає наступного виконання свого Alloc. Розмір перевіряє
+	// codegen.
+	Stack map[*ssa.Alloc]struct{}
 }
 
 // PlaceAll — Place разом з місцями спільної втечі через go (P9.3).
@@ -65,6 +69,7 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		goShared   map[*ssa.Go][]ssa.Value
 		regions    map[ssa.Instruction]struct{}
 		builders   map[*ssa.Function]bool
+		stack      map[*ssa.Alloc]struct{}
 	)
 	if len(funcs) == 0 {
 		return Placement{}
@@ -148,6 +153,12 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 			}
 			if head == "static" {
 				users := siteUsers(site, pts, contents)
+				if alloc, ok := site.(*ssa.Alloc); ok && alloc.Heap && frameLocal(alloc, users, pts, contents) {
+					if stack == nil {
+						stack = map[*ssa.Alloc]struct{}{}
+					}
+					stack[alloc] = struct{}{}
+				}
 				if len(users) > 0 {
 					staticUses[site] = users
 				}
@@ -200,7 +211,52 @@ func PlaceAll(funcs []*ssa.Function) Placement {
 		GoShared:   goShared,
 		Regions:    regions,
 		Builders:   builders,
+		Stack:      stack,
 	}
+}
+
+// frameLocal: об'єкт місця не доживає до наступного виконання alloc. Поза
+// циклом кожен виклик виконує alloc один раз. У циклі новий об'єкт займає
+// той самий слот кадру, тож попередній не може лишатися в phi, у вмісті
+// іншого об'єкта чи в аргументі defer.
+func frameLocal(alloc *ssa.Alloc, users []ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.Instruction]siteSet) bool {
+	if !inCycle(alloc.Block()) {
+		return true
+	}
+	for v, set := range pts {
+		if _, phi := v.(*ssa.Phi); phi {
+			if _, ok := set[alloc]; ok {
+				return false
+			}
+		}
+	}
+	for _, inner := range contents {
+		if _, ok := inner[alloc]; ok {
+			return false
+		}
+	}
+	return !slices.ContainsFunc(users, func(user ssa.Instruction) bool {
+		_, ok := user.(*ssa.Defer)
+		return ok
+	})
+}
+
+// inCycle: з блока є шлях назад у нього.
+func inCycle(block *ssa.BasicBlock) bool {
+	seen := map[*ssa.BasicBlock]bool{}
+	work := slices.Clone(block.Succs)
+	for len(work) > 0 {
+		b := work[len(work)-1]
+		work = work[:len(work)-1]
+		if b == block {
+			return true
+		}
+		if !seen[b] {
+			seen[b] = true
+			work = append(work, b.Succs...)
+		}
+	}
+	return false
 }
 
 // interiorCall: місце — виклик зі свіжим внутрішнім результатом.

@@ -1,6 +1,7 @@
 //go:build owngo
 
-// Програма прийняття P1.5: одне купове місце static звільняє свої 8 байтів.
+// Програма прийняття P1.5: одне купове місце static звільняє свої байти.
+// Масив більший за межу стека 64 КиБ (P-NEW-04.2), тож лишається в купі.
 package main
 
 import (
@@ -14,8 +15,10 @@ func ownGoFreed() uint64
 //go:linkname ownGoLive github.com/xgo-dev/llgo/runtime/internal/runtime.Live
 func ownGoLive(cat int32) uint64
 
+const size = 64<<10 + 8
+
 func staticSite() byte {
-	p := new([8]byte)
+	p := new([size]byte)
 	p[0] = 1
 	return p[0]
 }
@@ -26,7 +29,7 @@ func main() {
 	if staticSite() != 1 {
 		os.Exit(2)
 	}
-	if got, want := ownGoFreed()-beforeFreed, uint64(8); got != want {
+	if got, want := ownGoFreed()-beforeFreed, uint64(size); got != want {
 		println("freed delta", got, "want", want)
 		os.Exit(3)
 	}

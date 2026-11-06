@@ -1,7 +1,7 @@
 //go:build owngo
 
 // Програма прийняття P4.2: базове купове місце static у пакеті поза main
-// звільняє свої 8 байтів.
+// звільняє свої site.Size байтів.
 package main
 
 import (
@@ -23,7 +23,7 @@ func main() {
 	if site.Static() != 1 {
 		os.Exit(2)
 	}
-	if got, want := ownGoFreed()-beforeFreed, uint64(8); got != want {
+	if got, want := ownGoFreed()-beforeFreed, uint64(site.Size); got != want {
 		println("freed delta", got, "want", want)
 		os.Exit(3)
 	}

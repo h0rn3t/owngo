@@ -68,7 +68,8 @@ func calleePins() {
 	check += p.a
 }
 
-// boxPins — закріплене місце в полі static-об'єкта: коробка звільняється.
+// boxPins — закріплене місце в полі static-об'єкта. Коробка сталого розміру
+// лежить на стеку (P-NEW-04.2), тож звільнених байтів немає.
 func boxPins() {
 	t := &T{a: 4}
 	keep[3] = unsafe.Pointer(t)
@@ -118,7 +119,7 @@ func main() {
 		// Свіжий результат облікує New у своїй категорії: живий, але не pinned.
 		{"callerPins", callerPins, 0, 0, size},
 		{"calleePins", calleePins, 0, size, size},
-		{"boxPins", boxPins, uint64(unsafe.Sizeof(Box{})), size, size},
+		{"boxPins", boxPins, 0, size, size},
 		{"ringPins", ringPins, 2 * uint64(unsafe.Sizeof(Node{})), size, size},
 	}
 	for _, c := range cases {
