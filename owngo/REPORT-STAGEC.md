@@ -318,3 +318,35 @@ Codegen (`Options.OwnGoStack`, вмикається тегом `owngo`) знім
 | k-nucleotide 25 000 000 (8 прогонів) | 5.22–5.63 | 5.22–5.66 | 5.30 → 5.39, у межах розкиду |
 
 Пастка заміру: перший A/B показав k-nucleotide +18% (5.50 → 6.51 с). Бінарники тоді збирались із кешем `~/.cache/llgo`, який уже наповнив новий компілятор (`fixtures.sh`). Кеш не враховує змін `cl` і census, тож обидва варіанти брали змішані архіви. Бісекція за пакетами показала, що навіть варіант без жодного місця на стеку повільний, а збірка з чистим кешем різниці не має.
+
+## P-NEW-04.4 — стала в інтерфейсі без купи
+
+Компілятор — `26ea1d3dc`. Лічильники — один прогін reverse-complement під `-tags owngo,owngostat -O2 -lto thin` на вході `fasta 100000001`; вивід побайтно як `expected-100000001`. Дані — `bench/stagec/revcomp-const.stat`, база — `bench/stagec/revcomp-stack.stat`.
+
+### Правило
+
+Місце `MakeInterface`, чий операнд — `*ssa.Const` (не нетипізований `nil`), а категорія census — `static`, отримує позначку `const` (`cl.ownGoConstIfaces`, з `Options.OwnGoStack`, тобто з тегом `owngo`). Codegen будує інтерфейс через `ssa.Builder.MakeInterfaceConst`: значення лежить у приватній `unnamed_addr constant` глобальній змінній модуля, слово даних — її адреса. Місце не має ні `NoteAlloc`, ні `FreeAccounted`, ні рядка `alloc` в `owngo site`. Тип, який llgo кладе в слово даних без копії, і тип нульового розміру йдуть звичайним `MakeInterface`.
+
+Відхилення від тексту задачі: стала в місці іншої категорії (`return syscall.EAGAIN` — `rc-local return`) лишається в купі. `Dec` чи обхід такого місця звільнили б глобальну адресу.
+
+### reverse-complement до і після
+
+| Лічильник | до (`revcomp-stack.stat`) | після |
+| --- | ---: | ---: |
+| `owngo ops alloc` | 754 811 | **505 567** |
+| `owngo ops free_accounted` | 249 031 | **1** |
+| `owngo ops free_root` | 249 034 | 4 |
+| `owngo site :0 static` | 249 030 | — |
+
+`live cyclic` (353 792 → 335 480) і `note_alloc_cyclic` (2 108 → 1 999) — вузли очікування каналу `z_chan.go:204`, їхнє число залежить від планувальника (див. P-NEW-04.2). Решта корпусу має на `:0 static` від 2 до 260 алокацій (`*-stack.stat`) і не переміряна.
+
+### `GOROOT/test`
+
+`ci`, 830 випадків, llgo з робочого дерева `26ea1d3dc`; база — прогін P-NEW-04.2.
+
+| Варіант | `pass` до | після |
+| --- | ---: | ---: |
+| `-tags owngo` | 803 | 803 |
+| `-tags owngo -O0 -asan` | 799 | 799 |
+
+Множини `pass` збігаються поіменно, падіння ті самі. Під ASan немає `heap-use-after-free`, `double-free`, `attempting free` і стекових звітів; верифікатор P-NEW-03.1 помилок не дав.

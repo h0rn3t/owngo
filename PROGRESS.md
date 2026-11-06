@@ -1274,3 +1274,26 @@
   - На `exec.go:307/287` лишається `rc-local call note_alloc` — 1.37 млрд викликів `NoteAlloc` для самого `append` у `m.pool`, на кожен виклик, навіть без росту зрізу. Кандидат на наступну задачу: облік лише на гілці росту.
   - Перший A/B показав k-nucleotide +18%. Причина — збірка з кешем `~/.cache/llgo`, наповненим новим компілятором; з чистим кешем різниці немає. A/B компілятора збирати лише з чистим кешем для кожного варіанта.
 - Лишилось: рішення розробника про P-NEW-04.4 (стала в інтерфейсі), про облік `NoteAlloc` на `append` і про гейт C та D; P11.4 чекає сервісу.
+
+## 2026-11-06 — P-NEW-04.4 стала в інтерфейсі без купи
+
+- Рішення розробника: задача входить.
+- Тест спершу (`a069461cc`):
+  - `TestOwnGoConstIface` (`cl/owngo_stack_test.go`): `err == EINTR` (власний `Errno`) і `v == "boom"` — без `AllocU`, `NoteAlloc` і `FreeAccounted`; у модулі є приватна незмінна змінна `i64 4`. `v == any(x)` змінної і `return EINTR` лишаються в купі; без `OwnGoStack` `isEINTR` має `AllocU`. До реалізації червоні `isEINTR`, `isBoom` і перевірка глобальної змінної.
+  - фікстура `owngo/asan/constiface`: порівняння, `switch` на сталих `float64`, `string`, `syscall.Errno`, `errors.Is` на сталій з `return`. До реалізації вона проходить: `Freed` не бачить `FreeAccounted` місць `MakeInterface` (розмір 0). Фікстура ловить залишений `free` на глобальній адресі (`attempting free` під ASan), розміщення перевіряє IR-тест.
+- Реалізація (`26ea1d3dc`):
+  - `cl.ownGoConstIfaces`: місце `MakeInterface` з операндом `*ssa.Const` і категорією `static` виходить зі `StaticUses` і отримує позначку `const`;
+  - `ssa.Builder.MakeInterfaceConst`: значення — у приватній `unnamed_addr constant` змінній, слово даних — її адреса; прямий тип і тип нульового розміру — звичайний `MakeInterface`;
+  - `countOwnGoAlloc` пропускає `const`, як `stack`. Вмикається `Options.OwnGoStack` (тег `owngo`), без тегу IR не змінюється.
+  - Мутаційна перевірка: без умови `static` червоніє `retConst`.
+- Відхилення від плану, на перевірку розробнику:
+  - **Лише `static`.** Задача просила кожну сталу в інтерфейсі. Стала в місці `rc-local`, `rc-shared` чи `cyclic` лишається в купі: `Dec` чи обхід звільнили б глобальну адресу.
+  - **Без нової опції.** Поведінку вмикає `OwnGoStack`: це той самий розрив стека P-NEW-04, і наявні IR-тести `OwnGoFree` свого предмета не втрачають.
+- Прийняття:
+  - `go test -count=1 ./cl/ -run OwnGo` з чистим `~/.cache/llgo` і `go test -count=1 ./ssa/` — `ok`;
+  - `owngo/fixtures.sh` — 0 падінь з 64 (відомі `bytes/imconcat`, `counted`, `runtimefree`), `constiface` під `-O0 -asan` — код 0 без тексту ASan;
+  - `GOROOT/test` `ci`: `-tags owngo` — 803 `pass`, `-tags owngo -O0 -asan` — 799, поіменно як у базі P-NEW-04.2; без звітів ASan і помилок верифікатора;
+  - P-NEW-04.1 повторно на reverse-complement: рядка `:0 static` немає, `owngo ops alloc` 754 811 → 505 567, `free_accounted` 249 031 → 1; вивід — як `expected-100000001`. Звіт — `owngo/REPORT-STAGEC.md`, дані — `owngo/bench/stagec/revcomp-const.stat`;
+  - `gofmt`, `go vet ./cl ./ssa`, `golangci-lint --new-from-rev=HEAD`, `go build ./...` — чисто.
+- Час не міряно: задача його не вимагає, машина була зайнята `GOROOT/test`.
+- Лишилось: рішення розробника про облік `NoteAlloc` на `append` і про гейт C та D; P11.4 чекає сервісу.
