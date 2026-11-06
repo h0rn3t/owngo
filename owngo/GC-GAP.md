@@ -92,3 +92,7 @@
 | `internal/testutil/xuser.go:35` | rc-local | call | `*[1]any` |
 | `internal/testutil/xuser.go:39` | rc-local | call | `*[1]any` |
 
+
+## Корпус етапу C (P-NEW-04.1)
+
+На програмах `owngo/bench` розрив зважено числом алокацій з `owngo site`, див. `owngo/REPORT-STAGEC.md`, розділ «Розрив стека на корпусі». Там правило рядка цього файла замінено правилом об'єкта (`owngo/census/cmd/gcgap`). Причина: на рядку `append` діагностика росту зрізу ховає масив аргументів, а змінна, яку gc лишає на стеку, діагностики не має.
