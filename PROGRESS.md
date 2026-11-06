@@ -1208,3 +1208,25 @@
 - Лічильники — один прогін `-tags owngo,owngostat -O2 -lto thin` на `cec42d3a3` для шести програм (код 0 у всіх). `GOROOT/test` під `owngo,owngostat`: 830 випадків, 803 з `owngo ops`. Через stderr кожен випадок — `FAIL`, рядки взято з логу.
 - Перевірки: `go test ./cl -run TestOwnGo` — `ok`; `go build ./...`, `go vet ./cl ./ssa`, `gofmt` — чисто.
 - Лишилось: P-NEW-03.3 (вада free), P-NEW-04.1 (розрив стека на корпусі); рішення розробника про гейт D; P11.4 чекає сервісу.
+
+## 2026-11-06 — P-NEW-03.3 `free` на ребрі злиття
+
+- Тест спершу (`a6a5e565f`):
+  - `TestOwnGoFreeMergeDeath` (`cl/owngo_free_test.go`): `topBreak` (`break` у голові циклу і прямий `break` у тілі, phi у блоці виходу) — один `FreeAccounted`; `breakSet` (`acc = -1; break` дає окремий блок) і `ifUse` (ребро з блока алокації в блок злиття) — по два. До реалізації — 0, 1 і 1. Цикл з одним виходом (`loopLast`, `TestOwnGoFreeEdgeDeath`) — без змін, як і було;
+  - `TestVerify`: звільнення на ребрі, після якого місце читають і звільняють, — `use after release` і `double release`. До реалізації — помилка збірки (`Ownership.Edge`);
+  - фікстура `owngo/asan/mergefree`: три функції в циклі, `Live(static)` до і після однаковий. До реалізації — `live static 0 -> 1472` (23 місця по 64 байти).
+- Реалізація (`49c27b793`):
+  - `deaths` (`cl/owngo_free.go`) для кожного блока, де значення мертве на вході, збирає попередників, на виході яких воно живе. Якщо це всі попередники — free на вхід блока (як раніше для одного попередника; phi компілюються раніше, тож free стоїть після них). Якщо лише частина — розщеплене ребро з кожного живого попередника.
+  - Розщеплення: `If` веде таке ребро в новий блок (`ownGoEdgeBlock`), після термінатора блок отримує звільнення і перехід у наступника (`emitOwnGoEdgeFree`); `compilePhi` бере значення з нового блока. `Jump` розщеплення не потребує: у попередника з одним наступником значення не може бути живим на виході й мертвим на вході наступника.
+  - `census.Ownership.Edge` (`map[census.BlockEdge][]ssa.Value`): верифікатор застосовує звільнення ребра до стану попередника, ловить на ньому `double release`, а читання phi з такого ребра — `use after release`.
+- Відхилення від плану, на перевірку розробнику:
+  - **Змінено очікування фікстури `owngo/region`.** `goroutines` перевіряла точний `Freed` у вікні роботи горутин. `blocks := make([]block, 300)` (`static`) раніше не звільнявся (вихід із `for range rounds` — той самий випадок злиття) і тепер звільняється після останнього раунду, усередині вікна: 8 × 300 × 16 = 38 400 байтів, рівно різниця. Очікування доповнено цим числом; під `-O0 -asan` фікстура — код 0 без тексту ASan.
+  - **Окремий кейс `breakSet`.** Перша версія `topBreak` (з `acc = -1` перед `break`) у go/ssa дає окремий блок для `break`, тож це випадок розщеплення, а не входу злиття; тест пройшов би з одним free з неправильної причини. Форма з прямим `break` тепер — `topBreak`, стара — `breakSet`.
+- Мутаційна перевірка: без гілки розщеплення в `deaths` червоніють `ifUse` і `breakSet`; без відображення phi на блок ребра — `llvm.VerifyModule`.
+- Прийняття:
+  - `go test -count=1 ./cl/ -run OwnGo` з чистим `~/.cache/llgo` — `ok`; `go test -count=1 -race ./owngo/census/` — `ok`;
+  - `owngo/fixtures.sh` зі свіжозібраним `llgo` — 1 падіння з 62 (`owngo/region`, див. вище), після виправлення очікування — зелена (відомі `bytes/imconcat`, `counted`, `runtimefree`), зокрема `mergefree` під `-O0 -asan`;
+  - regex-redux під `-tags owngo,owngostat -O2 -lto thin`, вивід — як `expected-5000000.txt`: `owngo live static` 77 072 824 → 0, `free_accounted` +9 634 103 (рівно алокації `exec.go:191`), додатково `os/file_unix.go:144 rc-local closure dec_accounted 3`. Звіт — `owngo/REPORT-STAGEC.md`, дані — `owngo/bench/stagec/regexredux-merge.stat`. Час не мірявся: зміна — один `FreeAccounted` на виклик `machine.match`;
+  - `GOROOT/test` `ci` на `49c27b793` (llgo зібрано з того самого коду): `-tags owngo` — 803 `pass`, єдиний `unexpected-fail` — `issue14636.go`; `-tags owngo -O0 -asan` — 799 `pass`, решта — відомі (`inline_callers`, `peano`, `rangegen`, `issue78081`, `issue14636`), жодного `heap-use-after-free`, `double-free` чи `attempting free`. Верифікатор P-NEW-03.1 помилок не дав;
+  - `gofmt`, `go vet ./cl ./owngo/census` — чисто; `golangci-lint` (нові з `HEAD~1`) — 0.
+- Лишилось: P-NEW-04.1 (розрив стека на корпусі); рішення розробника про гейт D; P11.4 чекає сервісу.
