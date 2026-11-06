@@ -133,3 +133,65 @@ func compileOwnGoStack(t *testing.T, src string, stack bool) llvm.Module {
 	}
 	return pkg.Module()
 }
+
+// TestOwnGoConstIface — P-NEW-04.4: стала невказівникового типу в інтерфейсі
+// місця static бере слово даних з незмінної глобальної змінної, без AllocU і
+// FreeAccounted. Змінна в інтерфейсі і стала, що тікає через return,
+// лишаються в купі.
+func TestOwnGoConstIface(t *testing.T) {
+	const src = `package foo
+
+type Errno uintptr
+
+func (e Errno) Error() string { return "errno" }
+
+const EINTR = Errno(4)
+
+func isEINTR(err error) bool { return err == EINTR }
+
+func isBoom(v any) bool { return v == "boom" }
+
+func boxVar(x int, v any) bool { return v == any(x) }
+
+func retConst() error { return EINTR }
+`
+	mod := compileOwnGoStack(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		heap bool
+	}{
+		{"foo.isEINTR", false},
+		{"foo.isBoom", false},
+		{"foo.boxVar", true},
+		{"foo.retConst", true},
+	}
+	for _, tt := range tests {
+		ir := mustNamedFunction(t, mod, tt.name).String()
+		if got := strings.Contains(ir, "runtime.AllocU"); got != tt.heap {
+			t.Errorf("%s has AllocU = %v, want %v:\n%s", tt.name, got, tt.heap, ir)
+		}
+		if !tt.heap && (strings.Contains(ir, "runtime.FreeAccounted") || strings.Contains(ir, "runtime.NoteAlloc")) {
+			t.Errorf("%s has FreeAccounted or NoteAlloc, want none for a constant:\n%s", tt.name, ir)
+		}
+	}
+	// Слово даних EINTR — адреса приватної незмінної змінної зі значенням 4.
+	var data []string
+	for g := mod.FirstGlobal(); !g.IsNil(); g = llvm.NextGlobal(g) {
+		init := g.Initializer()
+		if g.Linkage() == llvm.PrivateLinkage && g.IsGlobalConstant() && !init.IsNil() &&
+			init.Type() == mod.Context().Int64Type() && init.ZExtValue() == 4 {
+			data = append(data, g.Name())
+		}
+	}
+	if len(data) == 0 {
+		t.Errorf("no private constant i64 4 global for EINTR:\n%s", mod.String())
+	}
+
+	off := compileOwnGoStack(t, src, false)
+	if ir := mustNamedFunction(t, off, "foo.isEINTR").String(); !strings.Contains(ir, "runtime.AllocU") {
+		t.Errorf("OwnGoStack false: foo.isEINTR lost AllocU:\n%s", ir)
+	}
+}
