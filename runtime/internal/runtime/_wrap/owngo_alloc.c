@@ -18,9 +18,15 @@
 // тож поле pending_next сторінки не перезаписується, поки власник його читає.
 //
 // Порожня мала сторінка, яка не є поточною для класу, і звільнений великий
-// блок повертаються в спільний пул вільних діапазонів сторінок. Пул
-// тримає зайнятими до SC_POOL_KEEP сторінок, решту віддає системі через
-// madvise. Діапазон із пулу береться першим, що підходить, з поділом.
+// блок повертаються в спільний пул вільних діапазонів сторінок. Діапазон
+// у пулі лишається зайнятим (P-NEW-08.2): наступне виділення бере його без
+// сторінкових збоїв. Діапазон, що пролежав у пулі довше за
+// SC_PURGE_DELAY_NS, віддається системі через madvise, доки зайнятих
+// сторінок пулу більше за SC_POOL_KEEP. Перевірка віку йде під sc_lock на
+// кожному взятті чи поверненні сторінок, не частіше ніж раз на половину
+// затримки, тож програма, яка більше не звертається до алокатора, тримає
+// пул до наступного звертання. Діапазон із пулу береться першим, що
+// підходить, з поділом.
 //
 // З OWNGO_ALLOC_STAT (файл owngo_alloc_stat.c, тег owngostat) алокатор
 // рахує свої події для рядків owngo alloc (P-NEW-08.1). Події власника купи
@@ -35,6 +41,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
+#include <time.h>
 
 #define SC_PAGE_SHIFT 16
 #define SC_PAGE ((size_t)1 << SC_PAGE_SHIFT)
@@ -44,6 +51,10 @@
 #define SC_SMALL_MAX 8192
 #define SC_CLASSES (SC_SMALL_MAX / SC_STEP + 1)
 #define SC_POOL_KEEP 64
+// Затримка повернення сторінок — 10 мс, як типова purge_delay у mimalloc.
+// На binary-trees 21 затримки 10 мс, 100 мс і 1 с дали той самий час і
+// sys у межах розкиду (owngo/REPORT-STAGEF.md), тож обрано найкоротшу.
+#define SC_PURGE_DELAY_NS ((uint64_t)10 * 1000 * 1000)
 #define SC_NONE SIZE_MAX
 
 enum { SC_FREE, SC_SMALL, SC_LARGE };
@@ -74,6 +85,7 @@ struct sc_page {
 	// Діапазон пулу.
 	sc_page *next_run;
 	uint32_t committed;
+	uint64_t freed_at; // мітка sc_now, коли діапазон потрапив у пул
 };
 
 // Номери лічильників; порядок — порядок рядків owngo alloc.
@@ -114,6 +126,7 @@ static pthread_key_t sc_key;
 static pthread_mutex_t sc_lock = PTHREAD_MUTEX_INITIALIZER;
 static sc_page *sc_runs;         // вільні діапазони пулу, під sc_lock
 static size_t sc_committed;      // зайняті сторінки пулу, під sc_lock
+static uint64_t sc_next_purge;   // sc_now наступної перевірки віку, під sc_lock
 static sc_heap *sc_abandoned;    // покинуті купи, під sc_lock
 
 static __thread sc_heap *sc_tls;
@@ -187,9 +200,37 @@ static inline char *sc_addr(size_t idx) {
 	return sc_region + (idx << SC_PAGE_SHIFT);
 }
 
+static uint64_t sc_now(void) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+
+// sc_purge віддає системі зайняті діапазони пулу, старші за
+// SC_PURGE_DELAY_NS, доки зайнятих сторінок пулу більше за SC_POOL_KEEP.
+// Викликається під sc_lock.
+static void sc_purge(void) {
+	uint64_t now = sc_now();
+	if (now < sc_next_purge) {
+		return;
+	}
+	sc_next_purge = now + SC_PURGE_DELAY_NS / 2;
+	for (sc_page *run = sc_runs; run != NULL && sc_committed > SC_POOL_KEEP; run = run->next_run) {
+		if (!run->committed || now - run->freed_at < SC_PURGE_DELAY_NS) {
+			continue;
+		}
+		madvise(sc_addr(run->start), (size_t)run->npages << SC_PAGE_SHIFT, MADV_DONTNEED);
+		SC_STAT_LOCKED(SC_STAT_MADVISE, 1);
+		SC_STAT_LOCKED(SC_STAT_MADVISE_BYTES, (size_t)run->npages << SC_PAGE_SHIFT);
+		run->committed = 0;
+		sc_committed -= run->npages;
+	}
+}
+
 // sc_take_pages повертає першу сторінку n вільних поспіль: з пулу чи
 // за межею використаних; SC_NONE — регіон вичерпано. Викликається під sc_lock.
 static size_t sc_take_pages(size_t n) {
+	sc_purge();
 	for (sc_page **link = &sc_runs; *link != NULL; link = &(*link)->next_run) {
 		sc_page *run = *link;
 		if (run->npages < n) {
@@ -208,6 +249,7 @@ static size_t sc_take_pages(size_t n) {
 			rest->start = (uint32_t)(idx + n);
 			rest->npages = run->npages - (uint32_t)n;
 			rest->committed = run->committed;
+			rest->freed_at = run->freed_at;
 			rest->next_run = run->next_run;
 			*link = rest;
 		}
@@ -228,17 +270,13 @@ static void sc_give_pages(size_t idx, size_t n) {
 	run->kind = SC_FREE;
 	run->start = (uint32_t)idx;
 	run->npages = (uint32_t)n;
-	run->committed = sc_committed + n <= SC_POOL_KEEP;
+	run->committed = 1;
+	run->freed_at = sc_now();
+	sc_committed += n;
 	SC_STAT_LOCKED(SC_STAT_PAGE_GIVE, n);
-	if (run->committed) {
-		sc_committed += n;
-	} else {
-		madvise(sc_addr(idx), n << SC_PAGE_SHIFT, MADV_DONTNEED);
-		SC_STAT_LOCKED(SC_STAT_MADVISE, 1);
-		SC_STAT_LOCKED(SC_STAT_MADVISE_BYTES, n << SC_PAGE_SHIFT);
-	}
 	run->next_run = sc_runs;
 	sc_runs = run;
+	sc_purge();
 }
 
 static sc_heap *sc_heap_get(void) {
