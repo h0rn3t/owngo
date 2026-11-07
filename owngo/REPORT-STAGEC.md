@@ -450,3 +450,26 @@ A/B за правилами S1.1 (чисті кеші, 10 прогонів з ч
 | k-nucleotide, повтор | 6.02–7.17 | 5.33–6.38 | 6.54 → 5.65 |
 
 Усі різниці — у межах розкиду: діапазони перетинаються, а два A/B k-nucleotide дали протилежні знаки за однакового user-часу. Виклик, що одразу повертається, коштував менше за шум заміру. Зміна прибирає 1.42 млрд операцій обліку, але не дає вимірного часу.
+
+## P-NEW-03.4 — вузол очікування каналу і канал `time.Sleep`
+
+Причина нестабільного `sharedtree` (гейт C) — не планувальник, а витік. Під `owngo` кожна блокувальна відправка чи прийом лишала живим `chanWaiter` (168 байтів `cyclic`), а кожен `time.Sleep` — ще й свій канал `done`: 304 байти на `Sleep` без межі. `sharedtree` чекав `DecShared` горутини через `time.Sleep`, і залежно від того, чи встиг `Sleep` заблокуватись, `live cyclic` після виклику був 0 або 304.
+
+| Що | Було | Стало |
+|---|---|---|
+| вузол `ChanSend`/`ChanRecv` | `new(chanWaiter)`, не звільнявся | `c.Malloc` поза обліком (як вузол `select`), `c.Free` після `wait()` |
+| канал `done` у `timeSleep` | не звільнявся | `rt.FreeChan` після прийому; `Lock`/`Unlock` чекають виходу відправника таймера |
+| фікстури `shared{tree,go,global}` | чекали `time.Sleep` | чекають `runtime.Gosched()`: `Sleep` тепер рухає `Freed` |
+
+Без тегу `owngo` рантайм не змінюється (`chan_waiter_default.go`, `time_sleep_default_llgo.go`). Канали користувача з `make` і далі не звільняються — це поза задачею.
+
+Перевірка:
+
+| Перевірка | Результат |
+|---|---|
+| `owngo/asan/chanwait` (50 обмінів і `Sleep`) | до зміни — код 3, після — `asan-chanwait-ok` під `-O0 -asan` |
+| `sharedtree`, `sharedgo`, `sharedglobal`, 200 паралельних прогонів кожна | 0 падінь з 600 |
+| `owngo/fixtures.sh` | 0 падінь з 65 (відомі `bytes/imconcat`, `counted`, `runtimefree`) |
+| `GOROOT/test` `ci`, `-tags owngo` | 803 `pass`, як база; множини збігаються поіменно |
+| `GOROOT/test` `ci`, `-tags owngo -O0 -asan` | 799 `pass`, як база; без `heap-use-after-free`, `double-free`, `attempting free` |
+| `go test -count=1 ./cl/` з чистим кешем llgo | `ok` |

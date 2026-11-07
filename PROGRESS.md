@@ -1326,3 +1326,12 @@
   - `gofmt`, `go vet ./cl`, `golangci-lint --new-from-rev=HEAD ./cl/`, `go build ./...` — чисто.
 - `GOROOT/test` не проганявся: зміна лише прибирає виклик, що на 0 байтів нічого не робить, і не змінює ні розміщення, ні звільнення.
 - Лишилось: рішення розробника про `sharedtree` і наступний етап (E: P-NEW-07, P-NEW-10; F: P-NEW-08); P11.4 чекає сервісу.
+
+## 2026-11-07 — P-NEW-03.4 Вузол очікування каналу і канал `time.Sleep`
+
+- Розбір нестабільного `TestOwnGoSharedBytes/sharedtree` (`live cyclic 304 want 0`) знайшов витік: під `owngo` блокувальна операція каналу лишала `chanWaiter` (168 байтів), а `time.Sleep` — ще й канал `done`; 304 байти на `Sleep`. Задачу додано в `PLAN.md` без умови входу (вада).
+- Тест спершу: фікстура `owngo/asan/chanwait` (`ae4d3f220`) — до зміни код 3 (`live cyclic` росте).
+- Реалізація (`ea85c5fef`): `allocChanWaiter`/`freeChanWaiter` (`chan_waiter_owngo.go`) — вузол поза обліком, звільняється після `wait()`; `rt.FreeChan` для каналу без буфера і `freeSleepChan` у `timeSleep`. Без тегу `owngo` — `new` і порожні функції. Фікстури `shared{tree,go,global}` чекають `Gosched`, а не `Sleep`: тепер `Sleep` звільняє свій канал у `Freed`.
+- Прийняття: `chanwait` зелена під `-O0 -asan`; `shared*` — 0 падінь з 600 (200 паралельних прогонів кожна); `owngo/fixtures.sh` — 0 з 65; `GOROOT/test` `ci` під `owngo` — 803 `pass`, під `owngo -O0 -asan` — 799, поіменно як база, без звітів ASan; `go test ./cl/` з чистим кешем — `ok`. Звіт — `owngo/REPORT-STAGEC.md`, «P-NEW-03.4».
+- Не зроблено: канали користувача з `make` не звільняються; `runtimeTimer` за `Sleep` окремо не міряно.
+- Лишилось: рішення розробника про наступний етап (E: P-NEW-07, P-NEW-10; F: P-NEW-08); P11.4 чекає сервісу.
