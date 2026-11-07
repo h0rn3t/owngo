@@ -7,6 +7,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
@@ -44,11 +45,15 @@ func main() {
 		os.Exit(2)
 	}
 	want := uint64(unsafe.Sizeof(0) + unsafe.Sizeof(sync.WaitGroup{}))
-	for i := 0; i < 5000 && ownGoFreed()-beforeFreed < want; i++ {
-		time.Sleep(time.Millisecond)
+	for end := time.Now().Add(5 * time.Second); ownGoFreed()-beforeFreed < want && time.Now().Before(end); {
+		// time.Sleep не годиться: він звільняє свій канал, і ці байти
+		// потрапили б у Freed.
+		runtime.Gosched()
 	}
 	// Ще мить: зайве звільнення S теж мало б час статися.
-	time.Sleep(10 * time.Millisecond)
+	for end := time.Now().Add(10 * time.Millisecond); time.Now().Before(end); {
+		runtime.Gosched()
+	}
 	if got := ownGoFreed() - beforeFreed; got != want {
 		println("freed delta", got, "want", want)
 		os.Exit(3)

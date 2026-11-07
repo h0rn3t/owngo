@@ -7,6 +7,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
@@ -62,8 +63,10 @@ func main() {
 	// Вузли, комірка змінної tree і WaitGroup.
 	var cell *Tree
 	want := uint64(uintptr(nodes)*unsafe.Sizeof(Tree{}) + unsafe.Sizeof(cell) + unsafe.Sizeof(sync.WaitGroup{}))
-	for i := 0; i < 5000 && ownGoFreed()-beforeFreed < want; i++ {
-		time.Sleep(time.Millisecond)
+	for end := time.Now().Add(5 * time.Second); ownGoFreed()-beforeFreed < want && time.Now().Before(end); {
+		// time.Sleep не годиться: він звільняє свій канал, і ці байти
+		// потрапили б у Freed.
+		runtime.Gosched()
 	}
 	if got := ownGoFreed() - beforeFreed; got != want {
 		println("freed delta", got, "want", want)

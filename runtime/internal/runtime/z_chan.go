@@ -201,7 +201,7 @@ func chanBuf(p *Chan, i int) unsafe.Pointer {
 }
 
 func newChanWaiter(ch *Chan, elem unsafe.Pointer, eltSize int, send bool) *chanWaiter {
-	w := new(chanWaiter)
+	w := allocChanWaiter()
 	if ch.bubble != nil {
 		w.synctest = NewSynctestWaiter()
 	}
@@ -407,7 +407,9 @@ func ChanSend(p *Chan, v unsafe.Pointer, eltSize int) bool {
 	p.mutex.Unlock()
 
 	w.wait()
-	if w.status.panicOnWake() {
+	closed = w.status.panicOnWake()
+	freeChanWaiter(w)
+	if closed {
 		panicSendOnClosedChan()
 	}
 	return true
@@ -480,7 +482,9 @@ func ChanRecv(p *Chan, v unsafe.Pointer, eltSize int) (recvOK bool) {
 	p.mutex.Unlock()
 
 	w.wait()
-	return w.status.recvOK()
+	recvOK = w.status.recvOK()
+	freeChanWaiter(w)
+	return recvOK
 }
 
 func ChanClose(p *Chan) {

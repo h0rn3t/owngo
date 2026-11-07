@@ -57,6 +57,7 @@ func timeSleep(ns int64) {
 	}
 	startRuntimeTimer(r)
 	<-done
+	freeSleepChan(done)
 }
 
 func timerHeapLess(i, j int) bool {
