@@ -104,3 +104,49 @@ func global() {
 		}
 	}
 }
+
+// TestOwnGoChan — P-NEW-03.5: канал static звільняє ChanDec, а не
+// FreeAccounted з 0 байтів; канал, що йде в go аргументом, отримує
+// IncShared перед go і ChanDec у функції та в горутині.
+func TestOwnGoChan(t *testing.T) {
+	const src = `package foo
+
+func local() int {
+	c := make(chan int, 1)
+	c <- 1
+	return <-c
+}
+
+func worker(c chan int) { c <- 1 }
+
+func arg() int {
+	c := make(chan int)
+	go worker(c)
+	return <-c
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	body := mustNamedFunction(t, mod, "foo.local").String()
+	if !strings.Contains(body, "runtime.ChanDec") || strings.Contains(body, "runtime.FreeAccounted") {
+		t.Errorf("foo.local: want ChanDec and no FreeAccounted\n%s", body)
+	}
+	body = mustNamedFunction(t, mod, "foo.arg").String()
+	inc := strings.Index(body, "runtime.IncShared")
+	proc := strings.Index(body, "runtime.NewProc")
+	dec := strings.LastIndex(body, "runtime.ChanDec")
+	if inc < 0 || proc < 0 || dec < 0 || inc > proc || proc > dec {
+		t.Errorf("foo.arg: IncShared at %d, NewProc at %d, ChanDec at %d, want all in this order\n%s", inc, proc, dec, body)
+	}
+	routines := 0
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+		if strings.HasPrefix(fn.Name(), "foo._llgo_routine$") && strings.Contains(fn.String(), "runtime.ChanDec") {
+			routines++
+		}
+	}
+	if routines != 1 {
+		t.Errorf("goroutine routines with ChanDec = %d, want 1 (arg)", routines)
+	}
+}
