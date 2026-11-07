@@ -472,6 +472,9 @@ func (p *context) emitOwnGoNote(b llssa.Builder, instr ssa.Instruction) {
 	if _, alloc := instr.(*ssa.Alloc); alloc && p.ownGoInRegionClone() {
 		return // байти регіону облікує RegionAlloc
 	}
+	if p.ownGoAppendUnsized(instr) {
+		return // NoteAlloc з 0 байтів нічого не облікує, а стоїть на кожному виклику
+	}
 	p.countOwnGoSite(b, val, "note_alloc")
 	p.callOwnGoAccount(b, "NoteAlloc", llssa.Nil, p.ownGoSizeExpr(b, val), cat)
 }
@@ -866,6 +869,17 @@ func (p *context) callOwnGoAccount(b llssa.Builder, name string, ptr llssa.Expr,
 }
 
 // ownGoSizeExpr повертає байти користувача. append через GrowSlice лишає 0.
+// ownGoAppendUnsized: append, буфер якого не підраховується і не
+// звільняється, обліковує 0 байтів.
+func (p *context) ownGoAppendUnsized(instr ssa.Instruction) bool {
+	if census.ImplicitOrigin(instr) != "append" {
+		return false
+	}
+	call, _ := instr.(*ssa.Call)
+	_, counted := p.ownGoCounted[instr]
+	return !counted && !p.ownGoWillFree(call)
+}
+
 func (p *context) ownGoSizeExpr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	zero := p.prog.IntVal(0, p.prog.Uintptr())
 	instr, ok := site.(ssa.Instruction)
@@ -880,11 +894,8 @@ func (p *context) ownGoSizeExpr(b llssa.Builder, site ssa.Value) llssa.Expr {
 	if !ok || expr.IsNil() {
 		return zero
 	}
-	if census.ImplicitOrigin(instr) == "append" {
-		call, _ := instr.(*ssa.Call)
-		if _, counted := p.ownGoCounted[instr]; !counted && !p.ownGoWillFree(call) {
-			return zero
-		}
+	if p.ownGoAppendUnsized(instr) {
+		return zero
 	}
 	switch underlying := site.Type().Underlying().(type) {
 	case *types.Slice:
