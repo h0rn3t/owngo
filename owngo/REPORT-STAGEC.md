@@ -473,3 +473,30 @@ A/B за правилами S1.1 (чисті кеші, 10 прогонів з ч
 | `GOROOT/test` `ci`, `-tags owngo` | 803 `pass`, як база; множини збігаються поіменно |
 | `GOROOT/test` `ci`, `-tags owngo -O0 -asan` | 799 `pass`, як база; без `heap-use-after-free`, `double-free`, `attempting free` |
 | `go test -count=1 ./cl/` з чистим кешем llgo | `ok` |
+
+## P-NEW-03.5 — канали з `make`
+
+Під `owngo` канал `static` отримував `FreeAccounted` з 0 байтів. Заголовок звільнявся, а буфер (`AllocUAligned`) лишався, і 136 байтів `cyclic` з `NewChan` лишались у `Live`. Канал, що йде в `go` аргументом чи через захоплену змінну, не звільнявся зовсім.
+
+| Канал | Було | Стало |
+|---|---|---|
+| блок | `new(Chan)` і окремий буфер | один блок: слово лічильника, заголовок, буфер; `cyclic` повним розміром |
+| `static` | `FreeAccounted(0)`, буфер жив | `ChanDec` на останньому живому шляху |
+| аргумент `go` | не звільнявся | місце P9.3: `IncShared` перед `go`, `ChanDec` у функції й у горутині |
+| у комірці, яку захоплює замикання `go` | не звільнявся | переміщений вміст комірки: каскад `DecShared` дає `chanDec` (`SharedEdge.Chan`) |
+| `time.Sleep` | `FreeChan` (P-NEW-03.4) | `FreeChan` через той самий `chanDec` |
+
+Дозволені вживання: відправка, прийом, `select`, `close` (і відкладений), `len`, `cap`, `range`, порівняння, аргумент виклику без втечі. Канал, який повертають, кладуть у поле, глобальну змінну, мапу чи інший канал, лишається живим; так само `reflect.MakeChan`. Нова операція `dec_chan` рахується лише в `ChanDec`, тож перевірка `owngo/opsite` (операції рантайму дорівнюють сумі місць компілятора) лишається точною. Без тегу `owngo` рантайм не змінюється (`chan_default.go`).
+
+Перевірка:
+
+| Перевірка | Результат |
+|---|---|
+| `owngo/asan/chanfree` (6 випадків по 20 раундів) | до зміни — `local live cyclic 2720 want 0`, після — `asan-chanfree-ok` під `-O0 -asan` |
+| `TestSharedChan`, `TestOwnGoChan` | червоні до зміни, зелені після |
+| `owngo/fixtures.sh` | 0 падінь з 66 |
+| `GOROOT/test` `ci`, `-tags owngo` | 803 `pass`, як база; множини збігаються поіменно |
+| `GOROOT/test` `ci`, `-tags owngo -O0 -asan` | 799 `pass`, як база; без `heap-use-after-free`, `double-free`, `attempting free` |
+| `go test -count=1 ./cl/ ./owngo/census/` з чистим кешем llgo | `ok` |
+
+Окремо знайдено: кожна горутина лишає 136 байтів `rc-local` (`runtime/internal/thread/thread_unix.go:64/78`).
