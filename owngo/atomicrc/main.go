@@ -44,6 +44,7 @@ type sharedEdge struct {
 	shared *sharedDesc
 	cyclic *cyclicDesc
 	size   uintptr
+	isChan bool
 }
 
 // snode — вузол спільної втечі; next — спільна дитина.

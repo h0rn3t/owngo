@@ -87,6 +87,7 @@ const (
 	opRegionCreate = opNoteAlloc + catCount + iota
 	opAllocRegion
 	opFreeRegion
+	opDecChan // ChanDec з місця компілятора (P-NEW-03.5)
 	opCount
 )
 
@@ -335,12 +336,14 @@ type SharedDesc struct {
 // SharedEdge — поле об'єкта спільної втечі зі зміщенням Off від вказівника
 // користувача. Ненульова ціль — вказівник AllocCounted. Shared задає дитину
 // спільної втечі: вона отримує DecShared. Інакше Cyclic задає переміщену
-// дитину cyclic: DecCyclic. Без обох дитина отримує DecAccounted з Size.
+// дитину cyclic: DecCyclic. Chan — поле з каналом make: ChanDec. Без них
+// дитина отримує DecAccounted з Size.
 type SharedEdge struct {
 	Off    uintptr
 	Shared *SharedDesc
 	Cyclic *CyclicDesc
 	Size   uintptr
+	Chan   bool
 }
 
 // IncShared атомарно збільшує слово перед ptr на одиницю. zerobase і nil
@@ -396,6 +399,8 @@ func DecShared(ptr unsafe.Pointer, desc *SharedDesc) {
 			c := child(node, e.Off)
 			switch {
 			case c == nil:
+			case e.Chan:
+				chanDec(c)
 			case e.Shared != nil:
 				if cw := countWord(c); atomic.Sub(cw, 1) == 1 {
 					*cw = work | uintptr(sharedIndex(table, e.Shared))

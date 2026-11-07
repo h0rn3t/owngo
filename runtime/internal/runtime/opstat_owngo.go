@@ -25,7 +25,7 @@ var opNames = [opCount]string{
 	"free_accounted", "free_root",
 	"note_alloc_static", "note_alloc_rc-local", "note_alloc_rc-shared",
 	"note_alloc_cyclic", "note_alloc_pinned", "note_alloc_implicit",
-	"region_create", "alloc_region", "free_region",
+	"region_create", "alloc_region", "free_region", "dec_chan",
 }
 
 func countOp(op int32) {

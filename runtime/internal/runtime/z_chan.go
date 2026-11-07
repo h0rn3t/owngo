@@ -148,13 +148,10 @@ func NewChanAligned(eltSize, cap, eltAlign int) *Chan {
 	if overflow || mem > maxAlloc {
 		panicMakeChanSize()
 	}
-	ret := new(Chan)
+	ret := allocChan(mem, cap, eltAlign)
 	ret.bubble = CurrentSynctestBubble()
 	ret.elemsize = eltSize
 	ret.dataqsiz = cap
-	if cap > 0 {
-		ret.buf = AllocUAligned(mem, uintptr(eltAlign))
-	}
 	ret.mutex.init()
 	return ret
 }

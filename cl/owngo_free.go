@@ -530,6 +530,12 @@ func (p *context) emitOwnGoFreeSites(b llssa.Builder, sites []ssa.Value) {
 		if ptr.IsNil() {
 			continue
 		}
+		if _, isChan := site.(*ssa.MakeChan); isChan {
+			// Слово каналу одне: ChanDec звільняє заголовок і буфер.
+			p.countOwnGoSite(b, site, "dec_chan")
+			p.callChanDec(b, ptr)
+			continue
+		}
 		_, sized := p.ownGoSiteSize(site)
 		cat, known := ownGoStatic, false
 		if siteInstr, isInstr := site.(ssa.Instruction); isInstr {
@@ -555,6 +561,11 @@ func (p *context) emitOwnGoDecSites(b llssa.Builder, sites []ssa.Value) {
 		}
 		ptr := p.ownGoFreePtr(b, site)
 		if ptr.IsNil() {
+			continue
+		}
+		if _, isChan := site.(*ssa.MakeChan); isChan {
+			p.countOwnGoSite(b, site, "dec_chan")
+			p.callChanDec(b, ptr)
 			continue
 		}
 		if _, sized := p.ownGoSiteSize(site); !sized {
@@ -618,6 +629,10 @@ func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder,
 	full := append([]llssa.Expr(nil), args...)
 	for _, site := range p.ownGoGoSites {
 		full = append(full, p.ownGoFreePtr(b, site))
+		if _, isChan := site.(*ssa.MakeChan); isChan {
+			descs = append(descs, llssa.Nil) // каналу дескриптор не потрібен: ChanDec
+			continue
+		}
 		descs = append(descs, p.sharedDesc(site.(ssa.Instruction)))
 	}
 	sites := p.ownGoGoSites
@@ -625,6 +640,11 @@ func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder,
 	wrapped := func(b llssa.Builder, fn llssa.Expr, all ...llssa.Expr) llssa.Expr {
 		ret := buildCall(b, fn, all[:n]...)
 		for i, ptr := range all[n:] {
+			if descs[i].IsNil() {
+				p.countOwnGoSite(b, sites[i], "dec_chan")
+				p.callChanDec(b, ptr)
+				continue
+			}
 			p.countOwnGoSite(b, sites[i], "dec_shared")
 			p.callDecShared(b, ptr, descs[i])
 		}
@@ -636,6 +656,15 @@ func (p *context) ownGoRoutineDec(b llssa.Builder, buildCall func(llssa.Builder,
 		return ret
 	}
 	return wrapped, full
+}
+
+// callChanDec віддає слово каналу з make (P-NEW-03.5).
+func (p *context) callChanDec(b llssa.Builder, ptr llssa.Expr) {
+	unsafePtr := types.Typ[types.UnsafePointer]
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+		types.NewVar(token.NoPos, nil, "ptr", unsafePtr),
+	), nil, false)
+	b.Call(p.runtimeFunc("ChanDec", sig), b.PtrCast(p.type_(unsafePtr, llssa.GoDecl), ptr))
 }
 
 func (p *context) callDecShared(b llssa.Builder, ptr, desc llssa.Expr) {
@@ -664,6 +693,7 @@ func (p *context) sharedDesc(site ssa.Instruction) llssa.Expr {
 		types.NewField(token.NoPos, nil, "Shared", unsafePtr, false),
 		types.NewField(token.NoPos, nil, "Cyclic", unsafePtr, false),
 		types.NewField(token.NoPos, nil, "Size", uintptrT, false),
+		types.NewField(token.NoPos, nil, "Chan", types.Typ[types.Bool], false),
 	}, nil)
 	edgesT := types.NewSlice(edgeT)
 	descT := types.NewStruct([]*types.Var{
@@ -679,9 +709,12 @@ func (p *context) sharedDesc(site ssa.Instruction) llssa.Expr {
 	if info := p.ownGoShared[site]; info.Content != nil {
 		cyclicDesc := p.prog.Nil(p.type_(unsafePtr, llssa.GoDecl))
 		size := p.prog.IntVal(0, p.prog.Uintptr())
-		if info.ContentCyclic {
+		_, isChan := info.Content.Underlying().(*types.Chan)
+		switch {
+		case isChan:
+		case info.ContentCyclic:
 			cyclicDesc = p.cyclicDesc(info.Content)
-		} else {
+		default:
 			size = p.prog.IntVal(p.prog.SizeOf(p.type_(info.Content, llssa.GoDecl)), p.prog.Uintptr())
 		}
 		edge := p.prog.ConstStruct(p.type_(edgeT, llssa.GoDecl), []llssa.Expr{
@@ -689,6 +722,7 @@ func (p *context) sharedDesc(site ssa.Instruction) llssa.Expr {
 			p.prog.Nil(p.type_(unsafePtr, llssa.GoDecl)),
 			cyclicDesc,
 			size,
+			p.prog.BoolVal(isChan),
 		})
 		edges = p.pkg.ConstSlice(name+"$edges", p.type_(edgesT, llssa.GoDecl), []llssa.Expr{edge})
 	}

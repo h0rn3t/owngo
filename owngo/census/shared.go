@@ -13,7 +13,8 @@ type Shared struct {
 	// Content — тип об'єкта, на який вказує вміст комірки місця, якщо
 	// каскад DecShared проходить вміст; nil — не проходить. У комірку
 	// пишуть лише nil і переміщений свіжий результат, а прочитаний вміст
-	// лише читають.
+	// лише читають. Для комірки з каналом — сам тип каналу: у комірку
+	// переходить канал з make, а каскад дає йому ChanDec (P-NEW-03.5).
 	Content types.Type
 	// ContentCyclic — дитину звільняє DecCyclic, інакше DecAccounted.
 	ContentCyclic bool
@@ -36,8 +37,9 @@ func sharedSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 	cand := siteSet{}
 	for site, label := range msg {
 		alloc, ok := site.(*ssa.Alloc)
+		_, isChan := site.(*ssa.MakeChan)
 		head, reason, _ := strings.Cut(label, ": ")
-		if ok && alloc.Heap && reason == "go" && (head == "rc-shared" || head == "cyclic") {
+		if (ok && alloc.Heap || isChan) && reason == "go" && (head == "rc-shared" || head == "cyclic") {
 			cand.add(site)
 		}
 	}
@@ -74,10 +76,11 @@ func sharedSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 			continue
 		}
 		val := site.(ssa.Value)
-		contentOK := cellContent(val, ctx)
+		_, isChan := site.(*ssa.MakeChan)
+		contentOK := !isChan && cellContent(val, ctx)
 		borrowed := true
 		for _, pass := range passes[site] {
-			if !borrowUses(pass.inner, ctx, map[ssa.Value]bool{}) {
+			if isChan && !chanUses(pass.inner, ctx) || !isChan && !borrowUses(pass.inner, ctx, map[ssa.Value]bool{}) {
 				borrowed = false
 				break
 			}
@@ -87,7 +90,13 @@ func sharedSites(fn *ssa.Function, msg map[ssa.Instruction]string, pts map[ssa.V
 			continue
 		}
 		info := Shared{}
-		if elem := pointee(pointee(val.Type())); contentOK && elem != nil {
+		switch content := pointee(val.Type()); {
+		case !contentOK || content == nil:
+		case isChanType(content):
+			// Канал у комірці каскад віддає ChanDec (P-NEW-03.5).
+			info.Content = content
+		case pointee(content) != nil:
+			elem := pointee(content)
 			info.Content = elem
 			_, isStruct := elem.Underlying().(*types.Struct)
 			info.ContentCyclic = isStruct && cyclic(types.NewPointer(elem), ifaceStrict, nil)
@@ -278,7 +287,11 @@ func borrowArg(call *ssa.CallCommon, v ssa.Value, ctx *v1Ctx) bool {
 // вживання якого — цей запис, а прочитаний вміст лише порівнюють і
 // передають параметру, що лише читається. Тоді каскад може пройти вміст.
 func cellContent(cell ssa.Value, ctx *v1Ctx) bool {
-	if _, ok := pointee(cell.Type()).Underlying().(*types.Pointer); !ok {
+	content := pointee(cell.Type())
+	if content == nil {
+		return false
+	}
+	if _, ok := content.Underlying().(*types.Pointer); !ok && !isChanType(content) {
 		return false
 	}
 	for _, ref := range *cell.Referrers() {
@@ -305,6 +318,10 @@ func movedInto(store *ssa.Store, ctx *v1Ctx) bool {
 	if c, ok := store.Val.(*ssa.Const); ok {
 		return c.IsNil()
 	}
+	if mc, ok := store.Val.(*ssa.MakeChan); ok {
+		// Слово каналу з make переходить до комірки (P-NEW-03.5).
+		return onlyUser(mc, store)
+	}
 	call, ok := store.Val.(*ssa.Call)
 	if !ok || call.Call.StaticCallee() == nil {
 		return false
@@ -314,6 +331,9 @@ func movedInto(store *ssa.Store, ctx *v1Ctx) bool {
 }
 
 func readOnlyValue(v ssa.Value, ctx *v1Ctx) bool {
+	if isChanType(v.Type()) {
+		return chanUses(v, ctx)
+	}
 	for _, ref := range *v.Referrers() {
 		switch ref := ref.(type) {
 		case *ssa.DebugRef:
@@ -369,4 +389,65 @@ func appendNew(vals []ssa.Value, v ssa.Value) []ssa.Value {
 		}
 	}
 	return append(vals, v)
+}
+
+func isChanType(t types.Type) bool {
+	_, ok := t.Underlying().(*types.Chan)
+	return ok
+}
+
+// chanUses: канал v лише вживають — відправка в нього, прийом, select,
+// close (зокрема відкладений), len, cap, порівняння й аргумент виклику без
+// втечі. Сам канал нікуди не записують і не надсилають (P-NEW-03.5).
+func chanUses(v ssa.Value, ctx *v1Ctx) bool {
+	refs := v.Referrers()
+	if refs == nil {
+		return true
+	}
+	for _, ref := range *refs {
+		switch ref := ref.(type) {
+		case *ssa.DebugRef:
+		case *ssa.Send:
+			if ref.X == v {
+				return false
+			}
+		case *ssa.UnOp:
+			if ref.Op != token.ARROW {
+				return false
+			}
+		case *ssa.Select:
+			for _, st := range ref.States {
+				if st.Send == v {
+					return false
+				}
+			}
+		case *ssa.BinOp:
+			if ref.Op != token.EQL && ref.Op != token.NEQ {
+				return false
+			}
+		case *ssa.Call:
+			if !chanBuiltin(&ref.Call) && !borrowArg(&ref.Call, v, ctx) {
+				return false
+			}
+		case *ssa.Defer:
+			if !chanBuiltin(&ref.Call) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func chanBuiltin(call *ssa.CallCommon) bool {
+	b, ok := call.Value.(*ssa.Builtin)
+	if !ok {
+		return false
+	}
+	switch b.Name() {
+	case "close", "len", "cap":
+		return true
+	}
+	return false
 }
