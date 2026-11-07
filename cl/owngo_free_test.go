@@ -333,6 +333,33 @@ func localConcat(a, b string) int {
 	}
 }
 
+// TestOwnGoAppendUnaccounted: append, буфер якого не підраховується і не
+// звільняється, обліковує 0 байтів, тож виклику NoteAlloc не має
+// (regexp/exec.go:307, 1.36 млрд викликів на regex-redux).
+func TestOwnGoAppendUnaccounted(t *testing.T) {
+	const src = `package foo
+
+type machine struct{ pool []*int }
+
+func (m *machine) put(t *int) { m.pool = append(m.pool, t) }
+
+func staticAppend(s, extra []int) int {
+	s = append(s, extra...)
+	return len(s)
+}
+`
+	mod := compileOwnGoStack(t, src, true) // масив аргументів append — на стеку, як під тегом owngo
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	if body := mustNamedFunction(t, mod, "foo.(*machine).put").String(); strings.Contains(body, "runtime.NoteAlloc") {
+		t.Errorf("foo.(*machine).put has NoteAlloc, want none for an unaccounted append:\n%s", body)
+	}
+	if body := mustNamedFunction(t, mod, "foo.staticAppend").String(); !strings.Contains(body, "runtime.NoteAlloc") {
+		t.Errorf("foo.staticAppend has no NoteAlloc, want the freed buffer accounted:\n%s", body)
+	}
+}
+
 func TestOwnGoCyclic(t *testing.T) {
 	const src = `package foo
 
