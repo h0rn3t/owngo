@@ -9,8 +9,9 @@ import (
 )
 
 // Алокатор owngo — _wrap/owngo_alloc.c (P8.3). Під цим тегом він замінює
-// malloc і free файлів z_nogc.go і z_defer_nogc.go.
-const owngoAllocLLGoFiles = "; _wrap/owngo_alloc.c"
+// malloc і free файлів z_nogc.go і z_defer_nogc.go. Файл алокатора
+// (owngoAllocCFile) залежить від тегу owngostat.
+const owngoAllocLLGoFiles = "; " + owngoAllocCFile
 
 //go:linkname owngoMalloc C.owngo_malloc
 func owngoMalloc(size uintptr) c.Pointer

@@ -272,17 +272,19 @@ def fasta_input(work, n):
 
 def measure(rusage, cmd, out, stdin=None):
     """Запускає cmd з stdout у файл out (і stdin з файлу stdin) через rusage.c;
-    повертає час, CPU і пікову RSS."""
+    повертає час, CPU, пікову RSS і сторінкові збої."""
     with open(stdin or os.devnull, "rb") as f:
         line = subprocess.run([str(rusage), str(out), *cmd], stdin=f, capture_output=True,
                               text=True, check=True).stdout
-    wall, user, sys_, rss_kb, code = line.split()
+    wall, user, sys_, rss_kb, code, minflt, majflt = line.split()
     return {
         "wall": float(wall),
         "user": float(user),
         "sys": float(sys_),
         "rss_mb": round(int(rss_kb) / 1024, 1),
         "exit": int(code),
+        "minflt": int(minflt),
+        "majflt": int(majflt),
     }
 
 
@@ -295,6 +297,7 @@ def summarize(runs):
         "user_median": round(statistics.median(r["user"] for r in runs), 3),
         "sys_median": round(statistics.median(r["sys"] for r in runs), 3),
         "peak_rss_mb": max(r["rss_mb"] for r in runs),
+        "minflt_median": round(statistics.median(r["minflt"] for r in runs)),
     }
 
 
@@ -306,13 +309,14 @@ def markdown(result):
             lines += [f"### {TABLE_TITLES.get(table['name'], table['name'])}", ""]
         lines += [
             "| Variant | Median, s | Min–max, s | User, s | Sys, s | Peak RSS, MB "
-            "| Size, KB | Build, s | Output |",
-            "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| Minor faults | Size, KB | Build, s | Output |",
+            "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
         for v in table["variants"]:
             lines.append(
                 f"| {v['label']} | {v['median']:.2f} | {v['min']:.2f}–{v['max']:.2f} "
                 f"| {v['user_median']:.2f} | {v['sys_median']:.2f} | {v['peak_rss_mb']:.0f} "
+                f"| {v['minflt_median']} "
                 f"| {v.get('size_kb', '—')} | {v.get('build_s', '—')} | {v['output']} |")
         lines.append("")
     probe = result.get("cpu_probe")

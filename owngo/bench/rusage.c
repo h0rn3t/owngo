@@ -1,5 +1,6 @@
 // rusage запускає команду з stdout у файл і друкує її wall-час, CPU user і
-// sys у секундах, пікову RSS у КБ і код виходу. Окремий малий процес, бо
+// sys у секундах, пікову RSS у КБ, код виходу і сторінкові збої без читання
+// з диска і з читанням (ru_minflt, ru_majflt). Окремий малий процес, бо
 // Linux переносить ru_maxrss процесу через fork і exec: дитина Python
 // успадкувала б пікову RSS інтерпретатора.
 //
@@ -46,7 +47,7 @@ int main(int argc, char **argv) {
 	clock_gettime(CLOCK_MONOTONIC, &end);
 	double wall = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 	int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
-	printf("%.3f %.3f %.3f %ld %d\n", wall, seconds(ru.ru_utime), seconds(ru.ru_stime),
-	       ru.ru_maxrss, code);
+	printf("%.3f %.3f %.3f %ld %d %ld %ld\n", wall, seconds(ru.ru_utime), seconds(ru.ru_stime),
+	       ru.ru_maxrss, code, ru.ru_minflt, ru.ru_majflt);
 	return 0;
 }

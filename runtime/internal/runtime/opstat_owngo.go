@@ -49,6 +49,7 @@ func reportOps() {
 	for op, name := range opNames {
 		println("owngo ops", name, OpCount(int32(op)))
 	}
+	reportAlloc()
 	reportSites()
 }
 

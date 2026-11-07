@@ -21,6 +21,12 @@
 // блок повертаються в спільний пул вільних діапазонів сторінок. Пул
 // тримає зайнятими до SC_POOL_KEEP сторінок, решту віддає системі через
 // madvise. Діапазон із пулу береться першим, що підходить, з поділом.
+//
+// З OWNGO_ALLOC_STAT (файл owngo_alloc_stat.c, тег owngostat) алокатор
+// рахує свої події для рядків owngo alloc (P-NEW-08.1). Події власника купи
+// лежать у самій купі без атомарних операцій; події під sc_lock — у
+// sc_stat; remote-звільнення — в атомарному лічильнику. Без макроса
+// лічильників немає.
 
 #include <pthread.h>
 #include <stdatomic.h>
@@ -70,11 +76,32 @@ struct sc_page {
 	uint32_t committed;
 };
 
+// Номери лічильників; порядок — порядок рядків owngo alloc.
+enum {
+	SC_STAT_SMALL,         // owngo_malloc малого блока
+	SC_STAT_LARGE,         // owngo_malloc великого блока
+	SC_STAT_FREE_LOCAL,    // owngo_free малого блока власником купи
+	SC_STAT_FREE_REMOTE,   // owngo_free малого блока іншим потоком
+	SC_STAT_FREE_LARGE,    // owngo_free великого блока
+	SC_STAT_PAGE_NEW,      // сторінки за межею використаних
+	SC_STAT_PAGE_REUSE,    // сторінки з пулу
+	SC_STAT_PAGE_GIVE,     // сторінки, повернуті в пул
+	SC_STAT_MADVISE,       // виклики madvise
+	SC_STAT_MADVISE_BYTES, // байти madvise
+	SC_STAT_LOCK,          // захоплення sc_lock
+	SC_STAT_COUNT
+};
+
 struct sc_heap {
 	sc_page *cur[SC_CLASSES];
 	sc_page *partial[SC_CLASSES];
 	_Atomic(sc_page *) pending;
 	sc_heap *next_abandoned;
+#ifdef OWNGO_ALLOC_STAT
+	sc_heap *next_all; // усі купи, під sc_lock
+	// Пише лише власник; atomic лише щоб читання на виході не було гонкою.
+	_Atomic uint64_t stat[SC_STAT_COUNT];
+#endif
 };
 
 static char *sc_region;
@@ -91,10 +118,33 @@ static sc_heap *sc_abandoned;    // покинуті купи, під sc_lock
 
 static __thread sc_heap *sc_tls;
 
+#ifdef OWNGO_ALLOC_STAT
+static sc_heap *sc_all;                 // під sc_lock
+static uint64_t sc_stat[SC_STAT_COUNT]; // під sc_lock
+static _Atomic uint64_t sc_stat_remote;
+
+static inline void sc_stat_heap(sc_heap *h, int i) {
+	uint64_t v = atomic_load_explicit(&h->stat[i], memory_order_relaxed);
+	atomic_store_explicit(&h->stat[i], v + 1, memory_order_relaxed);
+}
+#define SC_STAT_HEAP(h, i) sc_stat_heap(h, i)
+#define SC_STAT_LOCKED(i, n) (sc_stat[i] += (n))
+#define SC_STAT_REMOTE() atomic_fetch_add_explicit(&sc_stat_remote, 1, memory_order_relaxed)
+#else
+#define SC_STAT_HEAP(h, i) ((void)0)
+#define SC_STAT_LOCKED(i, n) ((void)0)
+#define SC_STAT_REMOTE() ((void)0)
+#endif
+
+static inline void sc_lock_acquire(void) {
+	pthread_mutex_lock(&sc_lock);
+	SC_STAT_LOCKED(SC_STAT_LOCK, 1);
+}
+
 static void sc_abandon(void *arg) {
 	sc_heap *h = arg;
 	sc_tls = NULL;
-	pthread_mutex_lock(&sc_lock);
+	sc_lock_acquire();
 	h->next_abandoned = sc_abandoned;
 	sc_abandoned = h;
 	pthread_mutex_unlock(&sc_lock);
@@ -149,6 +199,7 @@ static size_t sc_take_pages(size_t n) {
 		if (run->committed) {
 			sc_committed -= n;
 		}
+		SC_STAT_LOCKED(SC_STAT_PAGE_REUSE, n);
 		if (run->npages == n) {
 			*link = run->next_run;
 		} else {
@@ -167,6 +218,7 @@ static size_t sc_take_pages(size_t n) {
 		return SC_NONE;
 	}
 	atomic_store_explicit(&sc_used_pages, idx + n, memory_order_release);
+	SC_STAT_LOCKED(SC_STAT_PAGE_NEW, n);
 	return idx;
 }
 
@@ -177,10 +229,13 @@ static void sc_give_pages(size_t idx, size_t n) {
 	run->start = (uint32_t)idx;
 	run->npages = (uint32_t)n;
 	run->committed = sc_committed + n <= SC_POOL_KEEP;
+	SC_STAT_LOCKED(SC_STAT_PAGE_GIVE, n);
 	if (run->committed) {
 		sc_committed += n;
 	} else {
 		madvise(sc_addr(idx), n << SC_PAGE_SHIFT, MADV_DONTNEED);
+		SC_STAT_LOCKED(SC_STAT_MADVISE, 1);
+		SC_STAT_LOCKED(SC_STAT_MADVISE_BYTES, n << SC_PAGE_SHIFT);
 	}
 	run->next_run = sc_runs;
 	sc_runs = run;
@@ -188,7 +243,7 @@ static void sc_give_pages(size_t idx, size_t n) {
 
 static sc_heap *sc_heap_get(void) {
 	pthread_once(&sc_once, sc_init);
-	pthread_mutex_lock(&sc_lock);
+	sc_lock_acquire();
 	sc_heap *h = sc_abandoned;
 	if (h != NULL) {
 		sc_abandoned = h->next_abandoned;
@@ -200,6 +255,12 @@ static sc_heap *sc_heap_get(void) {
 		if (h == MAP_FAILED) {
 			abort();
 		}
+#ifdef OWNGO_ALLOC_STAT
+		pthread_mutex_lock(&sc_lock);
+		h->next_all = sc_all;
+		sc_all = h;
+		pthread_mutex_unlock(&sc_lock);
+#endif
 	}
 	sc_tls = h;
 	pthread_setspecific(sc_key, h);
@@ -247,7 +308,7 @@ static void sc_page_changed(sc_heap *h, sc_page *pg) {
 	}
 	pg->kind = SC_FREE;
 	pg->owner = NULL;
-	pthread_mutex_lock(&sc_lock);
+	sc_lock_acquire();
 	sc_give_pages((size_t)(pg - sc_table), 1);
 	pthread_mutex_unlock(&sc_lock);
 }
@@ -271,7 +332,7 @@ static void sc_collect(sc_heap *h) {
 }
 
 static sc_page *sc_new_page(sc_heap *h, size_t c) {
-	pthread_mutex_lock(&sc_lock);
+	sc_lock_acquire();
 	size_t idx = sc_take_pages(1);
 	pthread_mutex_unlock(&sc_lock);
 	if (idx == SC_NONE) {
@@ -316,14 +377,18 @@ static void *sc_alloc_slow(sc_heap *h, size_t c) {
 		pg->bump += pg->size;
 	}
 	pg->used++;
+	SC_STAT_HEAP(h, SC_STAT_SMALL);
 	return p;
 }
 
 static void *sc_alloc_large(size_t size) {
 	pthread_once(&sc_once, sc_init);
 	size_t n = (size + SC_PAGE - 1) >> SC_PAGE_SHIFT;
-	pthread_mutex_lock(&sc_lock);
+	sc_lock_acquire();
 	size_t idx = sc_take_pages(n);
+	if (idx != SC_NONE) {
+		SC_STAT_LOCKED(SC_STAT_LARGE, 1);
+	}
 	pthread_mutex_unlock(&sc_lock);
 	if (idx == SC_NONE) {
 		return NULL;
@@ -358,12 +423,14 @@ void *owngo_malloc(size_t size) {
 		if (p != NULL) {
 			pg->free = *(void **)p;
 			pg->used++;
+			SC_STAT_HEAP(h, SC_STAT_SMALL);
 			return p;
 		}
 		if (pg->bump != pg->end) {
 			p = pg->bump;
 			pg->bump += pg->size;
 			pg->used++;
+			SC_STAT_HEAP(h, SC_STAT_SMALL);
 			return p;
 		}
 	}
@@ -376,13 +443,15 @@ void owngo_free(void *p) {
 	if (pg->kind == SC_LARGE) {
 		size_t idx = pg->start;
 		size_t n = pg->npages;
-		pthread_mutex_lock(&sc_lock);
+		sc_lock_acquire();
+		SC_STAT_LOCKED(SC_STAT_FREE_LARGE, 1);
 		sc_give_pages(idx, n);
 		pthread_mutex_unlock(&sc_lock);
 		return;
 	}
 	sc_heap *h = pg->owner;
 	if (h == sc_tls) {
+		SC_STAT_HEAP(h, SC_STAT_FREE_LOCAL);
 		*(void **)p = pg->free;
 		pg->free = p;
 		pg->used--;
@@ -391,6 +460,7 @@ void owngo_free(void *p) {
 		}
 		return;
 	}
+	SC_STAT_REMOTE();
 	void *old = atomic_load_explicit(&pg->remote, memory_order_relaxed);
 	do {
 		*(void **)p = old;
@@ -425,3 +495,23 @@ void *owngo_base(const void *p) {
 		return NULL;
 	}
 }
+
+#ifdef OWNGO_ALLOC_STAT
+// owngo_alloc_stat пише в out[SC_STAT_COUNT] лічильники за весь процес:
+// суму куп усіх потоків, лічильники під sc_lock і remote-звільнення.
+// Читання не захоплює sc_lock через sc_lock_acquire, тож себе не рахує.
+void owngo_alloc_stat(uint64_t *out) {
+	pthread_once(&sc_once, sc_init);
+	pthread_mutex_lock(&sc_lock);
+	for (int i = 0; i < SC_STAT_COUNT; i++) {
+		out[i] = sc_stat[i];
+	}
+	for (sc_heap *h = sc_all; h != NULL; h = h->next_all) {
+		for (int i = 0; i < SC_STAT_COUNT; i++) {
+			out[i] += atomic_load_explicit(&h->stat[i], memory_order_relaxed);
+		}
+	}
+	pthread_mutex_unlock(&sc_lock);
+	out[SC_STAT_FREE_REMOTE] += atomic_load_explicit(&sc_stat_remote, memory_order_relaxed);
+}
+#endif
