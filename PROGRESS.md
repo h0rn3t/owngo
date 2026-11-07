@@ -1311,3 +1311,18 @@
 
 - Рішення розробника (2026-11-07): гейт C прийнято на `3a5d44819` (звіт — `owngo/REPORT-STAGEC.md`, «Гейт C»). P-NEW-02.3, 02.4, 03.2, 04.3 лишаються невідкритими з причинами й числами звіту.
 - Лишилось: рішення розробника про облік `NoteAlloc` на `append` лише на гілці росту, про нестабільний `sharedtree` і наступний етап (E: P-NEW-07, P-NEW-10; F: P-NEW-08); P11.4 чекає сервісу.
+
+## 2026-11-07 — P-NEW-04.5 `NoteAlloc` без байтів на `append`
+
+- Рішення розробника (2026-11-07): брати облік `NoteAlloc` на `append` після гейта C. Задачу додано в `PLAN.md`.
+- Корінь: `append`, буфер якого не підраховується і не звільняється, отримував `NoteAlloc` з розміром 0 на кожен виклик (`ownGoSizeExpr` дає 0). Рантайм на 0 байтів лише рахує операцію, тож виклик нічого не облікував. Це не «облік лише на гілці росту»: обліку байтів тут немає взагалі, тому виклик просто прибрано.
+- Тест спершу: `TestOwnGoAppendUnaccounted` (`cl/owngo_free_test.go`) — `m.pool = append(m.pool, t)` без `NoteAlloc`, `staticAppend` з ним; збірка з `OwnGoStack`, як під тегом `owngo`. До зміни червоний на `NoteAlloc(i64 0, i32 1)`. Перша версія тесту збиралась без `OwnGoStack` і червоніла на `NoteAlloc` масиву аргументів, а не `append` — виправлено до коміту.
+- Реалізація: `cl.ownGoAppendUnsized` — умова, спільна для `ownGoSizeExpr` і `emitOwnGoNote`.
+- Прийняття:
+  - `go test -count=1 ./cl/ -run OwnGo` з чистим `~/.cache/llgo` — `ok`; `go test -count=1 -race ./owngo/census/` — `ok`;
+  - `owngo/fixtures.sh` — 0 падінь з 64 (відомі `bytes/imconcat`, `counted`, `runtimefree`);
+  - `owngo ops`: `NoteAlloc` regex-redux 1 401 085 822 → 5 268, reverse-complement 16 669 905 → 3 211, k-nucleotide 2 366 340 → 282 756; `owngo freed` і `live` static/rc-local без змін; вивід як очікуваний;
+  - час — у межах розкиду на трьох програмах (два A/B k-nucleotide з протилежними знаками);
+  - `gofmt`, `go vet ./cl`, `golangci-lint --new-from-rev=HEAD ./cl/`, `go build ./...` — чисто.
+- `GOROOT/test` не проганявся: зміна лише прибирає виклик, що на 0 байтів нічого не робить, і не змінює ні розміщення, ні звільнення.
+- Лишилось: рішення розробника про `sharedtree` і наступний етап (E: P-NEW-07, P-NEW-10; F: P-NEW-08); P11.4 чекає сервісу.
