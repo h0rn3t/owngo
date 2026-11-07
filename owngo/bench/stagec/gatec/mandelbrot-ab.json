@@ -1,0 +1,179 @@
+{
+ "program": "mandelbrot",
+ "n": 16000,
+ "flags": [
+  "-tags",
+  "owngo",
+  "-O2",
+  "-lto",
+  "thin"
+ ],
+ "variants": [
+  {
+   "key": "before",
+   "summary": {
+    "median": 0.629,
+    "min": 0.622,
+    "max": 0.663,
+    "user_median": 4.603,
+    "sys_median": 0.043,
+    "peak_rss_mb": 36.0
+   },
+   "runs": [
+    {
+     "wall": 0.663,
+     "user": 4.656,
+     "sys": 0.039,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.628,
+     "user": 4.597,
+     "sys": 0.045,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.625,
+     "user": 4.555,
+     "sys": 0.038,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.624,
+     "user": 4.575,
+     "sys": 0.044,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.635,
+     "user": 4.674,
+     "sys": 0.047,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.629,
+     "user": 4.585,
+     "sys": 0.041,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.622,
+     "user": 4.582,
+     "sys": 0.042,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.633,
+     "user": 4.658,
+     "sys": 0.045,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.625,
+     "user": 4.611,
+     "sys": 0.04,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.642,
+     "user": 4.609,
+     "sys": 0.054,
+     "rss_mb": 35.9,
+     "exit": 0
+    }
+   ]
+  },
+  {
+   "key": "after",
+   "summary": {
+    "median": 0.625,
+    "min": 0.616,
+    "max": 0.689,
+    "user_median": 4.599,
+    "sys_median": 0.042,
+    "peak_rss_mb": 36.0
+   },
+   "runs": [
+    {
+     "wall": 0.624,
+     "user": 4.576,
+     "sys": 0.043,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.626,
+     "user": 4.6,
+     "sys": 0.047,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.619,
+     "user": 4.579,
+     "sys": 0.04,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.64,
+     "user": 4.612,
+     "sys": 0.048,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.616,
+     "user": 4.548,
+     "sys": 0.04,
+     "rss_mb": 35.9,
+     "exit": 0
+    },
+    {
+     "wall": 0.625,
+     "user": 4.599,
+     "sys": 0.05,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.625,
+     "user": 4.601,
+     "sys": 0.039,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.627,
+     "user": 4.615,
+     "sys": 0.036,
+     "rss_mb": 35.8,
+     "exit": 0
+    },
+    {
+     "wall": 0.63,
+     "user": 4.638,
+     "sys": 0.041,
+     "rss_mb": 36.0,
+     "exit": 0
+    },
+    {
+     "wall": 0.689,
+     "user": 4.588,
+     "sys": 0.045,
+     "rss_mb": 35.9,
+     "exit": 0
+    }
+   ]
+  }
+ ]
+}
