@@ -249,6 +249,16 @@ func memory(instr ssa.Instruction, pts map[ssa.Value]siteSet, contents map[ssa.I
 			}
 		}
 		return changed
+	case *ssa.MakeClosure:
+		// Замикання тримає свої прив'язки: комірку, яку воно захоплює, читає
+		// кожен виклик замикання, навіть якщо його саме захоплено іншим.
+		changed := false
+		for _, binding := range instr.Bindings {
+			if hold(instr, pts[binding]) {
+				changed = true
+			}
+		}
+		return changed
 	case *ssa.MapUpdate:
 		changed := false
 		for obj := range pts[instr.Map] {
