@@ -335,32 +335,22 @@ type UncommonType struct {
 	Moff     uint32 // offset from this uncommontype to [mcount]Method
 }
 
+// Methods повертає вид на таблицю методів типу, без копії: твердження типу
+// до інтерфейсу кличе його щоразу (Implements), і копія під owngo не
+// звільнялась (P-NEW-09.3). unsafe.Slice, а не *[1 << 16]Method: такий тип
+// масиву ламав wasm (3110382d8).
 func (t *UncommonType) Methods() []Method {
 	if t.Mcount == 0 {
 		return nil
 	}
-	methodsPtr := addChecked(unsafe.Pointer(t), uintptr(t.Moff), "t.mcount > 0")
-	methods := make([]Method, t.Mcount)
-	for i := 0; i < int(t.Mcount); i++ {
-		elemPtr := addChecked(methodsPtr, uintptr(i)*unsafe.Sizeof(Method{}), "accessing method element")
-		elem := (*Method)(elemPtr)
-		methods[i] = *elem
-	}
-	return methods
+	return unsafe.Slice((*Method)(addChecked(unsafe.Pointer(t), uintptr(t.Moff), "t.mcount > 0")), t.Mcount)
 }
 
 func (t *UncommonType) ExportedMethods() []Method {
 	if t.Xcount == 0 {
 		return nil
 	}
-	mthdsPtr := addChecked(unsafe.Pointer(t), uintptr(t.Moff), "t.xcount > 0")
-	mthds := make([]Method, t.Xcount)
-	for i := 0; i < int(t.Xcount); i++ {
-		elemPtr := addChecked(mthdsPtr, uintptr(i)*unsafe.Sizeof(Method{}), "accessing method element")
-		elem := (*Method)(elemPtr)
-		mthds[i] = *elem
-	}
-	return mthds
+	return unsafe.Slice((*Method)(addChecked(unsafe.Pointer(t), uintptr(t.Moff), "t.xcount > 0")), t.Xcount)
 }
 
 // Imethod represents a method on an interface type
