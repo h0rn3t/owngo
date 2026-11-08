@@ -20,7 +20,11 @@ func TestAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openDB = %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("db.Close = %v", err)
+		}
+	})
 	app := newApp(db)
 
 	do := func(method, target, body string) (int, string) {
