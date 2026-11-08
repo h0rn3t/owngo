@@ -70,8 +70,22 @@ func (v Expr) SetVolatile(volatile bool) Expr {
 	if v.impl.IsNil() {
 		return v
 	}
-	v.memoryInstruction().SetVolatile(volatile)
+	inst := v.memoryInstruction()
+	if call := inst.IsACallInst(); !call.IsNil() {
+		// Великий нуль Store пише через llvm.memset: volatile — його останній аргумент.
+		isVolatile := call.Operand(3)
+		call.SetOperand(3, llvm.ConstInt(isVolatile.Type(), boolBit(volatile), false))
+		return v
+	}
+	inst.SetVolatile(volatile)
 	return v
+}
+
+func boolBit(b bool) uint64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // memoryInstruction returns the underlying load or atomic instruction when a

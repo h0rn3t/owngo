@@ -560,8 +560,17 @@ func (b Builder) Store(ptr, val Expr) Expr {
 	if b.Prog.needsWidePointerStorage(storageType) {
 		return Expr{b.impl.CreateStore(b.toAtomicStorageValue(storageType, val.impl), ptr.impl), b.Prog.Void()}
 	}
+	if size := b.Prog.SizeOf(storageType); size > largeZeroStore && val.impl.IsConstant() && val.impl.IsNull() {
+		// SelectionDAG splits an aggregate store into one node per element;
+		// for tens of KiB its combine recursion overflows the thread stack.
+		b.zeroinit(ptr, b.Prog.IntVal(size, b.Prog.Uintptr()))
+		return Expr{b.impl.GetInsertBlock().LastInstruction(), b.Prog.Void()}
+	}
 	return Expr{b.impl.CreateStore(b.toStorageValue(storageType, val.impl), ptr.impl), b.Prog.Void()}
 }
+
+// largeZeroStore — найбільший нульовий запис у байтах, що лишається store.
+const largeZeroStore = 1024
 
 // Advance returns the pointer ptr advanced by offset.
 func (b Builder) Advance(ptr Expr, offset Expr) Expr {
