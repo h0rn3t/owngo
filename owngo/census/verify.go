@@ -13,13 +13,16 @@ import (
 // Ownership — рішення codegen про місця однієї функції: читачі місця
 // (Placement.StaticUses і DecUses), звільнення (FreeAccounted чи Dec*)
 // після інструкції, на вході блока чи на розщепленому ребрі і Inc на
-// передачі чи записі.
+// передачі чи записі. Kept — місця, які codegen свідомо лишає живими до
+// виходу процесу (їх бере defer): Inc на них лічильник власника до нуля не
+// доведе, тож пари не потребує.
 type Ownership struct {
 	Uses  map[ssa.Instruction][]ssa.Instruction
 	After map[ssa.Instruction][]ssa.Value
 	Entry map[*ssa.BasicBlock][]ssa.Value
 	Edge  map[BlockEdge][]ssa.Value
 	Inc   map[ssa.Instruction][]ssa.Value
+	Kept  map[ssa.Value]bool
 }
 
 // BlockEdge — ребро CFG з Pred у Succ.
@@ -81,7 +84,7 @@ func Verify(fn *ssa.Function, own Ownership) []OwnershipError {
 	for _, b := range fn.Blocks {
 		for _, instr := range b.Instrs {
 			for _, val := range own.Inc[instr] {
-				if released[val] || traversalStore(instr) {
+				if released[val] || own.Kept[val] || traversalStore(instr) {
 					continue
 				}
 				out = append(out, OwnershipError{

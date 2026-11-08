@@ -1197,6 +1197,15 @@ func (p *context) verifyOwnGo(f *ssa.Function) {
 		Entry: map[*ssa.BasicBlock][]ssa.Value{},
 		Edge:  map[census.BlockEdge][]ssa.Value{},
 		Inc:   p.ownGoInc,
+		Kept:  map[ssa.Value]bool{},
+	}
+	// ownGoFreeAfter не звільняє місце, яке бере defer: воно доживає до виходу.
+	for _, uses := range []map[ssa.Instruction][]ssa.Instruction{p.ownGoUses, p.ownGoDecUses} {
+		for site, users := range uses {
+			if val, ok := site.(ssa.Value); ok && site.Parent() == f && deferred(users) {
+				own.Kept[val] = true
+			}
+		}
 	}
 	addSites := func(sites []ssa.Value) {
 		for _, site := range sites {
