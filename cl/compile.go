@@ -1155,6 +1155,12 @@ func (p *context) debugRef(b llssa.Builder, v *ssa.DebugRef) {
 		// replace it with a snapshot instead of tracking later memory writes.
 		return
 	}
+	if !v.IsAddr && !types.Identical(v.X.Type(), variable.Type()) {
+		// go/ssa may attach the value after an implicit conversion, e.g. dc in
+		// driverResult{dc, resi} as a sync.Locker. The variable's storage has
+		// the size of its own type: storing the converted value overflows it.
+		return
+	}
 	if stable, ok := p.debugStableParams[variable]; ok {
 		if stable.value == v.X && stable.block == v.Block() {
 			return
