@@ -118,3 +118,56 @@ func TestClosureInLocalArrayKeepsCell(t *testing.T) {
 		t.Errorf("PlaceAll(stored).DecUses[p] = %v, want it to include %v", uses, call)
 	}
 }
+
+// P-NEW-09.2, os/signal.Notify: комірку c захоплює getHandler, а getHandler —
+// add. Dec комірки c стоїть після виклику add, а не після запису getHandler у
+// його комірку: інакше add читає звільнену c (ASan на стенді fiberdb).
+const nestedClosureSrc = `package p
+
+var table = map[chan int]*int{}
+
+func notify(c chan int, sig ...int) {
+	get := func() *int {
+		h := table[c]
+		if h == nil {
+			h = new(int)
+			table[c] = h
+		}
+		return h
+	}
+	add := func(n int) {
+		*get() += n
+	}
+	for _, s := range sig {
+		add(s)
+	}
+}
+`
+
+func TestNestedClosureKeepsCell(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", nestedClosureSrc, ssa.SanityCheckFunctions)
+	place := PlaceAll(ssaFuncs(pkg))
+	fn := pkg.Func("notify")
+	var cell, call ssa.Instruction
+	for _, b := range fn.Blocks {
+		for _, instr := range b.Instrs {
+			switch instr := instr.(type) {
+			case *ssa.Alloc:
+				if instr.Comment == "c" {
+					cell = instr
+				}
+			case *ssa.Call:
+				if _, closure := instr.Call.Value.(*ssa.MakeClosure); closure {
+					call = instr
+				}
+			}
+		}
+	}
+	if cell == nil || call == nil {
+		t.Fatalf("notify: cell %v, closure call %v; want both", cell, call)
+	}
+	uses, ok := place.DecUses[cell]
+	if ok && !slices.Contains(uses, call) {
+		t.Errorf("PlaceAll(notify).DecUses[c] = %v, want it to include %v", uses, call)
+	}
+}
