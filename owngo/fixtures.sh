@@ -8,7 +8,8 @@
 #   owngo/asan/*    — під -O0 -asan код 0 і жодного звіту;
 #   решта           — код 0.
 # Тег owngostat додається, якщо його вимагає рядок //go:build фікстури.
-# Каталоги bench, census/cmd, third_party і пакети site — не програми прийняття.
+# Каталоги bench, census/cmd, third_party, stand (окремі модулі) і пакети site —
+# не програми прийняття.
 set -uo pipefail
 
 llgo=${1:-llgo}
@@ -63,7 +64,7 @@ while IFS= read -r dir; do
 	failed+=("$dir")
 done < <(find owngo -name main.go \
 	-not -path 'owngo/bench/*' -not -path 'owngo/census/cmd/*' \
-	-not -path 'owngo/third_party/*' -not -path '*/site/*' |
+	-not -path 'owngo/third_party/*' -not -path 'owngo/stand/*' -not -path '*/site/*' |
 	xargs -n1 dirname | sort)
 
 echo "${#failed[@]} of $count fixtures failed"
