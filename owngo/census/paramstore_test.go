@@ -153,3 +153,57 @@ func TestBlankAliasResult(t *testing.T) {
 		t.Fatalf("PlaceAll(use) placed no sites")
 	}
 }
+
+// P-NEW-09.2, database/sql.Register: параметр записано в мапу, яку функція
+// читає з глобальної змінної (drivers[name] = driver). &SQLiteDriver{} у init
+// go-sqlite3 опинявся на стеку init, і пізніші init (fiber) його затирали.
+const globalMapSrc = `package p
+
+import "sync"
+
+type Driver interface{ Open(string) error }
+
+type D struct {
+	ext  []string
+	hook func() error
+}
+
+func (*D) Open(string) error { return nil }
+
+var (
+	mu      sync.RWMutex
+	drivers = make(map[string]Driver)
+)
+
+func Register(name string, driver Driver) {
+	mu.Lock()
+	defer mu.Unlock()
+	if driver == nil {
+		panic("nil driver")
+	}
+	if _, dup := drivers[name]; dup {
+		panic("twice " + name)
+	}
+	drivers[name] = driver
+}
+
+func init() {
+	Register("x", &D{})
+}
+`
+
+func TestGlobalMapValueEscapes(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", globalMapSrc, ssa.SanityCheckFunctions)
+	got := PlaceAll(ssaFuncs(pkg))
+	fn := pkg.Func("init#1")
+	if fn == nil {
+		t.Fatal("init#1 not found")
+	}
+	alloc := findInstr[*ssa.Alloc](t, fn)
+	if cat := got.Cats[alloc]; cat == "static" {
+		t.Errorf("PlaceAll(init#1).Cats[%v] = %q, want an escape through the global map", alloc, cat)
+	}
+	if _, ok := got.Stack[alloc]; ok {
+		t.Errorf("PlaceAll(init#1).Stack has %v (cat %q), which Register stores in a global map", alloc, got.Cats[alloc])
+	}
+}
