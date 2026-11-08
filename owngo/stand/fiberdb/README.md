@@ -17,14 +17,15 @@ HTTP-сервіс на fiber v3 і SQLite (`mattn/go-sqlite3`, cgo). Окрем�
 
 ```sh
 cd owngo/stand/fiberdb
-go test -race .              # контракт API під gc
-llgo test .                  # те саме під llgo (1:1)
+go test -race .                                   # контракт API під gc
+llgo test -tags owngo .                           # те саме під owngo
+ASAN_OPTIONS=detect_leaks=0 llgo test -tags owngo -O0 -asan .
 go build -o $BIN/fiberdb-go . && go build -o $BIN/load ./load
-llgo build -o $BIN/fiberdb-llgo .
-BIN=$BIN ./measure.sh go 18080      # fanout 1000/5000/20000, навантаження c=100 і c=1000
-BIN=$BIN ./measure.sh llgo 18081
+llgo build -tags owngo -o $BIN/fiberdb-owngo .
+BIN=$BIN ./measure.sh go 18080        # fanout 1000/5000/20000, навантаження c=100 і c=1000
+BIN=$BIN ./measure.sh owngo 18081
 ```
 
-`load` — `-url`, `-c` (клієнтів, кожен на своєму з'єднанні), `-d` (тривалість); друкує rps, p50, p99, max і помилки.
+`load` — `-url`, `-c` (клієнтів, кожен на своєму з'єднанні), `-d` (тривалість); друкує rps, p50, p99, max і помилки. Кеш llgo не враховує змін `cl` і `owngo/census`: після них чистіть `~/.cache/llgo`.
 
-Під `-tags owngo` стенд поки не збирається — задача P-NEW-09.2 у `PLAN.md`. Заміри — `owngo/REPORT-STAGEG.md`.
+Заміри — `owngo/REPORT-STAGEG.md`.
