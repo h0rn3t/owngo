@@ -1369,7 +1369,11 @@ func resultValue(instr ssa.Instruction, index, nres int, extracts map[*ssa.Call]
 	if nres == 1 {
 		return call
 	}
-	return extracts[call][index]
+	// Виклик-інструкція не має Extract; nil *ssa.Extract в ssa.Value — не nil.
+	if ex := extracts[call][index]; ex != nil {
+		return ex
+	}
+	return nil
 }
 
 func absorbSites(pts map[ssa.Value]siteSet, v ssa.Value, src siteSet) bool {
