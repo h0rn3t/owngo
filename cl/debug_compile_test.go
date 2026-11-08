@@ -361,3 +361,64 @@ func debugVariableID(t *testing.T, ir, variable string) string {
 	}
 	return match[1]
 }
+
+// TestDebugParamHomeKeepsParamType — P-NEW-09.2: DebugRef параметра в полі-
+// інтерфейсі складеного літерала несе вже перетворене значення. Стабільний
+// слот параметра має розмір його типу, тож запис інтерфейсу (16 байтів) у слот
+// *conn (8 байтів) затирав стек: database/sql.(*DB).execDC, driverResult{dc, resi}.
+func TestDebugParamHomeKeepsParamType(t *testing.T) {
+	const source = `package debughome
+
+type Locker interface {
+	Lock()
+	Unlock()
+}
+
+type conn struct{ n int }
+
+func (*conn) Lock()   {}
+func (*conn) Unlock() {}
+
+type result struct {
+	Locker
+	v int
+}
+
+func wrap(dc *conn, v int) any {
+	return result{dc, v}
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "debug_home.go", source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ssaPkg, _, err := ssautil.BuildPackage(
+		&types.Config{Importer: importer.Default()},
+		fset,
+		types.NewPackage("debughome", "debughome"),
+		[]*ast.File{file},
+		ssa.SanityCheckFunctions|ssa.GlobalDebug,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog := newLLSSAProgForTarget(t, &llssa.Target{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, OptLevel: optlevel.O0})
+	defer prog.Dispose()
+	pkg, _, err := newPackageEx(prog, nil, nil, nil, ssaPkg, []*ast.File{file}, nil, false, Options{Debug: true, DebugSymbols: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ir := pkg.Module().String()
+	fnIR := pkg.Module().NamedFunction("debughome.wrap").String()
+	variableID := debugVariableID(t, ir, `name: "dc", arg: 1`)
+	match := regexp.MustCompile(`#dbg_declare\(ptr ([^,]+), ` + regexp.QuoteMeta(variableID) + `,`).FindStringSubmatch(fnIR)
+	if len(match) != 2 {
+		t.Fatalf("debug home for dc not found:\n%s", fnIR)
+	}
+	for _, line := range strings.Split(fnIR, "\n") {
+		if strings.Contains(line, "store ") && strings.Contains(line, ", ptr "+match[1]+",") && !strings.Contains(line, "store ptr ") {
+			t.Errorf("debughome.wrap stores a non-pointer into the home of dc (*conn): %s", strings.TrimSpace(line))
+		}
+	}
+}
