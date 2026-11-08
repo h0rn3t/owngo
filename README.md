@@ -61,16 +61,16 @@ Go 1.27 ─▶ фронтенд llgo (go/packages + go/types + go/ssa)
 - лічильники операцій рантайму під тегом `owngostat` (P-NEW-02.0) — база етапу C (зведення володіння, RC elision, стек);
 - рантайм регіонів `RegionCreate`/`RegionAlloc`/`FreeRegion` (P-NEW-05.3) — перший крок етапу D; codegen, що кладе дерева в регіон, — наступні задачі.
 
-Бенчмарки (Debian 13 amd64, Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23.1.5, rustc 1.85.1; медіана з 10 прогонів із чергуванням варіантів). `owngo`, Rust і C — замір профілів P-NEW-01 (2026-11-04, ревізія `96ae9b792`, після S2 і S3); `go` — замір S1.1 (2026-11-03, ревізія `1a278541f`), код форку на нього не впливає:
+Бенчмарки (Debian 13 amd64, Xeon Gold 6240R, 8 ядер, Go 1.27.1, LLVM 23.1.5, rustc 1.85.1; медіана з 10 прогонів із чергуванням варіантів). Усі варіанти заміряно разом 2026-11-07 на ревізії `2a8b4583f`, після гейта F; RSS `owngo` — профілю `-O2 -lto thin`:
 
 | Програма | `go` | `owngo` `-Os` | `owngo` `-O2 -lto thin` | Rust | C | Пікова RSS: `go` / `owngo` / Rust / C |
 | --- | --- | --- | --- | --- | --- | --- |
-| [binary-trees 21](owngo/REPORT-BENCH.md#binary-trees-21), Go #2 без змін | 5.39 с | 8.89 с | 8.03 с | — | 6.02 с (#5: `malloc` + pthreads) | 633 / 476 / — / 343 МБ |
-| binary-trees 21 на аренах ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.41 с | 0.54 с | 0.51 с | 0.76 с (#5: bumpalo + rayon) | 1.13 с (#2: пули APR + OpenMP) | 227 / 359 / 322 / 175 МБ |
-| [fannkuch-redux 12](owngo/REPORT-BENCH.md#fannkuch-redux-12) | 3.21 с | 7.23 с | 2.69 с | 2.33 с (#6: rayon, SSE4) | 1.35 с (#6: pthreads, SSE4.1) | 2 / 6 / 2 / 2 МБ |
-| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.50 с | 1.32 с | 0.70 с | 0.54 с (#4: rayon) | 0.62 с (#6: OpenMP, SSE2) | 33 / 36 / 33 / 33 МБ |
+| [binary-trees 21](owngo/REPORT-BENCH.md#binary-trees-21), Go #2 без змін | 5.36 с | 1.33 с | 1.22 с | — | 5.33 с (#5: `malloc` + pthreads) | 631 / 306 / — / 343 МБ |
+| binary-trees 21 на аренах ([`binarytreesarena`](owngo/bench/binarytreesarena)) | 0.42 с | 0.49 с | 0.43 с | 0.68 с (#5: bumpalo + rayon) | 1.04 с (#2: пули APR + OpenMP) | 227 / 359 / 322 / 175 МБ |
+| [fannkuch-redux 12](owngo/REPORT-BENCH.md#fannkuch-redux-12) | 3.22 с | 6.13 с | 2.41 с | 2.21 с (#6: rayon, SSE4) | 1.14 с (#6: pthreads, SSE4.1) | 2 / 5 / 2 / 2 МБ |
+| [mandelbrot 16000](owngo/REPORT-BENCH.md#mandelbrot-16000) | 1.50 с | 0.89 с | 0.63 с | 0.54 с (#4: rayon) | 0.61 с (#6: OpenMP, SSE2) | 33 / 36 / 33 / 33 МБ |
 
-Вивід усіх програм побайтно збігається з очікуваним. Таблиці binary-trees — окремо за стратегією пам'яті: Go #2 і C #5 звільняють вузли по одному, а арена Go, Rust #5 і пули C тримають дерево цілим; висновку між рядками немає. Go #2 під `owngo` до S2 і S3 ішов 49.2 с: час з'їдали атомарні лічильники обліку і профілю на спільних кеш-лініях. `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4; програми Rust і C — з Benchmarks Game без змін коду. Повні таблиці (усі профілі, llgo без тега, CPU user/sys, розкид, розмір бінарника, час збірки) і JSON — у [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md), [owngo/bench/profiles](owngo/bench/profiles) і [owngo/bench/baseline](owngo/bench/baseline). Команда: `owngo/bench/compare.py binarytrees|fannkuchredux|mandelbrot [--profiles]`.
+Вивід усіх програм побайтно збігається з очікуваним. Таблиці binary-trees — окремо за стратегією пам'яті: Go #2 і C #5 звільняють вузли по одному, а арена Go, Rust #5 і пули C тримають дерево цілим; висновку між рядками немає. Go #2 під `owngo` до S2 і S3 ішов 49.2 с: час з'їдали атомарні лічильники обліку і профілю на спільних кеш-лініях. Після S2 і S3 — 8.03 с; регіони етапу D (дерева робітників — у регіоні) і відкладене повернення сторінок алокатора етапу F дали 1.22 с, у 4.4 раза швидше за `go` і C #5 ([owngo/REPORT-STAGEF.md](owngo/REPORT-STAGEF.md)). `fannkuch-redux` — порт Rust #6 на Go, `mandelbrot` — порт Rust #4; програми Rust і C — з Benchmarks Game без змін коду. Повні таблиці (усі профілі, llgo без тега, CPU user/sys, розкид, розмір бінарника, час збірки) і JSON — у [owngo/REPORT-BENCH.md](owngo/REPORT-BENCH.md), [owngo/bench/profiles](owngo/bench/profiles), [owngo/bench/baseline](owngo/bench/baseline) і [owngo/bench/stagef](owngo/bench/stagef) (замір цієї таблиці). Команда: `owngo/bench/compare.py binarytrees|fannkuchredux|mandelbrot [--profiles]`.
 
 ## Збірка і запуск
 

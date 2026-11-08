@@ -1,0 +1,872 @@
+{
+  "program": "fannkuchredux",
+  "n": 12,
+  "runs": 10,
+  "profiles": false,
+  "env": {
+    "sha": "2a8b4583f9a0f8d5a80052f25815c8908b343378",
+    "dirty": false,
+    "go": "go version go1.27.1 linux/amd64",
+    "llvm": "23.1.5",
+    "clang": "Debian clang version 23.1.5 (++20261028083851+a738f2737189-1~exp1~20261028203959.90)",
+    "rustc": "rustc 1.85.1 (4eb161250 2025-03-15) (built from a source tarball)",
+    "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+    "isa": [
+      "sse4_2",
+      "popcnt",
+      "avx",
+      "avx2",
+      "fma",
+      "bmi2",
+      "avx512f"
+    ],
+    "cores": 8,
+    "ulimit": "time(seconds)        unlimited\nfile(blocks)         unlimited\ndata(kbytes)         unlimited\nstack(kbytes)        8192\ncoredump(blocks)     unlimited\nmemory(kbytes)       unlimited\nlocked memory(kbytes) 8192\nprocess              unlimited\nnofiles              524288\nvmemory(kbytes)      unlimited\nlocks                unlimited\nrtprio               0",
+    "go_env": {
+      "GOAMD64": "v2"
+    },
+    "rust_env": {
+      "RUSTFLAGS": "-C target-cpu=ivybridge"
+    },
+    "c_flags": [
+      "-O3",
+      "-fomit-frame-pointer",
+      "-march=ivybridge"
+    ],
+    "libomp_root": "/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23",
+    "pcre2_root": null
+  },
+  "tables": [
+    {
+      "name": "main",
+      "pkg": "fannkuchredux",
+      "variants": [
+        {
+          "key": "go",
+          "label": "fannkuchredux, go, GOAMD64=v2",
+          "exe": "fannkuchredux-go",
+          "build_s": 4.9,
+          "size_kb": 2324,
+          "runs": [
+            {
+              "wall": 3.329,
+              "user": 25.251,
+              "sys": 0.022,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 369,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.193,
+              "user": 24.731,
+              "sys": 0.027,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 374,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.242,
+              "user": 24.761,
+              "sys": 0.03,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 356,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.226,
+              "user": 24.968,
+              "sys": 0.013,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 370,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.215,
+              "user": 24.841,
+              "sys": 0.023,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 371,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.205,
+              "user": 24.792,
+              "sys": 0.025,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 361,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.194,
+              "user": 24.725,
+              "sys": 0.024,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 340,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.196,
+              "user": 24.79,
+              "sys": 0.027,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 353,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.235,
+              "user": 24.847,
+              "sys": 0.018,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 340,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 3.23,
+              "user": 24.948,
+              "sys": 0.024,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 364,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 3.22,
+          "min": 3.193,
+          "max": 3.329,
+          "user_median": 24.817,
+          "sys_median": 0.024,
+          "peak_rss_mb": 2.1,
+          "minflt_median": 362
+        },
+        {
+          "key": "llgo",
+          "label": "fannkuchredux, llgo",
+          "exe": "fannkuchredux-llgo",
+          "build_s": 24.1,
+          "size_kb": 2481,
+          "runs": [
+            {
+              "wall": 12.907,
+              "user": 100.796,
+              "sys": 0.045,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 670,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.631,
+              "user": 97.597,
+              "sys": 0.039,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "minflt": 664,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 14.263,
+              "user": 111.275,
+              "sys": 0.041,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 661,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.146,
+              "user": 102.345,
+              "sys": 0.025,
+              "rss_mb": 6.1,
+              "exit": 0,
+              "minflt": 665,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.609,
+              "user": 97.943,
+              "sys": 0.034,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 663,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.591,
+              "user": 104.939,
+              "sys": 0.035,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 671,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.755,
+              "user": 99.312,
+              "sys": 0.047,
+              "rss_mb": 6.0,
+              "exit": 0,
+              "minflt": 662,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.134,
+              "user": 101.986,
+              "sys": 0.036,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 666,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 12.906,
+              "user": 100.244,
+              "sys": 0.034,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 668,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 13.337,
+              "user": 103.487,
+              "sys": 0.037,
+              "rss_mb": 6.2,
+              "exit": 0,
+              "minflt": 665,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 13.021,
+          "min": 12.609,
+          "max": 14.263,
+          "user_median": 101.391,
+          "sys_median": 0.036,
+          "peak_rss_mb": 6.2,
+          "minflt_median": 665
+        },
+        {
+          "key": "owngo",
+          "label": "fannkuchredux, llgo -tags owngo (-Os)",
+          "exe": "fannkuchredux-owngo",
+          "build_s": 26.0,
+          "size_kb": 2493,
+          "runs": [
+            {
+              "wall": 6.114,
+              "user": 47.399,
+              "sys": 0.021,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 450,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.112,
+              "user": 47.32,
+              "sys": 0.021,
+              "rss_mb": 5.5,
+              "exit": 0,
+              "minflt": 449,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.167,
+              "user": 47.848,
+              "sys": 0.015,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 452,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.14,
+              "user": 47.402,
+              "sys": 0.014,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 451,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.195,
+              "user": 47.881,
+              "sys": 0.026,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 452,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.104,
+              "user": 47.262,
+              "sys": 0.013,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 451,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.17,
+              "user": 47.578,
+              "sys": 0.018,
+              "rss_mb": 5.5,
+              "exit": 0,
+              "minflt": 448,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.087,
+              "user": 47.218,
+              "sys": 0.026,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 448,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.13,
+              "user": 47.425,
+              "sys": 0.025,
+              "rss_mb": 5.5,
+              "exit": 0,
+              "minflt": 449,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 6.156,
+              "user": 47.683,
+              "sys": 0.024,
+              "rss_mb": 5.6,
+              "exit": 0,
+              "minflt": 451,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 6.135,
+          "min": 6.087,
+          "max": 6.195,
+          "user_median": 47.413,
+          "sys_median": 0.021,
+          "peak_rss_mb": 5.6,
+          "minflt_median": 450
+        },
+        {
+          "key": "owngo-thin",
+          "label": "fannkuchredux, llgo -tags owngo -O2 -lto thin",
+          "exe": "fannkuchredux-owngo-thin",
+          "build_s": 25.8,
+          "size_kb": 2160,
+          "runs": [
+            {
+              "wall": 2.411,
+              "user": 18.517,
+              "sys": 0.016,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 421,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.429,
+              "user": 18.701,
+              "sys": 0.016,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 419,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.414,
+              "user": 18.666,
+              "sys": 0.011,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 422,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.393,
+              "user": 18.544,
+              "sys": 0.012,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 421,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.412,
+              "user": 18.735,
+              "sys": 0.01,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 420,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.418,
+              "user": 18.589,
+              "sys": 0.012,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 422,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.402,
+              "user": 18.555,
+              "sys": 0.009,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 421,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.413,
+              "user": 18.547,
+              "sys": 0.013,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 422,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.406,
+              "user": 18.555,
+              "sys": 0.01,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 418,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.429,
+              "user": 18.842,
+              "sys": 0.015,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 420,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 2.412,
+          "min": 2.393,
+          "max": 2.429,
+          "user_median": 18.572,
+          "sys_median": 0.012,
+          "peak_rss_mb": 5.2,
+          "minflt_median": 421
+        },
+        {
+          "key": "owngo-lto",
+          "label": "fannkuchredux, llgo -tags owngo -O2 -lto full",
+          "exe": "fannkuchredux-owngo-lto",
+          "build_s": 38.7,
+          "size_kb": 1626,
+          "runs": [
+            {
+              "wall": 2.47,
+              "user": 19.119,
+              "sys": 0.01,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 410,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.462,
+              "user": 19.061,
+              "sys": 0.01,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 415,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.462,
+              "user": 19.059,
+              "sys": 0.012,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 411,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.442,
+              "user": 18.893,
+              "sys": 0.007,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 418,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.444,
+              "user": 18.877,
+              "sys": 0.013,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 412,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.457,
+              "user": 18.972,
+              "sys": 0.015,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 416,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.477,
+              "user": 19.199,
+              "sys": 0.01,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 417,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.473,
+              "user": 19.138,
+              "sys": 0.015,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 413,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.453,
+              "user": 18.937,
+              "sys": 0.012,
+              "rss_mb": 5.2,
+              "exit": 0,
+              "minflt": 413,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.472,
+              "user": 18.979,
+              "sys": 0.02,
+              "rss_mb": 5.1,
+              "exit": 0,
+              "minflt": 414,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 2.462,
+          "min": 2.442,
+          "max": 2.477,
+          "user_median": 19.019,
+          "sys_median": 0.012,
+          "peak_rss_mb": 5.2,
+          "minflt_median": 414
+        },
+        {
+          "key": "rust",
+          "label": "Rust #6, rayon",
+          "exe": "fannkuchreduxrust",
+          "runs": [
+            {
+              "wall": 2.198,
+              "user": 16.863,
+              "sys": 0.011,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 160,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.216,
+              "user": 17.009,
+              "sys": 0.013,
+              "rss_mb": 2.0,
+              "exit": 0,
+              "minflt": 158,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.191,
+              "user": 16.971,
+              "sys": 0.005,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 158,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.187,
+              "user": 16.915,
+              "sys": 0.007,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 163,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.221,
+              "user": 16.899,
+              "sys": 0.016,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 163,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.207,
+              "user": 16.905,
+              "sys": 0.007,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 161,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.193,
+              "user": 16.882,
+              "sys": 0.014,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 156,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.241,
+              "user": 17.052,
+              "sys": 0.014,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 163,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.379,
+              "user": 16.867,
+              "sys": 0.013,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 165,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 2.211,
+              "user": 16.871,
+              "sys": 0.008,
+              "rss_mb": 2.1,
+              "exit": 0,
+              "minflt": 160,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 2.209,
+          "min": 2.187,
+          "max": 2.379,
+          "user_median": 16.902,
+          "sys_median": 0.012,
+          "peak_rss_mb": 2.1,
+          "minflt_median": 160
+        },
+        {
+          "key": "c",
+          "label": "C #6, pthreads",
+          "exe": "fannkuchreduxc",
+          "args": [
+            "-t",
+            "8"
+          ],
+          "cflags": [
+            "-O3",
+            "-fomit-frame-pointer",
+            "-march=ivybridge",
+            "-pthread"
+          ],
+          "runs": [
+            {
+              "wall": 1.146,
+              "user": 8.78,
+              "sys": 0.004,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 103,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.117,
+              "user": 8.716,
+              "sys": 0.002,
+              "rss_mb": 1.5,
+              "exit": 0,
+              "minflt": 106,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.176,
+              "user": 8.939,
+              "sys": 0.005,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 108,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.12,
+              "user": 8.789,
+              "sys": 0.003,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 103,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.121,
+              "user": 8.78,
+              "sys": 0.003,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 106,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.127,
+              "user": 8.771,
+              "sys": 0.006,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 106,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.12,
+              "user": 8.779,
+              "sys": 0.002,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 103,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.251,
+              "user": 8.973,
+              "sys": 0.006,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 106,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.267,
+              "user": 8.747,
+              "sys": 0.006,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 105,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.219,
+              "user": 8.889,
+              "sys": 0.007,
+              "rss_mb": 1.6,
+              "exit": 0,
+              "minflt": 104,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 1.136,
+          "min": 1.117,
+          "max": 1.267,
+          "user_median": 8.78,
+          "sys_median": 0.005,
+          "peak_rss_mb": 1.6,
+          "minflt_median": 106
+        }
+      ]
+    }
+  ]
+}

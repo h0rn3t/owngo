@@ -1,0 +1,876 @@
+{
+  "program": "mandelbrot",
+  "n": 16000,
+  "runs": 10,
+  "profiles": false,
+  "env": {
+    "sha": "2a8b4583f9a0f8d5a80052f25815c8908b343378",
+    "dirty": false,
+    "go": "go version go1.27.1 linux/amd64",
+    "llvm": "23.1.5",
+    "clang": "Debian clang version 23.1.5 (++20261028083851+a738f2737189-1~exp1~20261028203959.90)",
+    "rustc": "rustc 1.85.1 (4eb161250 2025-03-15) (built from a source tarball)",
+    "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+    "isa": [
+      "sse4_2",
+      "popcnt",
+      "avx",
+      "avx2",
+      "fma",
+      "bmi2",
+      "avx512f"
+    ],
+    "cores": 8,
+    "ulimit": "time(seconds)        unlimited\nfile(blocks)         unlimited\ndata(kbytes)         unlimited\nstack(kbytes)        8192\ncoredump(blocks)     unlimited\nmemory(kbytes)       unlimited\nlocked memory(kbytes) 8192\nprocess              unlimited\nnofiles              524288\nvmemory(kbytes)      unlimited\nlocks                unlimited\nrtprio               0",
+    "go_env": {
+      "GOAMD64": "v2"
+    },
+    "rust_env": {
+      "RUSTFLAGS": "-C target-cpu=ivybridge"
+    },
+    "c_flags": [
+      "-O3",
+      "-fomit-frame-pointer",
+      "-march=ivybridge"
+    ],
+    "libomp_root": "/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23",
+    "pcre2_root": null
+  },
+  "tables": [
+    {
+      "name": "main",
+      "pkg": "mandelbrot",
+      "variants": [
+        {
+          "key": "go",
+          "label": "mandelbrot, go, GOAMD64=v2",
+          "exe": "mandelbrot-go",
+          "build_s": 5.0,
+          "size_kb": 2323,
+          "runs": [
+            {
+              "wall": 1.509,
+              "user": 11.591,
+              "sys": 0.05,
+              "rss_mb": 32.9,
+              "exit": 0,
+              "minflt": 8634,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.474,
+              "user": 11.488,
+              "sys": 0.06,
+              "rss_mb": 32.9,
+              "exit": 0,
+              "minflt": 8578,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.481,
+              "user": 11.565,
+              "sys": 0.057,
+              "rss_mb": 32.6,
+              "exit": 0,
+              "minflt": 8633,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.505,
+              "user": 11.718,
+              "sys": 0.06,
+              "rss_mb": 33.0,
+              "exit": 0,
+              "minflt": 8666,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.516,
+              "user": 11.785,
+              "sys": 0.055,
+              "rss_mb": 33.0,
+              "exit": 0,
+              "minflt": 8664,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.507,
+              "user": 11.711,
+              "sys": 0.059,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8697,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.503,
+              "user": 11.669,
+              "sys": 0.068,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8671,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.501,
+              "user": 11.671,
+              "sys": 0.06,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8629,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.491,
+              "user": 11.552,
+              "sys": 0.062,
+              "rss_mb": 33.0,
+              "exit": 0,
+              "minflt": 8671,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 1.513,
+              "user": 11.659,
+              "sys": 0.068,
+              "rss_mb": 33.0,
+              "exit": 0,
+              "minflt": 8651,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 1.504,
+          "min": 1.474,
+          "max": 1.516,
+          "user_median": 11.664,
+          "sys_median": 0.06,
+          "peak_rss_mb": 33.1,
+          "minflt_median": 8658
+        },
+        {
+          "key": "llgo",
+          "label": "mandelbrot, llgo",
+          "exe": "mandelbrot-llgo",
+          "build_s": 23.8,
+          "size_kb": 2479,
+          "runs": [
+            {
+              "wall": 0.911,
+              "user": 6.805,
+              "sys": 0.045,
+              "rss_mb": 37.0,
+              "exit": 0,
+              "minflt": 8527,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.909,
+              "user": 6.756,
+              "sys": 0.045,
+              "rss_mb": 37.1,
+              "exit": 0,
+              "minflt": 8523,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.897,
+              "user": 6.717,
+              "sys": 0.046,
+              "rss_mb": 36.9,
+              "exit": 0,
+              "minflt": 8528,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.912,
+              "user": 6.888,
+              "sys": 0.043,
+              "rss_mb": 36.9,
+              "exit": 0,
+              "minflt": 8521,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.904,
+              "user": 6.779,
+              "sys": 0.04,
+              "rss_mb": 37.2,
+              "exit": 0,
+              "minflt": 8525,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.911,
+              "user": 6.829,
+              "sys": 0.046,
+              "rss_mb": 37.1,
+              "exit": 0,
+              "minflt": 8528,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.949,
+              "user": 7.078,
+              "sys": 0.049,
+              "rss_mb": 37.0,
+              "exit": 0,
+              "minflt": 8528,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.916,
+              "user": 6.79,
+              "sys": 0.055,
+              "rss_mb": 37.0,
+              "exit": 0,
+              "minflt": 8517,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.907,
+              "user": 6.781,
+              "sys": 0.049,
+              "rss_mb": 37.1,
+              "exit": 0,
+              "minflt": 8523,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.905,
+              "user": 6.814,
+              "sys": 0.043,
+              "rss_mb": 37.1,
+              "exit": 0,
+              "minflt": 8527,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.91,
+          "min": 0.897,
+          "max": 0.949,
+          "user_median": 6.797,
+          "sys_median": 0.045,
+          "peak_rss_mb": 37.2,
+          "minflt_median": 8526
+        },
+        {
+          "key": "owngo",
+          "label": "mandelbrot, llgo -tags owngo (-Os)",
+          "exe": "mandelbrot-owngo",
+          "build_s": 25.3,
+          "size_kb": 2491,
+          "runs": [
+            {
+              "wall": 0.897,
+              "user": 6.764,
+              "sys": 0.042,
+              "rss_mb": 36.4,
+              "exit": 0,
+              "minflt": 8307,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.914,
+              "user": 6.841,
+              "sys": 0.045,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8304,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.882,
+              "user": 6.637,
+              "sys": 0.043,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8310,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.895,
+              "user": 6.713,
+              "sys": 0.047,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8310,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.898,
+              "user": 6.732,
+              "sys": 0.043,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8307,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.892,
+              "user": 6.727,
+              "sys": 0.045,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8306,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.889,
+              "user": 6.679,
+              "sys": 0.046,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8306,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.887,
+              "user": 6.732,
+              "sys": 0.043,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8309,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.908,
+              "user": 6.747,
+              "sys": 0.048,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8305,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.893,
+              "user": 6.707,
+              "sys": 0.044,
+              "rss_mb": 36.2,
+              "exit": 0,
+              "minflt": 8309,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.894,
+          "min": 0.882,
+          "max": 0.914,
+          "user_median": 6.729,
+          "sys_median": 0.044,
+          "peak_rss_mb": 36.4,
+          "minflt_median": 8307
+        },
+        {
+          "key": "owngo-thin",
+          "label": "mandelbrot, llgo -tags owngo -O2 -lto thin",
+          "exe": "mandelbrot-owngo-thin",
+          "build_s": 25.3,
+          "size_kb": 2160,
+          "runs": [
+            {
+              "wall": 0.634,
+              "user": 4.625,
+              "sys": 0.045,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8289,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.642,
+              "user": 4.715,
+              "sys": 0.041,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8291,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.626,
+              "user": 4.547,
+              "sys": 0.044,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8287,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.622,
+              "user": 4.567,
+              "sys": 0.044,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8286,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.647,
+              "user": 4.793,
+              "sys": 0.038,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8286,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.625,
+              "user": 4.592,
+              "sys": 0.043,
+              "rss_mb": 35.9,
+              "exit": 0,
+              "minflt": 8286,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.642,
+              "user": 4.632,
+              "sys": 0.047,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8285,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.642,
+              "user": 4.665,
+              "sys": 0.041,
+              "rss_mb": 35.9,
+              "exit": 0,
+              "minflt": 8281,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.627,
+              "user": 4.682,
+              "sys": 0.038,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8290,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.632,
+              "user": 4.664,
+              "sys": 0.047,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8289,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.633,
+          "min": 0.622,
+          "max": 0.647,
+          "user_median": 4.648,
+          "sys_median": 0.043,
+          "peak_rss_mb": 36.1,
+          "minflt_median": 8286
+        },
+        {
+          "key": "owngo-lto",
+          "label": "mandelbrot, llgo -tags owngo -O2 -lto full",
+          "exe": "mandelbrot-owngo-lto",
+          "build_s": 38.3,
+          "size_kb": 1626,
+          "runs": [
+            {
+              "wall": 0.639,
+              "user": 4.664,
+              "sys": 0.048,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8277,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.638,
+              "user": 4.714,
+              "sys": 0.042,
+              "rss_mb": 35.9,
+              "exit": 0,
+              "minflt": 8273,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.635,
+              "user": 4.678,
+              "sys": 0.043,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8272,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.644,
+              "user": 4.771,
+              "sys": 0.039,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8272,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.658,
+              "user": 4.8,
+              "sys": 0.04,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8274,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.655,
+              "user": 4.8,
+              "sys": 0.05,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8277,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.646,
+              "user": 4.775,
+              "sys": 0.041,
+              "rss_mb": 36.1,
+              "exit": 0,
+              "minflt": 8275,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.629,
+              "user": 4.678,
+              "sys": 0.036,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8277,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.639,
+              "user": 4.692,
+              "sys": 0.046,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8271,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.655,
+              "user": 4.72,
+              "sys": 0.056,
+              "rss_mb": 36.0,
+              "exit": 0,
+              "minflt": 8272,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.641,
+          "min": 0.629,
+          "max": 0.658,
+          "user_median": 4.717,
+          "sys_median": 0.042,
+          "peak_rss_mb": 36.1,
+          "minflt_median": 8274
+        },
+        {
+          "key": "rust",
+          "label": "Rust #4, rayon",
+          "exe": "mandelbrotrust",
+          "runs": [
+            {
+              "wall": 0.54,
+              "user": 3.988,
+              "sys": 0.042,
+              "rss_mb": 32.8,
+              "exit": 0,
+              "minflt": 8017,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.534,
+              "user": 3.96,
+              "sys": 0.049,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8019,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.537,
+              "user": 3.993,
+              "sys": 0.052,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8016,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.545,
+              "user": 3.984,
+              "sys": 0.035,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8018,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.531,
+              "user": 3.999,
+              "sys": 0.052,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8021,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.54,
+              "user": 4.006,
+              "sys": 0.046,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8014,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.529,
+              "user": 3.991,
+              "sys": 0.045,
+              "rss_mb": 32.6,
+              "exit": 0,
+              "minflt": 8018,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.529,
+              "user": 3.977,
+              "sys": 0.047,
+              "rss_mb": 32.5,
+              "exit": 0,
+              "minflt": 8021,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.574,
+              "user": 3.982,
+              "sys": 0.053,
+              "rss_mb": 32.5,
+              "exit": 0,
+              "minflt": 8014,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.535,
+              "user": 3.993,
+              "sys": 0.044,
+              "rss_mb": 32.4,
+              "exit": 0,
+              "minflt": 8020,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.536,
+          "min": 0.529,
+          "max": 0.574,
+          "user_median": 3.99,
+          "sys_median": 0.046,
+          "peak_rss_mb": 32.8,
+          "minflt_median": 8018
+        },
+        {
+          "key": "c",
+          "label": "C #6, OpenMP",
+          "exe": "mandelbrotc",
+          "args": [],
+          "cflags": [
+            "-O3",
+            "-fomit-frame-pointer",
+            "-march=ivybridge",
+            "-fopenmp",
+            "-idirafter",
+            "/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib/clang/23/include",
+            "-L/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib",
+            "-Wl,-rpath,/home/coder/.cache/owngo-libomp/root/usr/lib/llvm-23/lib",
+            "-mno-fma",
+            "-fno-finite-math-only",
+            "-fgnu89-inline"
+          ],
+          "runs": [
+            {
+              "wall": 0.612,
+              "user": 4.677,
+              "sys": 0.058,
+              "rss_mb": 33.2,
+              "exit": 0,
+              "minflt": 8080,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.611,
+              "user": 4.678,
+              "sys": 0.054,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8082,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.604,
+              "user": 4.688,
+              "sys": 0.05,
+              "rss_mb": 33.2,
+              "exit": 0,
+              "minflt": 8080,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.61,
+              "user": 4.69,
+              "sys": 0.042,
+              "rss_mb": 33.0,
+              "exit": 0,
+              "minflt": 8080,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.607,
+              "user": 4.704,
+              "sys": 0.055,
+              "rss_mb": 33.2,
+              "exit": 0,
+              "minflt": 8081,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.611,
+              "user": 4.725,
+              "sys": 0.049,
+              "rss_mb": 33.4,
+              "exit": 0,
+              "minflt": 8080,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.704,
+              "user": 5.285,
+              "sys": 0.045,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8082,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.614,
+              "user": 4.685,
+              "sys": 0.052,
+              "rss_mb": 33.2,
+              "exit": 0,
+              "minflt": 8081,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.617,
+              "user": 4.775,
+              "sys": 0.054,
+              "rss_mb": 33.2,
+              "exit": 0,
+              "minflt": 8081,
+              "majflt": 0,
+              "output": "matches"
+            },
+            {
+              "wall": 0.653,
+              "user": 4.691,
+              "sys": 0.05,
+              "rss_mb": 33.1,
+              "exit": 0,
+              "minflt": 8078,
+              "majflt": 0,
+              "output": "matches"
+            }
+          ],
+          "output": "matches",
+          "median": 0.611,
+          "min": 0.604,
+          "max": 0.704,
+          "user_median": 4.691,
+          "sys_median": 0.051,
+          "peak_rss_mb": 33.4,
+          "minflt_median": 8080
+        }
+      ]
+    }
+  ]
+}
