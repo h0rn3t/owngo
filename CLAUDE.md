@@ -220,14 +220,44 @@ session did.
 - Remotes: `origin` is the fork, `upstream` is `goplus/llgo`. Rebase on
   `upstream/main` regularly and keep the diff from upstream minimal.
 - New OwnGo code lives under `owngo/`; runtime changes go behind the `owngo`
-  build tag.
-- One PLAN.md task per session. Write tests first and confirm they fail before
-  implementing. At the end of a session, update `PROGRESS.md` and tick the task
-  in `PLAN.md`.
+  build tag. Statistics counters (`owngo freed/live/ops/alloc/site` lines on
+  stderr) are compiled in only with `-tags owngo,owngostat`.
+- `PLAN.md` has two tracks: memory phases 0–11 and the performance track
+  (stages A–F, tasks `P-NEW-*`). Each phase or stage ends with a gate; the
+  gate decision belongs to the developer and is recorded in `INTENT.md`
+  ("Рішення гейта …"). Measurements go to `owngo/REPORT-*.md`.
+- One PLAN.md task per session. Write tests first, confirm they fail, and
+  commit them separately; then commit the implementation, then docs. Commit
+  subjects name the area and the task: `cl, census: <what> (P-NEW-03.3)`,
+  `docs: <what> (P-NEW-08.2)`. At the end of a session, update `PROGRESS.md`
+  and tick the task in `PLAN.md`.
 - The fork targets LLVM 23 (upstream: 22). `github.com/xgo-dev/llvm` is
   replaced by the patched copy in `owngo/third_party/llvm`; its `OWNGO.md`
   lists the patches. Run tests with LLVM 23 and LLD first in `PATH`, or
-  `clang` resolves to Apple's and rejects LLVM 23 IR:
-  `export PATH=/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH`.
-- `owngo/BASELINE.md` lists the known `go test ./...` failures; a change must
-  not add to that list.
+  `clang` resolves to the system one and rejects LLVM 23 IR:
+  - Linux (Debian): `export PATH=/usr/lib/llvm-23/bin:$PATH`;
+  - macOS: `export PATH=/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH`.
+- `owngo/BASELINE.md` lists the known `go test ./...` failures (recorded on
+  macOS); a change must not add to that list.
+
+### OwnGo checks
+
+- Acceptance fixtures: `owngo/fixtures.sh [LLGO]` runs every program under
+  `owngo/` with the right tags (ASan ones under `-O0 -asan`) and must report
+  no new failures; known ones are listed in the script.
+- ASan runs need `ASAN_OPTIONS=detect_leaks=0`: without a GC, LeakSanitizer
+  reports every live object at exit.
+- Compiler tests: `go test -count=1 ./cl/ -run OwnGo`. The llgo build cache
+  (`~/.cache/llgo`) does not key on `cl/` or `owngo/census` changes; clear it
+  before trusting results after editing them, and before each variant of a
+  before/after timing comparison.
+- Slow packages: `go test ./cl/` and `./internal/build/` take ~10 min each and
+  hit the default timeout; pass `-timeout 90m`.
+- `GOROOT/test`: the `test/goroot` runner with `-goroot <GOROOT>` and
+  `-llgo-flags="-tags owngo"` (add `-O0 -asan` for the ASan variant). Cases
+  that cannot pass without a tracing GC are in `owngo/goroot-xfail.yaml`; the
+  `owngo.yml` workflow appends them to `test/goroot/xfail.yaml`.
+- Benchmarks: `owngo/bench/compare.py PROGRAM [N] [RUNS]` (Linux only) builds
+  go, llgo, llgo `-tags owngo`, Rust and C variants and alternates runs.
+  For a baseline build use `git worktree add` with its own `LLGO_ROOT` and
+  `XDG_CACHE_HOME`, not `git stash`.
