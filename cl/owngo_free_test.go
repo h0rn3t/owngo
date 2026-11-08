@@ -936,3 +936,66 @@ func keepField() *int {
 		t.Errorf("foo.keepField has Base or Dec, want the result live in its caller\n%s", body)
 	}
 }
+
+// TestOwnGoDeferredIncSite — P-NEW-09.2: місце, яке бере defer, Dec не отримує
+// і доживає до виходу. Inc перед викликом, що зберігає його, лишається, а
+// верифікатор не відкидає функцію. Форми — (*net/http.Server).Serve і
+// (*fasthttp.HostClient).AcquireConn.
+func TestOwnGoDeferredIncSite(t *testing.T) {
+	const src = `package foo
+
+type Listener interface{ Accept() (int, error) }
+
+type once struct{ Listener }
+
+type Server struct{ ls map[*Listener]struct{} }
+
+func (s *Server) track(ln *Listener, add bool) bool {
+	if add {
+		s.ls[ln] = struct{}{}
+		return true
+	}
+	delete(s.ls, ln)
+	return true
+}
+
+func (s *Server) Serve(l Listener) error {
+	l = &once{Listener: l}
+	if !s.track(&l, true) {
+		return nil
+	}
+	defer s.track(&l, false)
+	n, err := l.Accept()
+	_ = n
+	return err
+}
+
+type want struct{ ready chan struct{} }
+
+type pool struct{ q []*want }
+
+func (p *pool) queue(w *want) { p.q = append(p.q, w) }
+
+func (p *pool) acquire() (err error) {
+	w := &want{ready: make(chan struct{}, 1)}
+	defer func() {
+		if err != nil {
+			w.ready = nil
+		}
+	}()
+	p.queue(w)
+	<-w.ready
+	return nil
+}
+`
+	mod := compileOwnGoFree(t, src, true)
+	if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"foo.(*Server).Serve", "foo.(*pool).acquire"} {
+		ir := mustNamedFunction(t, mod, name).String()
+		if !strings.Contains(ir, "runtime.Inc") {
+			t.Errorf("%s has no runtime.Inc before the storing call:\n%s", name, ir)
+		}
+	}
+}

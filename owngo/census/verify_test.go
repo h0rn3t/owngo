@@ -93,6 +93,16 @@ func TestVerify(t *testing.T) {
 			want: []string{"inc without pair"},
 		},
 		{
+			// P-NEW-09.2: місце, яке codegen лишає живим до виходу (його бере
+			// defer), Dec не має, а Inc на ньому лічильник до нуля не доведе.
+			name: "inc on kept site",
+			fn:   passed,
+			own: Ownership{
+				Inc:  map[ssa.Instruction][]ssa.Value{call: {node}},
+				Kept: map[ssa.Value]bool{node: true},
+			},
+		},
+		{
 			name: "inc paired with owner dec",
 			fn:   passed,
 			own: Ownership{
