@@ -4,9 +4,6 @@ package runtime
 
 import "unsafe"
 
-// З тегом owngostat алокатор збирається з лічильниками (P-NEW-08.1).
-const owngoAllocCFile = "_wrap/owngo_alloc_stat.c"
-
 // allocStatNames — назви рядків owngo alloc у порядку лічильників
 // owngo_alloc_stat (enum SC_STAT_* у _wrap/owngo_alloc.c).
 var allocStatNames = [...]string{
