@@ -1422,3 +1422,19 @@
 
 - Рішення розробника (2026-11-07): гейт F прийнято (merge) на `d18b1d578` (звіт — `owngo/REPORT-STAGEF.md`, «Гейт F»). P-NEW-08.3 і 08.4 не входять за своїми умовами.
 - Лишилось: ціль binary-trees `21` (1.0 с) не досягнута — 1.21 с; залишок у регіонах і коді програми, наступний етап — рішення розробника. P11.4 чекає сервісу.
+
+## 2026-11-08 — P-NEW-09.1 Стенд горутин
+
+- Стенд `owngo/stand/fiberdb` — окремий модуль: fiber v3.4.0, SQLite через `mattn/go-sqlite3` (cgo), `GET /fanout?n=N` (N горутин живі одночасно), CRUD `items`, генератор `load`, `measure.sh`. `fixtures.sh` оминає `owngo/stand`.
+- Тести спершу: `test/rodata_test.go` (`03e576566`, червоний — `undefined symbol runtime.rodata`); контракт API `main_test.go` (`dd964be18`).
+- Реалізація: `runtime.rodata`/`erodata` у рантаймі llgo — порожній діапазон (`296a28276`). Контракт стенду зелений під `go test -race` і `llgo test`.
+- Версія fiber: v3.6.1 і v3.5 тягнуть `gofiber/utils` v2.4+ з асемблером AVX2. Транслятор plan9asm пропускає локальний `#include` (макрос `BLOCKALIGN`) і не знає дев'яти інструкцій AVX2. Пробна правка `#include` у `internal/plan9asm` сама fiber не розблоковує, тож не закомічена.
+- Заміри (`owngo/REPORT-STAGEG.md`, по одному прогону):
+  - llgo падає на 20 000 горутин: `failed to create new OS thread`, cgroup `pids.max` 19 101; gc тримає 20 000 на 17 потоках;
+  - 100 клієнтів: gc 65.7 тис. rps, p99 6.5 мс; llgo 20.3 тис., p99 21.3 мс;
+  - пікова RSS: gc 119 МБ, llgo 398 МБ.
+- Знайдено, задача P-NEW-09.2:
+  - під `-tags owngo` стенд не збирається: верифікатор володіння відкидає `(*net/http.Server).Serve` і `(*fasthttp.HostClient).AcquireConn` (`inc without pair`);
+  - через раз процес llgo падає з SIGSEGV у C-коді під час паралельної збірки.
+- Не перевірено: після SIGINT llgo-сервер пише `sql: database is closed` — `Listen` повертається раніше, ніж закінчуються обробники; причину не шукали. `owngo/fixtures.sh` — 0 з 67 упало (відомі ті самі три); `go test ./...` не запускався: поза стендом змінились лише нова змінна рантайму і тест у `test/`.
+- Лишилось: P-NEW-09.2; S6 — за рішенням розробника про старт M:N; P11.4 чекає сервісу.
