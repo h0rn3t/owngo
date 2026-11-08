@@ -636,6 +636,10 @@ func fromGlobal(v ssa.Value) bool {
 			return walk(v.X)
 		case *ssa.Convert:
 			return walk(v.X)
+		case *ssa.UnOp:
+			// Мапа чи вказівник, прочитані з глобальної пам'яті
+			// (drivers[name] = driver у database/sql.Register), ведуть у неї ж.
+			return v.Op == token.MUL && walk(v.X)
 		case *ssa.Phi:
 			return slices.ContainsFunc(v.Edges, walk)
 		}
