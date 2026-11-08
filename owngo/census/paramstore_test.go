@@ -125,3 +125,31 @@ func TestIncDominatesCall(t *testing.T) {
 		}
 	}
 }
+
+const blankAliasSrc = `package p
+
+type T struct{ next *T }
+
+var sink []*T
+
+func pass(t *T) (*T, error) { return t, nil }
+
+func store(t *T) { sink = append(sink, t) }
+
+func use() {
+	t := new(T)
+	pass(t)
+	store(t)
+}
+`
+
+// TestBlankAliasResult — P-NEW-09.2: виклик з кількома результатами як
+// інструкція не має Extract для результату-аліаса. PlaceAll не панікує на
+// ньому (стенд fiberdb під owngo).
+func TestBlankAliasResult(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", blankAliasSrc, ssa.SanityCheckFunctions)
+	got := PlaceAll(ssaFuncs(pkg))
+	if got.Cats == nil {
+		t.Fatalf("PlaceAll(use) placed no sites")
+	}
+}
