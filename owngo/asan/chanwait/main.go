@@ -37,8 +37,10 @@ func main() {
 		time.Sleep(time.Millisecond) // відправник у горутині блокується
 		pong <- i
 	}
-	if got := ownGoLive(catCyclic); got != before {
-		println("live cyclic", got, "want", before)
+	// Горутина може вийти й звільнити своє до цього заміру, тож живих
+	// байтів буває й менше, ніж на початку; витік — лише приріст.
+	if got := ownGoLive(catCyclic); got > before {
+		println("live cyclic", got, "want at most", before)
 		os.Exit(3)
 	}
 	println("asan-chanwait-ok")
