@@ -35,6 +35,9 @@ type Summary struct {
 // Side — код escapeKind для втечі самого вказівника; 0 означає, що параметр його не зберігає.
 // Content — те саме для вказівника, зчитаного зсередини параметра.
 // Alias — індекси результатів, у які вказівник протікає.
+// Holds — індекси результатів, у пам'яті яких вказівник лежить (strings.Fields
+// кладе підрядки параметра у свіжий зріз): прочитане з результату тримає
+// аргумент.
 // Writes — функція пише в пам'ять, досяжну з параметра, або передає його
 // виклику, що пише.
 // Pinned — сам вказівник параметра стає unsafe.Pointer тут чи у виклику:
@@ -44,6 +47,7 @@ type Param struct {
 	Side    uint8
 	Content uint8
 	Alias   []int
+	Holds   []int
 	Writes  bool
 	Pinned  bool
 }
@@ -389,7 +393,7 @@ func paramsEqual(a, b []Param) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].Unknown != b[i].Unknown || a[i].Side != b[i].Side || a[i].Content != b[i].Content || a[i].Writes != b[i].Writes || a[i].Pinned != b[i].Pinned || !slices.Equal(a[i].Alias, b[i].Alias) {
+		if a[i].Unknown != b[i].Unknown || a[i].Side != b[i].Side || a[i].Content != b[i].Content || a[i].Writes != b[i].Writes || a[i].Pinned != b[i].Pinned || !slices.Equal(a[i].Alias, b[i].Alias) || !slices.Equal(a[i].Holds, b[i].Holds) {
 			return false
 		}
 	}
@@ -530,6 +534,7 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 			changed = sum.addAlias(tok[res], i) || changed
 			changed = sum.addAlias(derived[res], i) || changed
 			changed = sum.addAlias(content[res], i) || changed
+			changed = sum.addHolds(content[res], i) || changed
 		}
 		return changed
 	case *ssa.Store:
@@ -790,6 +795,19 @@ func (s *Summary) addAlias(ids pset, result int) bool {
 	return changed
 }
 
+func (s *Summary) addHolds(ids pset, result int) bool {
+	changed := false
+	for id := range ids {
+		if id < 0 || id >= len(s.Params) || slices.Contains(s.Params[id].Holds, result) {
+			continue
+		}
+		s.Params[id].Holds = append(s.Params[id].Holds, result)
+		slices.Sort(s.Params[id].Holds)
+		changed = true
+	}
+	return changed
+}
+
 func (s *Summary) raiseSide(ids pset, k escapeKind, content bool) bool {
 	if k == escapeNone || len(ids) == 0 {
 		return false
@@ -860,6 +878,7 @@ func mergedParam(targets []*ssa.Function, index int, lookup func(*ssa.Function) 
 		}
 		item := s.Params[index]
 		item.Alias = slices.Clone(item.Alias)
+		item.Holds = slices.Clone(item.Holds)
 		if !set {
 			acc = item
 			set = true
@@ -889,6 +908,12 @@ func mergeParam(a, b Param) Param {
 		a.Alias = append(a.Alias, ri)
 	}
 	slices.Sort(a.Alias)
+	for _, ri := range b.Holds {
+		if !slices.Contains(a.Holds, ri) {
+			a.Holds = append(a.Holds, ri)
+		}
+	}
+	slices.Sort(a.Holds)
 	return a
 }
 
@@ -1280,12 +1305,15 @@ func linkCallAliases(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1
 					if absorbSites(pts, dst, pts[arg]) {
 						changed = true
 					}
-					// Alias зводить і «результат — це аргумент», і «результат
-					// містить аргумент» (strings.Fields кладе підрядки у
-					// свіжий зріз): аргумент — ще й вміст власних місць
-					// результату, тож прочитане з них тримає його місце. Без
-					// власного місця (результат не свіжий) вміст тримає сам
-					// виклик.
+				}
+				// Аргумент лежить у пам'яті результату: він — вміст власних
+				// місць результату, а без них (результат не свіжий) — вміст
+				// самого виклику, тож прочитане з результату тримає його місце.
+				for _, ri := range ps.Holds {
+					dst := resultValue(instr, ri, nres, extracts)
+					if dst == nil || len(pts[arg]) == 0 {
+						continue
+					}
 					holders := 0
 					for obj := range pts[dst] {
 						if _, own := pts[arg][obj]; own {
@@ -1296,7 +1324,7 @@ func linkCallAliases(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1
 							changed = true
 						}
 					}
-					if holders == 0 && len(pts[arg]) > 0 {
+					if holders == 0 {
 						if absorbSites(pts, dst, siteSet{instr: {}}) {
 							changed = true
 						}
