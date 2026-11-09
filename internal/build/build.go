@@ -736,6 +736,7 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	}
 	prog.EnableGoGlobalDCE(conf.goGlobalDCEEnabled())
 	prog.EnableDeadcodeDrop(conf.deadcodeDropEnabled())
+	prog.EnableStackDeferFrames(frontendOptions.OwnGoFree)
 	prog.EnableGCRoots(wasmGC)
 	prog.EnableLogicalGoroutineLocality(usesSingleWorkerWasmScheduler(conf))
 	prog.EnableThreadLocalGCRoots(useThreadLocalGCRoots(conf, wasmGC, wasmWorkers))

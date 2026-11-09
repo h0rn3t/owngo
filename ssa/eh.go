@@ -304,7 +304,14 @@ func (b Builder) initDeferState(procBlk, rethrowBlk BasicBlock) (*aDefer, Expr, 
 	// Wasm Reth selector 0 is reserved for procBlk; Rund selector 0 is
 	// rethrowBlk. Native targets store the corresponding block addresses.
 	initialReth := deferTarget{index: 0, block: procBlk}
-	ptr := b.aggregateAllocU(prog.Defer(), jb.impl, zero.impl, link.impl, b.deferTargetValue(initialReth).impl)
+	flds := []llvm.Value{jb.impl, zero.impl, link.impl, b.deferTargetValue(initialReth).impl}
+	var ptr llvm.Value
+	if prog.stackDeferFrames && !prog.GCRootsEnabled() {
+		ptr = b.AllocaT(prog.Defer()).impl
+		b.aggregateInit(ptr, prog.Defer(), flds...)
+	} else {
+		ptr = b.aggregateAllocU(prog.Defer(), flds...)
+	}
 	deferData := Expr{ptr, prog.DeferPtr()}
 	b.Call(b.Pkg.rtFunc("SetThreadDefer"), deferData)
 	if prog.GCRootsEnabled() {

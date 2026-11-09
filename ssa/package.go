@@ -224,6 +224,7 @@ type aProgram struct {
 
 	enableGoGlobalDCE     bool
 	enableDeadcodeDrop    bool
+	stackDeferFrames      bool
 	enableGCRoots         bool
 	logicalGoroutineLocal bool
 	threadLocalGCRoots    bool
@@ -358,6 +359,7 @@ func (p Program) NewBackendProgram() Program {
 	backend.localities = p.localities
 	backend.enableGoGlobalDCE = p.enableGoGlobalDCE
 	backend.enableDeadcodeDrop = p.enableDeadcodeDrop
+	backend.stackDeferFrames = p.stackDeferFrames
 	backend.enableGCRoots = p.enableGCRoots
 	backend.logicalGoroutineLocal = p.logicalGoroutineLocal
 	backend.threadLocalGCRoots = p.threadLocalGCRoots
@@ -409,6 +411,13 @@ func (p Program) EnableGoGlobalDCE(enable bool) {
 
 func (p Program) EnableDeadcodeDrop(enable bool) {
 	p.enableDeadcodeDrop = enable
+}
+
+// EnableStackDeferFrames кладе кадр runtime.Defer функції на її стек, а не в
+// купу (owngo: без GC кадр у купі ніхто не звільняє). Кадр живе, лише поки
+// функція в ланцюжку defer потоку, як і його буфер sigjmp.
+func (p Program) EnableStackDeferFrames(enable bool) {
+	p.stackDeferFrames = enable
 }
 
 func (p Program) DeadcodeDropEnabled() bool {
