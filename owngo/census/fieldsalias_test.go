@@ -53,3 +53,56 @@ func TestFieldsParamAliasesResult(t *testing.T) {
 		t.Errorf("PlaceAll(second): string(b) %q uses = %v, want them to include %v", place.Cats[conv], uses, index)
 	}
 }
+
+// Те саме, коли результат не свіжий (як strings.Fields з гілкою
+// FieldsFunc чи глобальним зрізом): у результату немає власного місця,
+// тож аргумент тримає сам виклик.
+const fieldsAliasNotFreshSrc = `package p
+
+var empty []string
+
+func Fields(s string) []string {
+	if s == "" {
+		return empty
+	}
+	a := make([]string, 2)
+	a[0] = s[:1]
+	a[1] = s[1:]
+	return a
+}
+
+func use(s string) byte { return s[0] }
+
+func second(b []byte) byte {
+	f := Fields(string(b))
+	return use(f[1])
+}
+`
+
+func TestFieldsNotFreshParamAliasesResult(t *testing.T) {
+	pkg := buildOnePackage(t, "example.com/p", fieldsAliasNotFreshSrc, ssa.SanityCheckFunctions)
+	if sum := packageSummaries(nil, ssaFuncs(pkg))[pkg.Func("Fields")]; sum == nil || sum.Fresh {
+		t.Fatalf("packageSummaries(Fields) = %+v, want a summary without Fresh", sum)
+	}
+	place := PlaceAll(ssaFuncs(pkg))
+	var conv, use ssa.Instruction
+	for _, b := range pkg.Func("second").Blocks {
+		for _, instr := range b.Instrs {
+			switch instr := instr.(type) {
+			case *ssa.Convert:
+				conv = instr
+			case *ssa.Call:
+				if instr.Call.StaticCallee() == pkg.Func("use") {
+					use = instr
+				}
+			}
+		}
+	}
+	if conv == nil || use == nil {
+		t.Fatalf("second: convert %v, use %v; want both", conv, use)
+	}
+	uses := append(slices.Clone(place.StaticUses[conv]), place.DecUses[conv]...)
+	if !slices.Contains(uses, use) {
+		t.Errorf("PlaceAll(second): string(b) %q uses = %v, want them to include %v", place.Cats[conv], uses, use)
+	}
+}
