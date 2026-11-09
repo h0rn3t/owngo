@@ -1277,6 +1277,15 @@ func linkCallAliases(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1
 					if absorbSites(pts, dst, pts[arg]) {
 						changed = true
 					}
+					// Alias зводить і «результат — це аргумент», і «результат
+					// містить аргумент» (strings.Fields кладе підрядки у
+					// свіжий зріз): аргумент — ще й вміст власних місць
+					// результату, тож прочитане з них тримає його місце.
+					for obj := range pts[dst] {
+						if _, own := pts[arg][obj]; !own && holdSites(v1, obj, pts[arg]) {
+							changed = true
+						}
+					}
 				}
 			}
 		}

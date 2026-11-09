@@ -22,7 +22,6 @@ export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=0}
 # Відомі падіння, записані в PROGRESS.md. Фікстура зі списку, що пройшла, —
 # теж помилка: її треба прибрати звідси.
 declare -A known=(
-	[owngo/bytes/imconcat]="freed delta 0 want 8; pre-existing, awaiting a decision (PROGRESS.md)"
 	[owngo/counted]="links C.malloc_size, a macOS API absent on Linux"
 	[owngo/runtimefree]="links C.malloc_size, a macOS API absent on Linux"
 )

@@ -194,8 +194,14 @@ func flow(instr ssa.Instruction, grow func(ssa.Value, siteSet) bool, pts map[ssa
 	case *ssa.FieldAddr:
 		return grow(instr, pts[instr.X])
 	case *ssa.Field:
+		if !containsRef(instr.Type()) {
+			return false // значення без вказівників місця не тримає
+		}
 		return grow(instr, pts[instr.X])
 	case *ssa.Index:
+		if !containsRef(instr.Type()) {
+			return false
+		}
 		return grow(instr, pts[instr.X])
 	case *ssa.IndexAddr:
 		return grow(instr, pts[instr.X])
