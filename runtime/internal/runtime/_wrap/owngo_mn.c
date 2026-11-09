@@ -22,6 +22,7 @@
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
+#include <errno.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stddef.h>
@@ -413,4 +414,76 @@ void owngo_mn_entry(void) {
 	c->fn(c->arg);
 	mn_write("fatal error: goroutine entry returned without owngo_mn_exit\n");
 	_exit(2);
+}
+
+// ---- очікування й процесори для планувальника (P-NEW-09.6) -----------------
+
+#include <stdlib.h>
+#include <time.h>
+#if defined(__linux__)
+#include <linux/futex.h>
+#include <sched.h>
+#include <sys/syscall.h>
+#endif
+
+// owngo_mn_wait спить, доки *addr == val і ніхто не розбудив; ns < 0 — без
+// межі. 0 — розбуджено (або значення вже інше), 1 — минув час.
+int owngo_mn_wait(uint32_t *addr, uint32_t val, int64_t ns) {
+#if defined(__linux__)
+	struct timespec ts, *tp = NULL;
+	if (ns >= 0) {
+		ts.tv_sec = (time_t)(ns / 1000000000);
+		ts.tv_nsec = (long)(ns % 1000000000);
+		tp = &ts;
+	}
+	long r = syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, val, tp, NULL, 0);
+	return r != 0 && errno == ETIMEDOUT;
+#elif defined(__APPLE__)
+	extern int __ulock_wait(uint32_t op, void *addr, uint64_t value, uint32_t timeout_us);
+	uint32_t us = 0;
+	if (ns >= 0)
+		us = ns / 1000 > 0xffffffffu ? 0xffffffffu : (ns / 1000 == 0 ? 1 : (uint32_t)(ns / 1000));
+	int r = __ulock_wait(1 /* UL_COMPARE_AND_WAIT */, addr, val, us);
+	return r < 0 && errno == ETIMEDOUT;
+#endif
+}
+
+void owngo_mn_wake(uint32_t *addr, int all) {
+#if defined(__linux__)
+	syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, all ? 0x7fffffff : 1, NULL, NULL, 0);
+#elif defined(__APPLE__)
+	extern int __ulock_wake(uint32_t op, void *addr, uint64_t wake_value);
+	__ulock_wake(1 | (all ? 0x100 /* ULF_WAKE_ALL */ : 0), addr, 0);
+#endif
+}
+
+// owngo_mn_procs — типове GOMAXPROCS, як у Go 1.25+: змінна середовища
+// GOMAXPROCS, інакше процесори, доступні потоку (sched_getaffinity), обмежені
+// квотою cgroup v2 (cpu.max, округлення вгору).
+int owngo_mn_procs(void) {
+	const char *env = getenv("GOMAXPROCS");
+	if (env && *env) {
+		int n = atoi(env);
+		if (n > 0)
+			return n;
+	}
+	long n = sysconf(_SC_NPROCESSORS_ONLN);
+#if defined(__linux__)
+	cpu_set_t set;
+	if (sched_getaffinity(0, sizeof set, &set) == 0 && CPU_COUNT(&set) > 0)
+		n = CPU_COUNT(&set);
+	FILE *f = fopen("/sys/fs/cgroup/cpu.max", "r");
+	if (f) {
+		char quota[32];
+		long period = 0;
+		if (fscanf(f, "%31s %ld", quota, &period) == 2 && strcmp(quota, "max") != 0 && period > 0) {
+			long q = atol(quota);
+			long limit = (q + period - 1) / period;
+			if (limit > 0 && limit < n)
+				n = limit;
+		}
+		fclose(f);
+	}
+#endif
+	return n > 0 ? (int)n : 1;
 }

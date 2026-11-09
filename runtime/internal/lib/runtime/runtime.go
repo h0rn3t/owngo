@@ -40,7 +40,7 @@ func Version() string {
 }
 
 func GOMAXPROCS(n int) int {
-	return int(c_maxprocs())
+	return gomaxprocs(n)
 }
 
 func Goexit() {

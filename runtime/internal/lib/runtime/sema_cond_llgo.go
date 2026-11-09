@@ -1,4 +1,4 @@
-//go:build darwin || (linux && baremetal)
+//go:build (darwin || (linux && baremetal)) && !(owngo && owngomn && (linux || darwin))
 
 package runtime
 

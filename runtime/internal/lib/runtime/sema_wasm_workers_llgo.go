@@ -1,4 +1,4 @@
-//go:build llgo && js && wasm && llgo.wasm.workers
+//go:build (llgo && js && wasm && llgo.wasm.workers) || (owngo && owngomn && (linux || darwin))
 
 package runtime
 
@@ -151,11 +151,3 @@ func sync_runtime_notifyListNotifyOne(l *notifyList) {
 		w.waiter.Ready()
 	}
 }
-
-//go:linkname sync_runtime_procPin sync.runtime_procPin
-func sync_runtime_procPin() int {
-	return llruntime.SchedulerProcID()
-}
-
-//go:linkname sync_runtime_procUnpin sync.runtime_procUnpin
-func sync_runtime_procUnpin() {}

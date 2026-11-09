@@ -59,7 +59,7 @@ func EnterLocalContext(ctx *LocalContext) uintptr {
 // and releases its package-block roots.
 func LeaveLocalContext(ctx *LocalContext, previous uintptr) {
 	if previous != 0 {
-		if currentLocalContext != previous {
+		if !localContextMigrates && currentLocalContext != previous {
 			panic("runtime: local context changed by nested entry")
 		}
 		return

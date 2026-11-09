@@ -22,5 +22,7 @@ func initTimerSchedulerCond() {
 }
 
 func timerSchedulerTimedWait(wait int64) {
+	psync.BlockEnter()
 	c_timerCondTimedWait(&timerSchedulerCond, &timerSchedulerMu, wait)
+	psync.BlockExit()
 }

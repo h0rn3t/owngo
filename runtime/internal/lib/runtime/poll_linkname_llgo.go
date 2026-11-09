@@ -248,7 +248,9 @@ func poll_runtime_pollWait(ctx uintptr, mode int) int {
 		fds[0] = pollfd{fd: pd.fd, events: ev}
 		fds[1] = pollfd{fd: wakeR, events: pollIn}
 
+		psync.BlockEnter()
 		n := c_poll(&fds[0], 2, timeout)
+		psync.BlockExit()
 		if n < 0 {
 			errno := cliteos.Errno()
 			if int(errno) == int(csyscall.EINTR) {

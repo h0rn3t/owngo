@@ -1,4 +1,4 @@
-//go:build (linux && !baremetal) || (llgo && wasip1 && wasm && llgo.wasi_threads)
+//go:build ((linux && !baremetal) || (llgo && wasip1 && wasm && llgo.wasi_threads)) && !(owngo && owngomn && (linux || darwin))
 
 package runtime
 

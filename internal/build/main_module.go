@@ -72,6 +72,11 @@ func needsWasmRuntimeScheduler(ctx *context) bool {
 	if ctx.crossCompile.WasmPostLink.Asyncify {
 		return true
 	}
+	// Планувальник M:N owngo (тег owngomn) теж запускає ініціалізацію і main
+	// на стеку горутини: головний потік стає звичайною M.
+	if slices.Contains(splitSourcePatchBuildTags(ctx.buildConf.Tags), "owngomn") {
+		return true
+	}
 	return ctx.crossCompile.WasmProfile == crosscompile.WasmProfileJ32 ||
 		ctx.crossCompile.WasmProfile == crosscompile.WasmProfileJ64
 }

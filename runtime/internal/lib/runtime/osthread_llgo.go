@@ -1,3 +1,5 @@
+//go:build !(owngo && owngomn && (linux || darwin))
+
 package runtime
 
 // LockOSThread and UnlockOSThread are currently no-ops for llgo.

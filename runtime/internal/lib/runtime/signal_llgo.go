@@ -149,7 +149,10 @@ func ensureSignalInit() {
 func signalReadLoop() {
 	for {
 		var value c.Int
-		if c_signalRecv(sigReadFD, &value) != 0 {
+		psync.BlockEnter()
+		r := c_signalRecv(sigReadFD, &value)
+		psync.BlockExit()
+		if r != 0 {
 			panic("runtime: failed to read signal pipe")
 		}
 		if value == 0 {
