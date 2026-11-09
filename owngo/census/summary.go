@@ -524,6 +524,9 @@ func applySummary(instr ssa.Instruction, sum *Summary, tok, derived, content map
 	case *ssa.Return:
 		changed := false
 		for i, res := range instr.Results {
+			if !containsRef(res.Type()) {
+				continue // результат без вказівників нічого не аліасить
+			}
 			changed = sum.addAlias(tok[res], i) || changed
 			changed = sum.addAlias(derived[res], i) || changed
 			changed = sum.addAlias(content[res], i) || changed
@@ -1280,9 +1283,24 @@ func linkCallAliases(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1
 					// Alias зводить і «результат — це аргумент», і «результат
 					// містить аргумент» (strings.Fields кладе підрядки у
 					// свіжий зріз): аргумент — ще й вміст власних місць
-					// результату, тож прочитане з них тримає його місце.
+					// результату, тож прочитане з них тримає його місце. Без
+					// власного місця (результат не свіжий) вміст тримає сам
+					// виклик.
+					holders := 0
 					for obj := range pts[dst] {
-						if _, own := pts[arg][obj]; !own && holdSites(v1, obj, pts[arg]) {
+						if _, own := pts[arg][obj]; own {
+							continue
+						}
+						holders++
+						if holdSites(v1, obj, pts[arg]) {
+							changed = true
+						}
+					}
+					if holders == 0 && len(pts[arg]) > 0 {
+						if absorbSites(pts, dst, siteSet{instr: {}}) {
+							changed = true
+						}
+						if holdSites(v1, instr, pts[arg]) {
 							changed = true
 						}
 					}
