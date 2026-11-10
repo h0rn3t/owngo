@@ -229,6 +229,7 @@ type aProgram struct {
 	logicalGoroutineLocal bool
 	threadLocalGCRoots    bool
 	enableSafepoints      bool
+	blockingCallMarkers   bool
 	disableBoundsChecks   bool
 	pthreadStackSize      uint64
 	enableLTOPluginMarker bool
@@ -364,6 +365,7 @@ func (p Program) NewBackendProgram() Program {
 	backend.logicalGoroutineLocal = p.logicalGoroutineLocal
 	backend.threadLocalGCRoots = p.threadLocalGCRoots
 	backend.enableSafepoints = p.enableSafepoints
+	backend.blockingCallMarkers = p.blockingCallMarkers
 	backend.disableBoundsChecks = p.disableBoundsChecks
 	backend.pthreadStackSize = p.pthreadStackSize
 	backend.enableLTOPluginMarker = p.enableLTOPluginMarker

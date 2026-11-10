@@ -189,6 +189,8 @@ type context struct {
 	pkg                  llssa.Package
 	fn                   llssa.Function
 	goFn                 *ssa.Function
+	callbackEntry        bool       // вхід //export під маркерами owngomn
+	callbackToken        llssa.Expr // результат CallbackEnter для CallbackExit
 	fset                 *token.FileSet
 	goProg               *ssa.Program
 	goTyps               *types.Package
@@ -847,6 +849,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			oldRecoverSlots, oldImplicitDeferResults := p.recoverSlots, p.implicitDeferResults
 			oldGCRoots, oldGCClosureRoot := p.gcRoots, p.gcClosureRoot
 			oldSafepointEntry, oldSafepoints := p.safepointEntry, p.safepoints
+			oldCallbackEntry, oldCallbackToken := p.callbackEntry, p.callbackToken
 			p.fn = fn
 			p.goFn = f
 			p.callerFrameMark = llssa.Nil
@@ -865,6 +868,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 				p.implicitDeferResults = oldImplicitDeferResults
 				p.gcRoots, p.gcClosureRoot = oldGCRoots, oldGCClosureRoot
 				p.safepointEntry, p.safepoints = oldSafepointEntry, oldSafepoints
+				p.callbackEntry, p.callbackToken = oldCallbackEntry, oldCallbackToken
 			}()
 			p.phis = nil
 			if dbgSymsEnabled {
@@ -887,6 +891,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 				b.DebugFunction(fn, debugFunctionScope(f), pos, bodyPos)
 			}
 			p.prepareExportedLocalContext(f)
+			p.prepareCallbackEntry(f)
 			p.bvals = make(map[ssa.Value]llssa.Expr)
 			p.ownGoFreeAfter, p.ownGoFreeEntry, p.ownGoFreeEdge = ownGoFreeAfter(f, p.ownGoUses, false)
 			p.ownGoDecAfter, p.ownGoDecEntry, p.ownGoDecEdge = ownGoFreeAfter(f, p.ownGoDecUses, true)
@@ -1252,6 +1257,9 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	}
 	if block.Index == 0 {
 		p.enterExportedLocalContext(b)
+		if p.callbackEntry {
+			p.callbackToken = b.Call(p.pkg.RuntimeFunc("CallbackEnter"))
+		}
 	}
 	if block.Index == 0 && p.shouldTrackCallerFrames() {
 		p.pushCallerLocationFrame(b, block.Parent())
@@ -2548,6 +2556,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		if p.shouldTrackCallerFrames() {
 			p.popCallerLocationFrame(b)
+		}
+		if p.callbackEntry {
+			b.Call(p.pkg.RuntimeFunc("CallbackExit"), p.callbackToken)
 		}
 		p.leaveExportedLocalContext(b)
 		p.emitOwnGoFree(b, v)

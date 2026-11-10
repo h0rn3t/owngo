@@ -738,9 +738,11 @@ func buildInvocation(inv Invocation, plan *initialBuildPlan) (result []Package, 
 	prog.EnableDeadcodeDrop(conf.deadcodeDropEnabled())
 	prog.EnableStackDeferFrames(frontendOptions.OwnGoFree)
 	prog.EnableGCRoots(wasmGC)
-	// M:N owngo (тег owngomn) переносить горутини між потоками: GLS — на G.
-	prog.EnableLogicalGoroutineLocality(usesSingleWorkerWasmScheduler(conf) ||
-		slices.Contains(splitSourcePatchBuildTags(conf.Tags), "owngomn"))
+	// M:N owngo (тег owngomn) переносить горутини між потоками: GLS — на G,
+	// а виклики C позначено, щоб sysmon забирав P у M, що застрягла в C.
+	owngoMN := slices.Contains(splitSourcePatchBuildTags(conf.Tags), "owngomn")
+	prog.EnableLogicalGoroutineLocality(usesSingleWorkerWasmScheduler(conf) || owngoMN)
+	prog.EnableBlockingCallMarkers(owngoMN)
 	prog.EnableThreadLocalGCRoots(useThreadLocalGCRoots(conf, wasmGC, wasmWorkers))
 	prog.EnableCooperativeSafepoints(wasmGC || wasmWorkers.Enabled())
 	if conf.PthreadStackSize > 0 {

@@ -508,3 +508,15 @@ int owngo_mn_procs(void) {
 #endif
 	return n > 0 ? (int)n : 1;
 }
+
+// Для маркерів викликів C (P-NEW-09.8): монотонний час sysmon і errno, який
+// ExitSyscall зберігає на повільному шляху.
+int64_t owngo_mn_nanotime(void) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
+
+int owngo_mn_errno(void) { return errno; }
+
+void owngo_mn_set_errno(int e) { errno = e; }

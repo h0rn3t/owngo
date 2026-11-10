@@ -249,6 +249,11 @@ func (p *context) cgoCgocall(b llssa.Builder, args []ssa.Value) (ret llssa.Expr)
 	}
 	pfn.Type = p.prog.Pointer(fnTy)
 	fn := b.Load(pfn)
+	cName := strings.TrimPrefix(strings.TrimPrefix(fnName, "_Cfunc_"), "_C2func_")
+	marked := p.marksBlockingCall(cName)
+	if marked {
+		b.Call(p.pkg.RuntimeFunc("EnterSyscall"))
+	}
 	p.cgoRet = b.Call(fn, p.cgoArgs...)
 
 	if isC2 {
@@ -256,7 +261,13 @@ func (p *context) cgoCgocall(b llssa.Builder, args []ssa.Value) (ret llssa.Expr)
 			types.NewTuple(types.NewVar(token.NoPos, nil, "", types.Typ[types.Int32])), false)
 		errnoFn := b.Pkg.NewFunc("cliteErrno", errnoSig, llssa.CDecl)
 		p.cgoErrno = b.Call(errnoFn.Expr)
+		if marked {
+			b.Call(p.pkg.RuntimeFunc("ExitSyscall"))
+		}
 		return p.cgoErrno
+	}
+	if marked {
+		b.Call(p.pkg.RuntimeFunc("ExitSyscall"))
 	}
 	i32 := p.type_(types.Typ[types.Int32], llssa.GoDecl)
 	p.cgoErrno = p.prog.Zero(i32)
@@ -2668,7 +2679,14 @@ func (p *context) callEx(b llssa.Builder, act llssa.DoAction, call *ssa.CallComm
 				// recover-frame alias may surround it (or run after the call).
 				ret = b.CallForwardVarargs(aFn.Expr, args...)
 			} else {
+				marked := act == llssa.Call && p.marksBlockingCall(aFn.Name())
+				if marked {
+					b.Call(p.pkg.RuntimeFunc("EnterSyscall"))
+				}
 				ret = p.emitDo(b, act, ds, mayRecover, aFn.Expr, llssa.Builder.Call, args...)
+				if marked {
+					b.Call(p.pkg.RuntimeFunc("ExitSyscall"))
+				}
 			}
 		case goFunc:
 			args := p.compileValues(b, args, kind)

@@ -25,3 +25,15 @@ func (p Program) EnableCooperativeSafepoints(enable bool) {
 func (p Program) CooperativeSafepointsEnabled() bool {
 	return p.enableSafepoints
 }
+
+// EnableBlockingCallMarkers controls the EnterSyscall/ExitSyscall markers
+// around C calls and CallbackEnter/CallbackExit around exported entries
+// (owngomn).
+func (p Program) EnableBlockingCallMarkers(enable bool) {
+	p.blockingCallMarkers = enable
+}
+
+// BlockingCallMarkersEnabled reports whether C calls are marked.
+func (p Program) BlockingCallMarkersEnabled() bool {
+	return p.blockingCallMarkers
+}

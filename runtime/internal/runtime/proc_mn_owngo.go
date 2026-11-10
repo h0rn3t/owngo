@@ -50,6 +50,7 @@ type runtimeContextPlatform struct {
 	pless      bool         // користувацька G виконується без P
 	systemG    bool
 	parking    uint32 // 1 — G на стеку з резерву в SchedulerWaiter.Park
+	syscalls   int32  // вкладені марковані виклики C (EnterSyscall)
 
 	foreignThreadAttached bool
 }
@@ -146,6 +147,10 @@ type mnP struct {
 	link    *mnP
 	idle    bool // у списку вільних
 	off     bool // id >= GOMAXPROCS
+
+	syscalltick uint32 // росте з кожним EnterSyscall на цьому P
+	sysmonTick  uint32 // syscalltick, який sysmon бачив востаннє
+	sysmonWhen  int64  // коли sysmon уперше побачив sysmonTick
 }
 
 func pOf(pp *p) *mnP { return (*mnP)(unsafe.Pointer(pp)) }
@@ -168,6 +173,7 @@ var mnSched struct {
 	deadSeen   bool
 	netpoll    uint32 // 1 — lib/runtime поставив netpollHook
 	polling    uint32 // 1 — якась M блокується в netpoll
+	sysmon     uint32 // 1 — потік sysmon запущено
 }
 
 // timersPending ставить lib/runtime: чи є таймери, що ще спрацюють. Без
@@ -533,7 +539,8 @@ func mnHandoffp(pp *mnP) {
 	}
 }
 
-func mnNewm(pp *mnP) {
+// mnAllocm створює M з її g0; потік запускає викликач.
+func mnAllocm() *m {
 	mp := (*m)(c.Calloc(1, unsafe.Sizeof(m{})))
 	ctx := allocRuntimeContext()
 	if mp == nil || ctx == nil {
@@ -546,6 +553,11 @@ func mnNewm(pp *mnP) {
 	ctx.platform.systemG = true
 	mp.id = nextMid(mp)
 	mp.os.g0 = g0
+	return mp
+}
+
+func mnNewm(pp *mnP) {
+	mp := mnAllocm()
 	mp.os.nextp = &pp.p
 	if errno := thread.CreateDetached(0, thread.RoutineFunc(wasiGCThreadStart), c.Pointer(unsafe.Pointer(mp))); errno != 0 {
 		fatal("runtime: failed to create new OS thread")
@@ -937,6 +949,14 @@ func (w *SchedulerWaiter) Park() {
 		return
 	}
 	pf := &gp.context.platform
+	if pf.syscalls > 0 {
+		// Callback з C через покажчик на функцію без //export: G спершу
+		// виходить з маркованого виклику, як у CallbackEnter.
+		tok := CallbackEnter()
+		w.Park()
+		CallbackExit(tok)
+		return
+	}
 	if pf.mn != nil {
 		// parking ставиться раніше за перевірку notified, а Ready пише
 		// notified раніше за читання parking: хоч один побачить іншого.
@@ -1003,6 +1023,12 @@ func SchedulerProcID() int {
 func goschedBackend() {
 	mnInit()
 	gp := getg()
+	if gp.context.platform.syscalls > 0 {
+		tok := CallbackEnter()
+		goschedBackend()
+		CallbackExit(tok)
+		return
+	}
 	if gp.context.platform.mn != nil {
 		mnMcall(gp, mnCallGosched)
 		return
