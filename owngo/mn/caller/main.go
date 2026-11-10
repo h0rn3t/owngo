@@ -4,9 +4,12 @@
 // Після паніки з розіменування nil runtime.Caller і debug.Stack мають знайти
 // кадр, де вона сталася, і в main, і в горутині, запущеній go: кадри паніки
 // знімає обробник сигналу, і межі стека для нього — межі стека G, а не
-// потоку. Хвіст стека — як у gc: у main — runtime.main і runtime.goexit, у
-// горутині — runtime.goexit. Код 0 лише якщо обидва шляхи знайшли
-// main.fault на рядку 23 і хвости збіглися.
+// потоку. Хвіст стека — як у моделі 1:1: у main — runtime.main і
+// runtime.goexit, у горутині — її власна функція або, як у gc,
+// runtime.goexit (коли обгортка go має запис кадру, як під -O0), без
+// інших кадрів рантайму і C.
+// Код 0 лише якщо обидва шляхи знайшли main.fault на рядку 26 і хвости
+// збіглися.
 package main
 
 import (
@@ -20,7 +23,7 @@ var p *int
 
 //go:noinline
 func fault() int {
-	return *p // рядок 23
+	return *p // рядок 26
 }
 
 // tail — імена двох останніх кадрів стека викликача.
@@ -51,15 +54,15 @@ func check(who string) (ok bool) {
 				break
 			}
 			if runtime.FuncForPC(pc).Name() == "main.fault" && strings.HasSuffix(file, "main.go") {
-				ok = line == 23
+				ok = line == 26
 				if !ok {
 					println(who, "runtime.Caller: main.fault at line", line)
 				}
 				break
 			}
 		}
-		if stk := string(debug.Stack()); !strings.Contains(stk, "main.go:23") {
-			println(who, "debug.Stack: no main.go:23")
+		if stk := string(debug.Stack()); !strings.Contains(stk, "main.go:26") {
+			println(who, "debug.Stack: no main.go:26")
 			ok = false
 		}
 	}()
@@ -76,7 +79,7 @@ func main() {
 	done := make(chan bool)
 	go func() {
 		good := check("goroutine")
-		if _, last := tail(); last != "runtime.goexit" {
+		if _, last := tail(); !strings.HasPrefix(last, "main.") && last != "runtime.goexit" {
 			println("goroutine: stack ends with", last)
 			good = false
 		}
