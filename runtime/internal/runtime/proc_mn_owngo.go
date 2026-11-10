@@ -64,6 +64,7 @@ type mOS struct {
 	schedlink *m
 	localCtx  LocalContext // TLS-змінні з блоками пакета: свої в кожної M
 	call      int32        // що G просить від g0 у mnMcall
+	tick      uint32       // пошуки роботи; кожен 61-й опитує poller
 }
 
 const (
@@ -165,6 +166,8 @@ var mnSched struct {
 	gen        uint64 // росте з кожною готовою чи запущеною G
 	deadGen    uint64 // gen на першому виявленні взаємоблокування
 	deadSeen   bool
+	netpoll    uint32 // 1 — lib/runtime поставив netpollHook
+	polling    uint32 // 1 — якась M блокується в netpoll
 }
 
 // timersPending ставить lib/runtime: чи є таймери, що ще спрацюють. Без
@@ -174,6 +177,35 @@ var timersPending func() bool
 // SetTimersPendingHook ставить перевірку таймерів для виявлення
 // взаємоблокування.
 func SetTimersPendingHook(f func() bool) { timersPending = f }
+
+// netpollHook і netpollWaiting ставить мережевий poller lib/runtime
+// (P-NEW-09.7): netpollHook(delay) будить G, чиї дескриптори готові (delay < 0
+// — чекати без межі, 0 — не блокуватися), а netpollWaiting каже, чи є G,
+// припарковані в pollWait.
+var (
+	netpollHook    func(delay int64)
+	netpollWaiting func() bool
+)
+
+// SetNetpollHooks ставить poller. Планувальник кличе його лише після цього
+// виклику.
+func SetNetpollHooks(poll func(delay int64), waiting func() bool) {
+	netpollHook, netpollWaiting = poll, waiting
+	atomic.Store(&mnSched.netpoll, 1)
+}
+
+// mnNetpollWaiters — чи є G, які чекають на poller.
+func mnNetpollWaiters() bool {
+	return atomic.Load(&mnSched.netpoll) != 0 && netpollWaiting()
+}
+
+// mnNetpollNow опитує poller без блокування, якщо ніхто не блокується в
+// ньому: готові G ідуть у чергу P поточної M.
+func mnNetpollNow() {
+	if mnNetpollWaiters() && atomic.Load(&mnSched.polling) == 0 {
+		netpollHook(0)
+	}
+}
 
 func mnInit() {
 	if atomic.Load(&mnSched.state) == 2 {
@@ -410,6 +442,11 @@ func mnAnyWork() bool {
 }
 
 func mnFindRunnable(mp *m, pp *mnP) *g {
+	// Без sysmon зайняті M мусять самі час від часу забирати готові
+	// дескриптори, інакше мережа голодуватиме за CPU-завантажених G.
+	if mp.os.tick++; mp.os.tick%61 == 0 {
+		mnNetpollNow()
+	}
 	if gp := mnRunqGet(pp); gp != nil {
 		return gp
 	}
@@ -446,7 +483,8 @@ func mnFindRunnable(mp *m, pp *mnP) *g {
 			return gp
 		}
 	}
-	return nil
+	mnNetpollNow()
+	return mnRunqGet(pp)
 }
 
 // ---- M ---------------------------------------------------------------------
@@ -540,7 +578,8 @@ func mnCheckDead() {
 	defer mnSched.lock.unlock()
 	count, mainExited := gState()
 	dead := mnSched.npidle == mnSched.gomaxprocs && atomic.Load(&mnSched.nblocked) == 0 &&
-		count > 0 && !mainExited && timersPending != nil && !mnAnyWork() && !timersPending()
+		count > 0 && !mainExited && timersPending != nil && !mnAnyWork() && !timersPending() &&
+		!mnNetpollWaiters()
 	gen := atomic.Load(&mnSched.gen)
 	if !dead {
 		mnSched.deadSeen = false
@@ -633,6 +672,29 @@ func mnIdle(mp *m) {
 		mnSched.lock.unlock()
 		if pp != nil {
 			mnAcquirep(mp, pp)
+			return
+		}
+	}
+	// M без роботи блокується в poller, якщо там ще ніхто не чекає.
+	// Розбуджені G без P ідуть у глобальну чергу, а mnReady запускає для
+	// них M на вільному P.
+	if mnNetpollWaiters() {
+		if _, won := atomic.CompareAndExchange(&mnSched.polling, 0, 1); won {
+			netpollHook(-1)
+			atomic.Store(&mnSched.polling, 0)
+			// M, що віддали P, поки ця чекала, побачили polling і заснули.
+			// Вільний P після скидання polling означає, що poller знову
+			// нікому стерегти: ця M бере P і шукає роботу, а без неї
+			// повертається в poller. Без вільного P у poller прийде M, що
+			// тримає P, коли та залишиться без роботи.
+			if atomic.Load(&mnSched.npidle) != 0 {
+				mnSched.lock.lock()
+				pp = mnPidleGetLocked()
+				mnSched.lock.unlock()
+				if pp != nil {
+					mnAcquirep(mp, pp)
+				}
+			}
 			return
 		}
 	}
