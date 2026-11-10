@@ -1519,3 +1519,39 @@
   - контракт стенду під `owngo` і `owngo -O0 -asan` — ok.
 - Не перевірено: запуск на arm64 і macOS (лише асемблювання); `GOROOT/test` після змін census.
 - Лишилось: P-NEW-09.6 (планувальник); P11.4 чекає сервісу.
+
+## 2026-11-10 — P-NEW-09.6 Планувальник
+
+- Тести спершу:
+  - `3eb764baa`, `323ab6a2a`: фікстури `owngo/mn/spawn`, `pingpong`, `lockthread`, `deadlock`;
+  - `a50329a63`, `806d43e48`: `owngo/mn/caller` (обхід кадрів на стеку G) і `owngo/asan/mnpark` (гонитва паркування).
+- Реалізація (`fc72fb838`, теги `owngo,owngomn`) — `proc_mn_owngo.go`:
+  - P з локальною чергою, `runnext`, глобальною чергою і крадіжкою;
+  - паркування через `SchedulerWaiter`: канали, `select`, семафори й `notifyList` взято з бекенду wasm workers;
+  - `main` — задача `__llgo_wasm_main`;
+  - `LockOSThread`;
+  - `psync.BlockEnter`/`BlockExit` навколо блокувань ОС у рантаймі;
+  - `GOMAXPROCS` з cgroup v2;
+  - виявлення взаємоблокування.
+- Виправлення після першого прогону `GOROOT/test` (`92264b5e7`):
+  - межі стека G для `fpCallers` і знімка за SIGURG;
+  - хвіст головної G `runtime.main` / `runtime.goexit`, як у 1:1;
+  - use-after-free у `mnExecute` при паркуванні (`issue13169` під ASan).
+- Заміри (`owngo/REPORT-STAGEG.md`):
+  - `spawn`: 100 001 G на 5 потоках (1:1 падає);
+  - обмін каналом: 0.63 мкс проти 9.4 мкс на 1:1;
+  - стенд: fanout 20 000 — 0.60 с на 17 потоках.
+- Прийняття:
+  - фікстури `owngo/mn` зелені під `owngo,owngomn` і `-O0 -asan`;
+  - `fixtures.sh` — 0 з 77;
+  - контракт стенду під чотирма варіантами — ok;
+  - `go test ./cl/ -run OwnGo` — ok.
+- `GOROOT/test` `ci`:
+  - під census (P-NEW-09.5) — результати ті самі, що на базі;
+  - під M:N і M:N `-O0 -asan` — одне нове падіння, `issue25897a`. Мережевих падінь немає.
+- Відхилення від прийняття: `issue25897a` — не мережеве падіння. Причина — відсутність витіснення: G крутить `runtime.GC()` на `GOMAXPROCS(1)`. Віднесено до умови входу P-NEW-09.10.
+- Не перевірено:
+  - arm64 і macOS: асемблер лише асембльовано;
+  - `AllThreadsSyscall` з G під M:N.
+- Відомо: головна G під M:N має goid 2, а не 1, як у Go; жоден тест від цього не падає.
+- Лишилось: P-NEW-09.7 (poller); P11.4 чекає сервісу.
