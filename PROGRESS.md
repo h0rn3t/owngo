@@ -1580,3 +1580,27 @@
   - під M:N `-O0 -asan` упав `issue79186` (стрес `RWMutex`, `ready of invalid scheduler waiter`). Він падає й на рантаймі без poller, отже, це давня гонитва паркування M:N під ASan. Потрібна окрема задача.
 - Не перевірено: `kqueue` і arm64 — лише `go vet`. Тегів послідовності проти застарілих подій немає.
 - Лишилось: P-NEW-09.8 (блокувальні виклики C), гонитва `issue79186`.
+
+## 2026-11-10 — P-NEW-09.8 Блокувальні виклики C і cgo
+
+- Тести спершу (`350fc2f13`):
+  - `TestBlockingCallMarkers` і `TestBlockingCallMarkersDisabled` (`cl/syscallmark_test.go`);
+  - фікстури `owngo/mn/blockingc` і `owngo/mn/callback`; до зміни — «обміни чекали на `usleep`» і «228 з 400».
+- Реалізація (`1c92027db`):
+  - `cl/syscallmark.go`: під `owngomn` виклики C і `_Cfunc_*` стоять між `EnterSyscall` / `ExitSyscall`, крім `nonBlockingCFuncs` і пакетів рантайму; `//export` — між `CallbackEnter` / `CallbackExit`; прапорець `ssa.Program.EnableBlockingCallMarkers` ставить `internal/build`;
+  - `runtime/internal/runtime/syscall_mn_owngo.go`: `_Psyscall`, sysmon (20 мкс – 10 мс), callback прив'язує G до M;
+  - `syscall.Syscall` іде через ту саму обгортку.
+- Знайдено під ASan: G без P не рахувала глибину виклику, тож callback не прив'язував її до M. Виправлено до коміту.
+- Прийняття:
+  - `blockingc` і `callback` — 40 з 40, з `-O0 -asan` теж;
+  - `fixtures.sh` — 0 з 81;
+  - контракт стенду під чотирма збірками — ok;
+  - стенд c=1000 — 0 помилок, 24.9 тис. rps, p99 143 мс;
+  - S1.1 (binarytrees, fannkuchredux, mandelbrot), 10 прогонів — усі в розкиді;
+  - `GOROOT/test` `ci` — без нових падінь;
+  - `go test ./ssa ./cl` — ok; `./internal/build` — лише відомі падіння (`TestBuildDo_DepFingerprintAndVersion`, три `TestSIMD*` darwin, `runextest`, `linkfail/missing`).
+- Прогалини:
+  - callback через вказівник без `//export` виконується з P у `_Psyscall` і може торкатися P, який sysmon уже віддав (ризик, фікстурою не покритий);
+  - список неблокувальних функцій ручний;
+  - darwin — лише `go vet`.
+- Лишилось: P-NEW-09.9, гонитва `issue79186`.
