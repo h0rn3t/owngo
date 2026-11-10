@@ -1335,13 +1335,19 @@ func linkCallAliases(instrs []ssa.Instruction, pts map[ssa.Value]siteSet, v1 *v1
 				}
 			}
 		}
+		grow := func(v ssa.Value, src siteSet) bool { return absorbSites(pts, v, src) }
 		for _, instr := range instrs {
-			if flow(instr, func(v ssa.Value, src siteSet) bool { return absorbSites(pts, v, src) }, pts) {
+			if flow(instr, grow, pts) {
 				changed = true
 			}
-			if memory(instr, pts, v1Contents(v1), func(v ssa.Value, src siteSet) bool { return absorbSites(pts, v, src) }, func(obj ssa.Instruction, src siteSet) bool {
+			if memory(instr, pts, v1Contents(v1), grow, func(obj ssa.Instruction, src siteSet) bool {
 				return holdSites(v1, obj, src)
 			}) {
+				changed = true
+			}
+			// append від аліасу виклику — той самий буфер, коли ємності
+			// вистачає: без цього кроку результат губив місця аргументу.
+			if builtinResult(instr, grow, pts) {
 				changed = true
 			}
 		}
