@@ -49,6 +49,7 @@ type runtimeContextPlatform struct {
 	glsContext LocalContext // змінні GLS цієї G
 	pless      bool         // користувацька G виконується без P
 	systemG    bool
+	parking    uint32 // 1 — G на стеку з резерву в SchedulerWaiter.Park
 
 	foreignThreadAttached bool
 }
@@ -63,7 +64,6 @@ type mOS struct {
 	schedlink *m
 	localCtx  LocalContext // TLS-змінні з блоками пакета: свої в кожної M
 	call      int32        // що G просить від g0 у mnMcall
-	callArg   unsafe.Pointer
 }
 
 const (
@@ -665,20 +665,19 @@ func mnExecute(mp *m, gp *g) *g {
 	mnSwitch(mp.os.g0ctx, gp.context.platform.mn)
 	currentG = uintptr(unsafe.Pointer(mp.os.g0))
 	mp.curg = nil
-	call, arg := mp.os.call, mp.os.callArg
-	mp.os.call, mp.os.callArg = 0, nil
+	call := mp.os.call
+	mp.os.call = 0
 	locked := gp.context.platform.lockedm == mp
 	if locked {
 		mp.os.note.clear()
 	}
 	switch call {
 	case mnCallPark:
-		w := (*SchedulerWaiter)(arg)
-		casgstatus(gp, _Grunning, _Gwaiting)
+		// Після Gwaiting Ready з іншої M може вже виконати G, а та звільнить
+		// своє очікування, тож ні його, ні gp тут більше не читаємо.
+		// Ready, що прийшов раніше, чекає на Gwaiting, поки стоїть parking.
 		mnSetPless(gp, false)
-		if atomic.Load(&w.notified) == 1 && tryCasgstatus(gp, _Gwaiting, _Grunnable) {
-			return gp
-		}
+		casgstatus(gp, _Grunning, _Gwaiting)
 	case mnCallGosched:
 		casgstatus(gp, _Grunning, _Grunnable)
 		mnSetPless(gp, false)
@@ -700,9 +699,9 @@ func mnExecute(mp *m, gp *g) *g {
 }
 
 // mnMcall повертає G у g0 її M з проханням call.
-func mnMcall(gp *g, call int32, arg unsafe.Pointer) {
+func mnMcall(gp *g, call int32) {
 	mp := gp.m
-	mp.os.call, mp.os.callArg = call, arg
+	mp.os.call = call
 	mnSwitch(gp.context.platform.mn, mp.os.g0ctx)
 }
 
@@ -762,7 +761,7 @@ func mnGEntry(arg unsafe.Pointer) unsafe.Pointer {
 		ReportExit()
 		c.Exit(0)
 	}
-	mnMcall(gp, mnCallExit, nil)
+	mnMcall(gp, mnCallExit)
 	return nil
 }
 
@@ -826,7 +825,7 @@ func mnGoexit0(mp *m, gp *g) {
 
 func goexitBackend(gp *g) {
 	if gp.context.platform.mn != nil {
-		mnMcall(gp, mnCallExit, nil)
+		mnMcall(gp, mnCallExit)
 		fatal("runtime: exited goroutine resumed")
 	}
 	leaveCurrentLocalContext()
@@ -875,12 +874,20 @@ func (w *SchedulerWaiter) Park() {
 		fatal("runtime: invalid scheduler waiter")
 		return
 	}
+	pf := &gp.context.platform
+	if pf.mn != nil {
+		// parking ставиться раніше за перевірку notified, а Ready пише
+		// notified раніше за читання parking: хоч один побачить іншого.
+		atomic.Store(&pf.parking, 1)
+	}
 	if _, ok := atomic.CompareAndExchange(&w.notified, 1, 0); ok {
+		atomic.Store(&pf.parking, 0)
 		return
 	}
 	mnInit()
-	if gp.context.platform.mn != nil {
-		mnMcall(gp, mnCallPark, unsafe.Pointer(w))
+	if pf.mn != nil {
+		mnMcall(gp, mnCallPark)
+		atomic.Store(&pf.parking, 0)
 		atomic.Store(&w.notified, 0)
 		return
 	}
@@ -911,9 +918,16 @@ func (w *SchedulerWaiter) Ready() {
 	if _, ok := atomic.CompareAndExchange(&w.notified, 0, 1); !ok {
 		return
 	}
-	if tryCasgstatus(gp, _Gwaiting, _Grunnable) {
-		mnReady(gp, true)
+	// G, що вже паркується, ще не побачила notified або g0 її M ще не
+	// опублікувала Gwaiting: чекаємо, доки G стане Gwaiting або сама
+	// забере сповіщення.
+	for !tryCasgstatus(gp, _Gwaiting, _Grunnable) {
+		if atomic.Load(&gp.context.platform.parking) == 0 {
+			return
+		}
+		thread.Yield()
 	}
+	mnReady(gp, true)
 }
 
 // SchedulerProcID — номер P поточної M; без P — 0.
@@ -928,7 +942,7 @@ func goschedBackend() {
 	mnInit()
 	gp := getg()
 	if gp.context.platform.mn != nil {
-		mnMcall(gp, mnCallGosched, nil)
+		mnMcall(gp, mnCallGosched)
 		return
 	}
 	mp := gp.m

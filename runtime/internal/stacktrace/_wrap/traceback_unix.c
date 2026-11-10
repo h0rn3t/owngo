@@ -72,10 +72,29 @@ static void *map_buffer(void)
 
 uintptr_t *llgo_traceback_fault_buffer(void) { return fault_buffer; }
 
+/* Межі стека, на якому зараз виконується код потоку, коли це не рідний стек
+ * потоку: горутина M:N під owngomn на стеку з резерву. 0, 0 — рідний стек,
+ * межі якого тримає вузол потоку. */
+static _Thread_local uintptr_t fiber_low, fiber_high;
+
+void llgo_traceback_set_stack(uintptr_t low, uintptr_t high)
+{
+    fiber_low = low;
+    fiber_high = high;
+}
+
+static void stack_bounds(thread_node *node, uintptr_t *low, uintptr_t *high)
+{
+    if (fiber_high) {
+        *low = fiber_low; *high = fiber_high;
+    } else {
+        *low = node ? node->low : 0; *high = node ? node->high : 0;
+    }
+}
+
 void llgo_traceback_bounds(uintptr_t *low, uintptr_t *high)
 {
-    *low = current ? current->low : 0;
-    *high = current ? current->high : 0;
+    stack_bounds(current, low, high);
 }
 
 void llgo_traceback_release_fault_buffer(void)
@@ -136,25 +155,29 @@ static size_t capture_context(void *raw, thread_node *node)
 {
     size_t n = 0;
     if (sigsetjmp(capture_recovery, 1) == 0) {
+        uintptr_t low, high;
+        stack_bounds(node, &low, &high);
         capture_armed = 1;
         llgo_traceback_unwinder walk = __atomic_load_n(&unwind_context, __ATOMIC_ACQUIRE);
         uintptr_t endfp = 0;
         n = walk ? walk(raw, node->pcs, LLGO_TRACEBACK_MAX, &endfp) : 0;
         if (n && endfp && n < LLGO_TRACEBACK_MAX) {
             size_t extra = frame_records(endfp, node->pcs+n, LLGO_TRACEBACK_MAX-n,
-                                         node->low, node->high);
+                                         low, high);
             if (extra && node->pcs[n] == node->pcs[n-1])
                 memmove(node->pcs+n, node->pcs+n+1, (--extra)*sizeof(uintptr_t));
             n += extra;
         }
         if (!n)
-            n = frame_chain(raw, node->pcs, LLGO_TRACEBACK_MAX, node->low, node->high);
+            n = frame_chain(raw, node->pcs, LLGO_TRACEBACK_MAX, low, high);
         capture_armed = 0;
     } else {
         n = 0;
         if (sigsetjmp(capture_recovery, 1) == 0) {
+            uintptr_t low, high;
+            stack_bounds(node, &low, &high);
             capture_armed = 1;
-            n = frame_chain(raw, node->pcs, LLGO_TRACEBACK_MAX, node->low, node->high);
+            n = frame_chain(raw, node->pcs, LLGO_TRACEBACK_MAX, low, high);
             capture_armed = 0;
         } else {
             n = 0;

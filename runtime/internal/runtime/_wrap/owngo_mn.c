@@ -4,7 +4,9 @@
 // які зберігає викликаний (і стан FPU на amd64), пише sp у from і бере sp
 // іншого контексту; повернення з неї — вже в іншому контексті. Новий
 // контекст має на вершині стека підготовлений кадр swap, чий адрес
-// повернення — owngo_mn_start, а той кличе owngo_mn_entry.
+// повернення — owngo_mn_start. Той кличе owngo_mn_begin, а потім переходить у
+// fn(arg) контексту з нульовою адресою повернення: обхід кадрів зупиняється
+// на fn (для G — mnGEntry, у трасуванні runtime.goexit), як у gc.
 //
 // Стек G — резерв mmap: знизу охорона OWNGO_MN_GUARD без доступу, вище —
 // стек, на самій вершині — заголовок owngo_mn_ctx. Фізичні сторінки ОС
@@ -63,7 +65,11 @@ typedef struct owngo_mn_ctx {
 
 void owngo_mn_swap(void **from_sp, void *to_sp);
 void owngo_mn_start(void);
-void owngo_mn_entry(void);
+struct owngo_mn_ctx *owngo_mn_begin(void);
+
+// owngo_mn_start читає fn і arg за цими зсувами.
+_Static_assert(offsetof(owngo_mn_ctx, fn) == 56, "owngo_mn_ctx.fn");
+_Static_assert(offsetof(owngo_mn_ctx, arg) == 64, "owngo_mn_ctx.arg");
 
 #if defined(__x86_64__)
 // Кадр swap знизу вгору: керівне слово x87 (2 Б) і MXCSR (4 Б) у 8 байтах,
@@ -92,10 +98,14 @@ __asm__(".text\n" MN_FUNC(owngo_mn_swap)
 	"popq %rbp\n"
 	"ret\n"
 	MN_END(owngo_mn_swap)
+	// sp = вершина, вирівняна на 16: call і push $0 дають fn те саме
+	// вирівнювання, що й звичайний call. fn не повертається.
 	MN_FUNC(owngo_mn_start)
 	"xorl %ebp, %ebp\n"
-	"call " MN_SYM(owngo_mn_entry) "\n"
-	"ud2\n"
+	"call " MN_SYM(owngo_mn_begin) "\n"
+	"movq 64(%rax), %rdi\n"
+	"pushq $0\n"
+	"jmpq *56(%rax)\n"
 	MN_END(owngo_mn_start));
 
 static void *mn_init_frame(char *top) {
@@ -142,10 +152,14 @@ __asm__(".text\n" MN_FUNC(owngo_mn_swap)
 	"add sp, sp, #176\n"
 	"ret\n"
 	MN_END(owngo_mn_swap)
+	// fn входить з нульовими x29 і x30; fn не повертається.
 	MN_FUNC(owngo_mn_start)
 	"mov x29, #0\n"
-	"bl " MN_SYM(owngo_mn_entry) "\n"
-	"brk #0\n"
+	"bl " MN_SYM(owngo_mn_begin) "\n"
+	"ldr x1, [x0, #56]\n"
+	"ldr x0, [x0, #64]\n"
+	"mov x30, #0\n"
+	"br x1\n"
 	MN_END(owngo_mn_start));
 
 static void *mn_init_frame(char *top) {
@@ -383,8 +397,16 @@ static void mn_arrived(void *fake) {
 	}
 }
 
+// Межі стека для обходу кадрів (runtime.Caller, debug.Stack, звіт паніки):
+// runtime/internal/stacktrace/_wrap/traceback_unix.c.
+void llgo_traceback_set_stack(uintptr_t low, uintptr_t high);
+
 static void mn_switch(owngo_mn_ctx *from, owngo_mn_ctx *to, int exiting) {
 	mn_thread_init();
+	if (to->map)
+		llgo_traceback_set_stack((uintptr_t)to->lo, (uintptr_t)to->lo + to->size);
+	else
+		llgo_traceback_set_stack(0, 0);
 	if (__sanitizer_start_switch_fiber)
 		__sanitizer_start_switch_fiber(exiting ? NULL : &from->fake, to->lo, to->size);
 	mn_from = from;
@@ -408,12 +430,11 @@ void owngo_mn_exit(owngo_mn_ctx *from, owngo_mn_ctx *to) {
 	_exit(2);
 }
 
-void owngo_mn_entry(void) {
+// owngo_mn_begin — перші дії нового контексту на його стеку (з
+// owngo_mn_start); повертає сам контекст.
+owngo_mn_ctx *owngo_mn_begin(void) {
 	mn_arrived(NULL);
-	owngo_mn_ctx *c = mn_cur;
-	c->fn(c->arg);
-	mn_write("fatal error: goroutine entry returned without owngo_mn_exit\n");
-	_exit(2);
+	return mn_cur;
 }
 
 // ---- очікування й процесори для планувальника (P-NEW-09.6) -----------------

@@ -58,6 +58,8 @@ const (
 	processEntrySymbol = "main"
 	runtimeMainSymbol  = "runtime.main"
 	runtimeGoexitName  = "runtime.goexit"
+	// mnGoroutineEntrySymbol — вхід кожної горутини M:N (owngomn).
+	mnGoroutineEntrySymbol = "github.com/xgo-dev/llgo/runtime/internal/runtime.mnGEntry"
 )
 
 func needsRuntimeMainFrame(ctx *context) bool {
@@ -103,6 +105,18 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 		tailRecords := []funcInfoRecord{
 			{symbol: runtimeMainSymbol, name: runtimeMainSymbol},
 			{symbol: processEntrySymbol, name: runtimeGoexitName},
+		}
+		if needsWasmRuntimeScheduler(ctx) {
+			// M:N owngomn: main.main кличе задача __llgo_wasm_main на стеку
+			// горутини, а кожен такий стек починається входом mnGEntry. Для
+			// трасування це runtime.main і runtime.goexit, як у gc.
+			tailRecords = append(tailRecords, funcInfoRecord{symbol: "__llgo_wasm_main", name: runtimeMainSymbol})
+			funcInfo = slices.Clone(funcInfo)
+			for i := range funcInfo {
+				if funcInfo[i].symbol == mnGoroutineEntrySymbol {
+					funcInfo[i].name, funcInfo[i].file, funcInfo[i].line = runtimeGoexitName, "", 0
+				}
+			}
 		}
 		funcInfo = append(funcInfo, tailRecords...)
 		// Entry sites are emitted after these generated functions have bodies.
@@ -522,6 +536,11 @@ func defineWasmMainTask(pkg llssa.Package, packageInits []llssa.Function, mainIn
 	fn := pkg.NewFunc("__llgo_wasm_main", sig, llssa.CDecl)
 	fnVal := pkg.Module().NamedFunction("__llgo_wasm_main")
 	fnVal.SetVisibility(llvm.HiddenVisibility)
+	if prog.NeedsFramePointer() {
+		// Під owngomn задача — кадр runtime.main: без запису кадру обхід
+		// пропустив би її викликача runtime.goexit (mnGEntry).
+		fnVal.AddFunctionAttr(fnVal.GlobalParent().Context().CreateStringAttribute("frame-pointer", "non-leaf"))
+	}
 	b := fn.MakeBody(1)
 	for _, init := range packageInits {
 		b.Call(init.Expr)
