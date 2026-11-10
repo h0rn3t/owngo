@@ -1555,3 +1555,28 @@
   - `AllThreadsSyscall` з G під M:N.
 - Відомо: головна G під M:N має goid 2, а не 1, як у Go; жоден тест від цього не падає.
 - Лишилось: P-NEW-09.7 (poller); P11.4 чекає сервісу.
+
+## 2026-11-10 — P-NEW-09.7 Мережевий poller
+
+- Тести спершу:
+  - `426f6b509`: фікстура `owngo/mn/idleconns`, 10 000 TCP-з'єднань і дедлайн читання; до зміни — 10 005 потоків;
+  - `f377f2a95`: `TestAppendThroughCallAliasKeepsSites` і `owngo/asan/appendalias` — use-after-free census у `netip.Addr.appendTo4`, знайдений фікстурою.
+- Census (`928623549`): `linkCallAliases` у нерухомій точці кличе й `builtinResult`, тож `append` через аліас виклику зберігає місця аргументу.
+- Реалізація (`e5c4e9da2`) — `netpoll_*owngomn_llgo.go`, `proc_mn_owngo.go`:
+  - `epoll` / `kqueue` за `netpoll.go` з Go;
+  - очікувачі вбудовані в `pollDesc`;
+  - неблокувальне опитування в `findrunnable` (і кожен 61-й пошук);
+  - одна M блокується в poller;
+  - дедлайни — таймери рантайму;
+  - `poll(2)` на G під `owngomn` не збирається.
+- Заміри: `idleconns` — 6–7 потоків, 1.4–1.9 с, 30 з 30 прогонів зелені.
+- Прийняття:
+  - `fixtures.sh` — 0 з 79;
+  - контракт стенду під `owngo`, `owngo,owngomn` і обома з `-O0 -asan` — ok;
+  - `go test ./cl/ -run OwnGo` — ok;
+  - `GOROOT/test` `ci` під M:N — без змін.
+- Відхилення:
+  - poller блокується без таймауту найближчого таймера, бо таймери мають свій потік;
+  - під M:N `-O0 -asan` упав `issue79186` (стрес `RWMutex`, `ready of invalid scheduler waiter`). Він падає й на рантаймі без poller, отже, це давня гонитва паркування M:N під ASan. Потрібна окрема задача.
+- Не перевірено: `kqueue` і arm64 — лише `go vet`. Тегів послідовності проти застарілих подій немає.
+- Лишилось: P-NEW-09.8 (блокувальні виклики C), гонитва `issue79186`.
