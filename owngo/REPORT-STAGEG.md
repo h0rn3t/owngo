@@ -1,4 +1,4 @@
-# Етап G — стенд горутин і M:N (P-NEW-09.1 – P-NEW-09.8)
+# Етап G — стенд горутин і M:N (P-NEW-09.1 – P-NEW-09.9)
 
 Стенд — `owngo/stand/fiberdb`: fiber v3.4.0, fasthttp v1.72.0, SQLite 3.51.3 через `mattn/go-sqlite3` v1.14.42 (cgo). Скрипт — `owngo/stand/fiberdb/measure.sh`. Порівнюються `gc` і `llgo -tags owngo` (типовий профіль).
 
@@ -312,6 +312,30 @@ P-NEW-09.2 — стенд під `-tags owngo` не збирався або па
 | вказівник, записаний у глобальну мапу, опинявся на стеку | `database/sql.Register(&SQLiteDriver{})` в `init` go-sqlite3: пізніші `init` fiber затирали драйвер | значення, прочитане з глобальної пам'яті (`*drivers`), — теж глобальна пам'ять (`8b1eae9f5`) |
 
 Ще не перевірено: після SIGINT сервер пише `sql: database is closed` — `Listen` повертається раніше, ніж закінчуються обробники; причину не шукали.
+
+## Шарди на P (P-NEW-09.9)
+
+Під `owngo,owngomn` індекс шарду обліку (`myShardIndex`, ним же `owngo ops`) і шарду профілю пам'яті — це `P.id` поточної M, за модулем 64. Потік без P (sysmon, G після `ExitSyscall`, доки P не повернуто) ділить шард 0 і не заводить новий шард на кожну M. Модель 1:1 лишає TLS потоку. Кеш алокатора `sc_tls` чіпляється до купи цього P в `mnAcquirep` і знімається в `mnReleasep` і коли `ExitSyscall` втрачає вкрадений P. Купа не кидається на виході потоку: її тримає P.
+
+Фікстура `owngo/mn/shards` (`4474e82c3`, до зміни червона: 8 шардів). Після `faa0509ca`, три прогони, `GOMAXPROCS=2`, 8 горутин після `C.usleep`: M = 10–11, унікальних шардів горутин 1, задіяних шардів вікна не більше за 2, `owngo freed` +512, `note_alloc static` +8, `live static` без зміни. Більшість цих алокацій іде ще без P (G після виклику C, поки вільний P не взято) і тому сідає в шард 0; якщо P є, шард збігається з його id. `owngo/mn/blockingc` — код 0. Корпус S1.1 десятьма прогонами тут не знято: машина — Darwin, а `compare.py` читає `ru_maxrss` як кібібайти Linux.
+
+### Ревізія `//llgointernal:tls`
+
+У дереві 33 змінні в 10 оголошеннях (план казав 22). Нативний M:N виконує п'ять з `runtime/internal/runtime`. Решта — wasm і JS: вони лишаються на потоці воркера, бо це його pthread або JS-realm, і нативний планувальник їх не переносить.
+
+| Змінна | Де | Рішення |
+| --- | --- | --- |
+| `currentG` | `g_tls.go` | M. Слот G, що виконується на цьому потоці. |
+| `currentGHasLifecycle` | `g_tls.go` | M. Чи ставив цей потік деструктор TLS. |
+| `currentAccountShard` | `account_owngo.go` | 1:1 — TLS потоку. `owngomn` — індекс з P, TLS цього шляху не пише. |
+| `currentMemProfileShard` | `memprofile_shard.go` | Те саме, що облік. |
+| `currentLocalContext` | `local_context_tls.go` | M. Кеш фізичного `LocalContext`. Блоки GLS лежать на G. `mstart` і sysmon ставлять контекст своєї M. |
+| `currentRootChain`, `sjljReplaying`, `activeContext`, `rebuilding` | `gcroot`, wasi threads і wasm workers | M того pthread. Нативний M:N це не чіпає. |
+| `funcsMu`, `funcs`, `nextFuncID`, `activeCallbacks` | `syscall/js/func.go` | M JS-воркера, що володіє callback. |
+| десять `value*` / `*Constructor` | `syscall/js/emval.go` | M JS-воркера, realm emval. |
+| `workerJSHostReady` і п'ять `workerJS*` | `fs_js_wasm_workers.go` | M JS-воркера. |
+
+`sc_tls` — це `__thread` у C, не ця директива; під `owngomn` купа належить P. `//llgointernal:gls` (`fipsBypassDepth`, `callerLocationStoreCurrent`) уже на G.
 
 ## Висновок для етапу G
 
