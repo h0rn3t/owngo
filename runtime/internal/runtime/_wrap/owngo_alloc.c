@@ -279,6 +279,35 @@ static void sc_give_pages(size_t idx, size_t n) {
 	sc_purge();
 }
 
+
+static sc_heap *sc_heap_get(void);
+
+// owngo_sc_attach робить купу *held кешем цього потоку. Нульова *held —
+// поточна купа потоку або нова; вона записується в *held і лишається за
+// викликачем (P). Вихід потоку її не кидає.
+void owngo_sc_attach(void **held) {
+	pthread_once(&sc_once, sc_init);
+	sc_heap *h = held != NULL ? *held : NULL;
+	if (h == NULL) {
+		h = sc_tls;
+		if (h == NULL)
+			h = sc_heap_get();
+		if (held != NULL)
+			*held = h;
+	}
+	sc_tls = h;
+	pthread_setspecific(sc_key, NULL);
+}
+
+// owngo_sc_detach знімає кеш з потоку, не віддаючи купу. Наступний потік,
+// що візьме той самий P, чіпляє її знову.
+void owngo_sc_detach(void) {
+	if (sc_tls == NULL)
+		return;
+	sc_tls = NULL;
+	pthread_setspecific(sc_key, NULL);
+}
+
 static sc_heap *sc_heap_get(void) {
 	pthread_once(&sc_once, sc_init);
 	sc_lock_acquire();

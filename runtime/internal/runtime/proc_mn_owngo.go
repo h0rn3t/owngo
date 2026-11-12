@@ -145,8 +145,9 @@ type mnP struct {
 	runq    [mnRunqSize]*g
 	head, n uint32
 	link    *mnP
-	idle    bool // у списку вільних
-	off     bool // id >= GOMAXPROCS
+	idle    bool           // у списку вільних
+	off     bool           // id >= GOMAXPROCS
+	heap    unsafe.Pointer // кеш алокатора цього P
 
 	syscalltick uint32 // росте з кожним EnterSyscall на цьому P
 	sysmonTick  uint32 // syscalltick, який sysmon бачив востаннє
@@ -310,9 +311,11 @@ func mnAcquirep(mp *m, pp *mnP) {
 	mp.p = &pp.p
 	pp.p.m = mp
 	setpstatus(&pp.p, _Prunning)
+	bindAllocatorCache(&pp.heap)
 }
 
 func mnReleasep(mp *m) *mnP {
+	unbindAllocatorCache()
 	pp := pOf(mp.p)
 	mp.p = nil
 	pp.p.m = nil

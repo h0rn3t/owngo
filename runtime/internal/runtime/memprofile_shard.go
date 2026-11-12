@@ -34,12 +34,18 @@ func memProfileAddObject(bucket int) {
 }
 
 func memProfileAddObjects(bucket int, n uint64) {
-	i := currentMemProfileShard
-	if i == 0 {
-		i = atomic.Add(&nextMemProfileShard, 1)%memProfileShardCount + 1
-		currentMemProfileShard = i
+	var idx uint32
+	if i, ok := procShard(); ok {
+		idx = i % memProfileShardCount
+	} else {
+		i := currentMemProfileShard
+		if i == 0 {
+			i = atomic.Add(&nextMemProfileShard, 1)%memProfileShardCount + 1
+			currentMemProfileShard = i
+		}
+		idx = (i - 1) % memProfileShardCount
 	}
-	atomic.Add(&memProfileShards[i-1].objects[bucket], n)
+	atomic.Add(&memProfileShards[idx].objects[bucket], n)
 }
 
 func memProfileLoadObjects(bucket int) uint64 {

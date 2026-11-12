@@ -52,6 +52,10 @@ var currentAccountShard uint32
 
 // myShardIndex — номер шарду потоку, спільний для обліку і лічильників операцій.
 func myShardIndex() uint32 {
+	if idx, ok := procShard(); ok {
+		noteShard(idx)
+		return idx
+	}
 	i := currentAccountShard
 	if i == 0 {
 		i = atomic.Add(&nextAccountShard, 1)%accountShardCount + 1

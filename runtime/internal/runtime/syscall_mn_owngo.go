@@ -96,10 +96,12 @@ func ExitSyscall() {
 			atomic.Add(&mnSched.nblocked, 1)
 			pp.p.m = mp
 		}
+		bindAllocatorCache(&pp.heap)
 		return
 	}
 	errno := mnErrno()
 	mp.p = nil
+	unbindAllocatorCache()
 	// Той, хто забрав P, уже порахував цю G в nblocked.
 	if pf.systemG {
 		atomic.Add(&mnSched.nblocked, -1)

@@ -60,6 +60,9 @@ func usedShards() int
 //go:linkname myShard github.com/xgo-dev/llgo/runtime/internal/runtime.MyShardForTesting
 func myShard() uint32
 
+//go:linkname procID github.com/xgo-dev/llgo/runtime/internal/runtime.ProcIDForTesting
+func procID() int32
+
 //go:linkname mnCount github.com/xgo-dev/llgo/runtime/internal/runtime.MNCountForTesting
 func mnCount() int
 
@@ -73,6 +76,7 @@ func main() {
 	runtime.GOMAXPROCS(procs)
 	var phase, entered, done atomic.Int32
 	shards := make([]uint32, workers)
+	pids := make([]int32, workers)
 	for i := range workers {
 		go func() {
 			entered.Add(1)
@@ -83,6 +87,7 @@ func main() {
 			noteAlloc(size, 0)
 			freeAccounted(ptr, size, 0)
 			shards[i] = myShard()
+			pids[i] = procID()
 			done.Add(1)
 			C.mnWaitGate(2)
 		}()
@@ -106,11 +111,22 @@ func main() {
 	// Точні — freed, live і note_alloc static.
 	ms := mnCount()
 	used := usedShards()
+	held := 0
+	for i, id := range shards {
+		if pids[i] < 0 {
+			continue
+		}
+		held++
+		if uint32(pids[i])%64 != id {
+			fmt.Fprintf(os.Stderr, "mn-shards: shard %d != P %d\n", id, pids[i])
+			os.Exit(1)
+		}
+	}
 	if ms <= procs || len(uniq) > procs || used > procs || gotFreed != uint64(workers*size) || gotLive != beforeLive || gotNote != uint64(workers) || gotAlloc < uint64(workers) {
-		fmt.Fprintf(os.Stderr, "mn-shards: M %d uniq %d used %d shards %v freed %d want %d alloc %d note %d live %d want %d\n",
-			ms, len(uniq), used, shards, gotFreed, workers*size, gotAlloc, gotNote, gotLive, beforeLive)
+		fmt.Fprintf(os.Stderr, "mn-shards: M %d held %d uniq %d used %d shards %v pids %v freed %d want %d alloc %d note %d live %d want %d\n",
+			ms, held, len(uniq), used, shards, pids, gotFreed, workers*size, gotAlloc, gotNote, gotLive, beforeLive)
 		os.Exit(1)
 	}
-	fmt.Printf("mn-shards used %d freed %d alloc %d\n", len(uniq), gotFreed, gotAlloc)
+	fmt.Printf("mn-shards used %d freed %d alloc %d shards %v pids %v\n", len(uniq), gotFreed, gotAlloc, shards, pids)
 	C.mnOpenGate(2)
 }
