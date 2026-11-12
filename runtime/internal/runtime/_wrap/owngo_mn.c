@@ -178,10 +178,19 @@ __asm__(".section .note.GNU-stack,\"\",@progbits\n.text\n");
 
 // ---- ASan -----------------------------------------------------------------
 
-void __sanitizer_start_switch_fiber(void **fake_stack_save, const void *bottom, size_t size)
-	__attribute__((weak));
-void __sanitizer_finish_switch_fiber(void *fake_stack_save, const void **bottom_old, size_t *size_old)
-	__attribute__((weak));
+// Порожні слабкі означення: без ASan лінкер їх лишає (виклик нічого не робить),
+// з ASan сильний символ рантайму санітайзера їх замінює. Голе weak-оголошення
+// без означення ld64 на Darwin відхиляє.
+__attribute__((weak)) void __sanitizer_start_switch_fiber(void **fake_stack_save, const void *bottom, size_t size) {
+	(void)fake_stack_save;
+	(void)bottom;
+	(void)size;
+}
+__attribute__((weak)) void __sanitizer_finish_switch_fiber(void *fake_stack_save, const void **bottom_old, size_t *size_old) {
+	(void)fake_stack_save;
+	(void)bottom_old;
+	(void)size_old;
+}
 
 // ---- стан потоку ----------------------------------------------------------
 

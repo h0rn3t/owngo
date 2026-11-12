@@ -178,6 +178,12 @@ var mnSched struct {
 
 // timersPending ставить lib/runtime: чи є таймери, що ще спрацюють. Без
 // нього взаємоблокування не виявляється.
+// mnCreated — скільки M створив планувальник, крім головної. Тест P-NEW-09.9.
+var mnCreated uint32
+
+// MNCountForTesting — головна M плюс створені планувальником.
+func MNCountForTesting() int { return int(atomic.Load(&mnCreated)) + 1 }
+
 var timersPending func() bool
 
 // SetTimersPendingHook ставить перевірку таймерів для виявлення
@@ -557,6 +563,7 @@ func mnAllocm() *m {
 }
 
 func mnNewm(pp *mnP) {
+	atomic.Add(&mnCreated, 1)
 	mp := mnAllocm()
 	mp.os.nextp = &pp.p
 	if errno := thread.CreateDetached(0, thread.RoutineFunc(wasiGCThreadStart), c.Pointer(unsafe.Pointer(mp))); errno != 0 {

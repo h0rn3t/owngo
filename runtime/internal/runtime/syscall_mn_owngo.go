@@ -152,6 +152,7 @@ func mnStartSysmon() {
 	if _, won := atomic.CompareAndExchange(&mnSched.sysmon, 0, 1); !won {
 		return
 	}
+	atomic.Add(&mnCreated, 1)
 	mp := mnAllocm()
 	if errno := thread.CreateDetached(0, thread.RoutineFunc(mnSysmon), c.Pointer(unsafe.Pointer(mp))); errno != 0 {
 		fatal("runtime: failed to create sysmon thread")

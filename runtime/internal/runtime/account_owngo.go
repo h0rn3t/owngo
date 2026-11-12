@@ -57,7 +57,9 @@ func myShardIndex() uint32 {
 		i = atomic.Add(&nextAccountShard, 1)%accountShardCount + 1
 		currentAccountShard = i
 	}
-	return (i - 1) % accountShardCount
+	idx := (i - 1) % accountShardCount
+	noteShard(idx)
+	return idx
 }
 
 func myAccountShard() *accountShard {
